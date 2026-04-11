@@ -201,7 +201,7 @@ export function useAdminData() {
   };
 
   const createChat = async (name: string, participantIds: string[]) => {
-    if (!effectiveTenantId || participantIds.length === 0) return;
+    if (!effectiveTenantId || participantIds.length < 2) return;
     await addDoc(collection(db, "chats"), {
       tenantId: effectiveTenantId,
       participants: participantIds,
@@ -216,7 +216,7 @@ export function useAdminData() {
   };
 
   const updateChat = async (chatId: string, name: string, participantIds: string[]) => {
-    if (participantIds.length === 0) return;
+    if (participantIds.length < 2) return;
     await updateDoc(doc(db, "chats", chatId), {
       name,
       participants: participantIds,

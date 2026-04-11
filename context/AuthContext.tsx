@@ -10,6 +10,7 @@ import {
   serverTimestamp,
   setDoc,
   where,
+  type DocumentSnapshot,
 } from "firebase/firestore";
 import {
   createUserWithEmailAndPassword,
@@ -25,6 +26,41 @@ import { randomUuid } from "@/lib/randomUuid";
 import type { AppUser, LoginCodeDoc, MemberDoc, UserDoc } from "@/types/chat";
 
 const DEVICE_ID_KEY = "deviceId";
+
+function waitForUserDoc(
+  uid: string,
+  isStale: () => boolean
+): Promise<DocumentSnapshot | null> {
+  const userRef = doc(db, "users", uid);
+  return getDoc(userRef)
+    .catch(() => null)
+    .then((first) => {
+      if (isStale()) return null;
+      if (first?.exists()) return first;
+      return new Promise<DocumentSnapshot | null>((resolve) => {
+        let unsub: () => void;
+        const done = (value: DocumentSnapshot | null) => {
+          unsub();
+          resolve(value);
+        };
+        unsub = onSnapshot(
+          userRef,
+          (s) => {
+            if (isStale()) {
+              done(null);
+              return;
+            }
+            if (s.exists()) {
+              done(s);
+            }
+          },
+          () => {
+            done(null);
+          }
+        );
+      });
+    });
+}
 
 async function getOrCreateDeviceId(): Promise<string> {
   let id = await AsyncStorage.getItem(DEVICE_ID_KEY);
@@ -72,6 +108,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!deviceId) return;
 
+    let cancelled = false;
+
     const unsub = onAuthStateChanged(auth, async (user) => {
       setFirebaseUser(user);
 
@@ -83,8 +121,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      const userSnap = await getDoc(doc(db, "users", user.uid));
-      if (!userSnap.exists()) {
+      setLoading(true);
+
+      const uid = user.uid;
+      const stale = () =>
+        cancelled || auth.currentUser?.uid !== uid;
+
+      const userSnap = await waitForUserDoc(uid, stale);
+      if (stale()) return;
+      if (!userSnap?.exists()) {
         setLoading(false);
         return;
       }
@@ -120,10 +165,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await setDoc(deviceRef, {
           tenantId: userData.tenantId,
           userId: user.uid,
-          approved: false,
+          approved: !user.isAnonymous,
           pushToken: randomUuid(),
           createdAt: serverTimestamp(),
         });
+      } else if (!user.isAnonymous) {
+        await setDoc(
+          deviceRef,
+          {
+            tenantId: userData.tenantId,
+            userId: user.uid,
+            approved: true,
+          },
+          { merge: true }
+        );
       }
 
       if (deviceUnsub.current) deviceUnsub.current();
@@ -136,6 +191,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     return () => {
+      cancelled = true;
       unsub();
       if (deviceUnsub.current) deviceUnsub.current();
     };

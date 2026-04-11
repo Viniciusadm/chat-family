@@ -2,6 +2,8 @@ import { LoadingDots } from "@/components/LoadingDots";
 import { useAuth } from "@/context/AuthContext";
 import { colors } from "@/theme/colors";
 import { Ionicons } from "@expo/vector-icons";
+import { auth } from "@/lib/firebase";
+import { fetchSignInMethodsForEmail } from "firebase/auth";
 import { Redirect, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
@@ -17,6 +19,16 @@ import {
 } from "react-native";
 
 type ViewMode = "login" | "register";
+
+function registerErrorMessage(e: unknown): string {
+  if (e && typeof e === "object" && "code" in e) {
+    const code = (e as { code: string }).code;
+    if (code === "auth/email-already-in-use") {
+      return "Este e-mail já possui uma conta. Faça login ou use outro e-mail.";
+    }
+  }
+  return e instanceof Error ? e.message : "Erro ao criar conta";
+}
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -75,7 +87,6 @@ export default function LoginScreen() {
     setBusy(true);
     try {
       await loginWithEmail(email.trim(), password.trim());
-      router.replace("/");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Erro ao entrar");
     } finally {
@@ -88,10 +99,16 @@ export default function LoginScreen() {
     setError("");
     setBusy(true);
     try {
+      const methods = await fetchSignInMethodsForEmail(auth, email.trim());
+      if (methods.length > 0) {
+        setError(
+          "Este e-mail já possui uma conta. Faça login ou use outro e-mail."
+        );
+        return;
+      }
       await registerWithEmail(email.trim(), password.trim(), name.trim());
-      router.replace("/");
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Erro ao criar conta");
+      setError(registerErrorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -338,9 +355,12 @@ const styles = StyleSheet.create({
   },
   scroll: {
     flexGrow: 1,
+    justifyContent: "center",
+    alignItems: "center",
     paddingHorizontal: 24,
     paddingTop: 48,
     paddingBottom: 32,
+    width: "100%",
   },
   logoWrap: {
     alignItems: "center",

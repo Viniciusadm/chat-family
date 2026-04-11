@@ -29,7 +29,7 @@ function formatTime(date: Date) {
 
 export default function AdminScreen() {
   const router = useRouter();
-  const { currentUser, firebaseUser } = useAuth();
+  const { currentUser, firebaseUser, logout } = useAuth();
   if (
     currentUser?.role !== "adult" ||
     !firebaseUser ||
@@ -108,7 +108,7 @@ export default function AdminScreen() {
   };
 
   const handleCreateChat = async () => {
-    if (selectedParticipants.length === 0) return;
+    if (selectedParticipants.length < 2) return;
     const name =
       chatName.trim() ||
       selectedParticipants
@@ -128,7 +128,7 @@ export default function AdminScreen() {
   };
 
   const handleUpdateChat = async () => {
-    if (!editingChatId || editChatParticipants.length === 0) return;
+    if (!editingChatId || editChatParticipants.length < 2) return;
     const name =
       editChatName.trim() ||
       editChatParticipants
@@ -147,7 +147,12 @@ export default function AdminScreen() {
 
   return (
     <View style={styles.screen}>
-      <AppHeader title="Gerenciamento" onBack={() => router.back()} />
+      <AppHeader
+        title="Gerenciamento"
+        onBack={() => router.back()}
+        rightIcon="log-out-outline"
+        onRightPress={() => void logout()}
+      />
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color={colors.primary} />
@@ -451,10 +456,10 @@ export default function AdminScreen() {
               </Pressable>
               <Pressable
                 onPress={() => void handleCreateChat()}
-                disabled={selectedParticipants.length === 0}
+                disabled={selectedParticipants.length < 2}
                 style={[
                   styles.modalPrimary,
-                  selectedParticipants.length === 0 && styles.btnDisabled,
+                  selectedParticipants.length < 2 && styles.btnDisabled,
                 ]}
               >
                 <Text style={styles.primaryText}>Criar</Text>
@@ -513,10 +518,10 @@ export default function AdminScreen() {
               </Pressable>
               <Pressable
                 onPress={() => void handleUpdateChat()}
-                disabled={editChatParticipants.length === 0}
+                disabled={editChatParticipants.length < 2}
                 style={[
                   styles.modalPrimary,
-                  editChatParticipants.length === 0 && styles.btnDisabled,
+                  editChatParticipants.length < 2 && styles.btnDisabled,
                 ]}
               >
                 <Text style={styles.primaryText}>Salvar</Text>
