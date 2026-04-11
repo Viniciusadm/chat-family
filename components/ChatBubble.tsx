@@ -1,11 +1,13 @@
 import type { Message } from "@/types/chat";
 import { colors } from "@/theme/colors";
+import { MaterialIcons } from "@expo/vector-icons";
 import { StyleSheet, Text, View } from "react-native";
 import { AudioBubble } from "./AudioBubble";
 
 interface ChatBubbleProps {
   message: Message;
   isSelf: boolean;
+  readReceipt?: "sent" | "read";
 }
 
 function formatTime(date: Date) {
@@ -15,7 +17,7 @@ function formatTime(date: Date) {
   });
 }
 
-export function ChatBubble({ message, isSelf }: ChatBubbleProps) {
+export function ChatBubble({ message, isSelf, readReceipt }: ChatBubbleProps) {
   return (
     <View
       style={[styles.wrap, isSelf ? styles.wrapSelf : styles.wrapOther]}
@@ -42,6 +44,16 @@ export function ChatBubble({ message, isSelf }: ChatBubbleProps) {
         )}
         <View style={[styles.meta, isSelf ? styles.metaSelf : styles.metaOther]}>
           <Text style={styles.timestamp}>{formatTime(message.timestamp)}</Text>
+          {isSelf && readReceipt ? (
+            <MaterialIcons
+              name={readReceipt === "read" ? "done-all" : "done"}
+              size={14}
+              color={
+                readReceipt === "read" ? colors.primary : colors.timestamp
+              }
+              style={styles.receiptIcon}
+            />
+          ) : null}
         </View>
       </View>
     </View>
@@ -91,9 +103,13 @@ const styles = StyleSheet.create({
   },
   meta: {
     marginTop: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
   },
   metaSelf: {
     alignItems: "flex-end",
+    justifyContent: "flex-end",
   },
   metaOther: {
     alignItems: "flex-start",
@@ -101,5 +117,8 @@ const styles = StyleSheet.create({
   timestamp: {
     fontSize: 10,
     color: colors.timestamp,
+  },
+  receiptIcon: {
+    marginLeft: 2,
   },
 });

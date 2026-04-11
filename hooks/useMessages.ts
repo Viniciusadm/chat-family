@@ -28,6 +28,7 @@ export function useMessages(chatId: string): { messages: Message[]; loading: boo
           audioUrl: data.audioUrl ?? undefined,
           audioDuration: data.audioDuration ?? undefined,
           timestamp: data.createdAt ? data.createdAt.toDate() : new Date(),
+          createdAtMs: data.createdAt ? data.createdAt.toMillis() : Date.now(),
         };
       });
       setMessages(result);

@@ -47,6 +47,7 @@ export interface ChatDoc {
   lastMessageType: "text" | "audio" | null;
   createdAt: Timestamp;
   updatedAt: Timestamp;
+  readUpTo?: Record<string, Timestamp>;
 }
 
 export interface MessageDoc {
@@ -86,6 +87,7 @@ export interface Chat {
   participants: string[];
   isGroup: boolean;
   name: string;
+  readUpTo?: Record<string, Timestamp>;
   lastMessage?: {
     text: string | null;
     type: "text" | "audio" | null;
@@ -102,4 +104,5 @@ export interface Message {
   audioUrl?: string;
   audioDuration?: number;
   timestamp: Date;
+  createdAtMs: number;
 }

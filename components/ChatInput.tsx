@@ -5,7 +5,6 @@ import { Audio } from "expo-av";
 import { useCallback, useRef, useState } from "react";
 import {
   Keyboard,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -167,7 +166,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.chatInputBg,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    paddingBottom: Platform.OS === "ios" ? 24 : 12,
+    paddingBottom: 12,
   },
   row: {
     flexDirection: "row",

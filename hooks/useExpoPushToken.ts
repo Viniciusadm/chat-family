@@ -30,11 +30,16 @@ export function useExpoPushToken() {
     if (final !== "granted") return null;
     const eas = Constants.expoConfig?.extra?.eas as { projectId?: string } | undefined;
     const projectId = eas?.projectId;
-    const t = await Notifications.getExpoPushTokenAsync(
-      projectId ? { projectId: String(projectId) } : undefined
-    );
-    setToken(t.data);
-    return t.data;
+    try {
+      const t = await Notifications.getExpoPushTokenAsync(
+        projectId ? { projectId: String(projectId) } : undefined
+      );
+      setToken(t.data);
+      return t.data;
+    } catch {
+      setToken(null);
+      return null;
+    }
   }, []);
 
   useEffect(() => {

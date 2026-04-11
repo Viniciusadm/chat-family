@@ -1,7 +1,18 @@
 import type { ExpoConfig } from "expo/config";
+import fs from "node:fs";
+import path from "node:path";
+
+const googleServicesFile = "./google-services.json";
+const hasGoogleServices = fs.existsSync(
+  path.resolve(process.cwd(), googleServicesFile)
+);
 
 export default ({ config }: { config: ExpoConfig }): ExpoConfig => ({
   ...config,
+  android: {
+    ...config.android,
+    ...(hasGoogleServices ? { googleServicesFile } : {}),
+  },
   plugins: [
     ...(config.plugins ?? []),
     "expo-notifications",
