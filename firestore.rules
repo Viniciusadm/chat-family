@@ -38,6 +38,11 @@ service cloud.firestore {
       allow create: if request.auth != null && request.auth.uid == userId;
       allow update: if request.auth != null && request.auth.uid == userId;
       allow delete: if false;
+
+      match /chatList/{chatId} {
+        allow read: if request.auth != null && request.auth.uid == userId;
+        allow write: if false;
+      }
     }
 
     match /members/{memberId} {
@@ -54,9 +59,13 @@ service cloud.firestore {
     }
 
     match /devices/{deviceId} {
-      allow read: if request.auth != null && resource.data.tenantId == userTenant() && (
-        resource.data.userId == request.auth.uid ||
-        isTenantAdult()
+      allow read: if request.auth != null && (
+        resource == null || (
+          resource.data.tenantId == userTenant() && (
+            resource.data.userId == request.auth.uid ||
+            isTenantAdult()
+          )
+        )
       );
       allow create: if request.auth != null &&
         request.resource.data.userId == request.auth.uid &&
@@ -71,17 +80,17 @@ service cloud.firestore {
     match /chats/{chatId} {
       allow read: if request.auth != null &&
         resource.data.tenantId == userTenant() &&
-        memberId() in resource.data.participants;
+        (memberId() in resource.data.participants || isTenantAdult());
       allow create: if request.auth != null &&
         request.resource.data.tenantId == userTenant() &&
-        memberId() in request.resource.data.participants &&
+        (memberId() in request.resource.data.participants || isTenantAdult()) &&
         request.resource.data.keys().hasAll([
           'tenantId', 'participants', 'isGroup', 'name',
           'lastMessageText', 'lastMessageAt', 'lastMessageType', 'createdAt', 'updatedAt'
         ]);
       allow update, delete: if request.auth != null &&
         resource.data.tenantId == userTenant() &&
-        memberId() in resource.data.participants;
+        (memberId() in resource.data.participants || isTenantAdult());
     }
 
     match /chats/{chatId}/messages/{messageId} {

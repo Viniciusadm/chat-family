@@ -27,6 +27,7 @@ export interface UserDoc {
   name: string;
   role: "adult" | "child";
   createdAt: Timestamp;
+  chatIndexBuiltAt?: Timestamp;
 }
 
 export interface DeviceDoc {

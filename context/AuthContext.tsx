@@ -124,67 +124,79 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const stale = () =>
         cancelled || auth.currentUser?.uid !== uid;
 
-      const userSnap = await waitForUserDoc(uid, stale);
-      if (stale()) return;
-      if (!userSnap?.exists()) {
-        setLoading(false);
-        return;
-      }
-      const userData = userSnap.data() as UserDoc;
-      let memberId = userData.memberId ?? user.uid;
-      if (userData.memberId === undefined) {
-        const memberRef = doc(db, "members", user.uid);
-        const memberSnap = await getDoc(memberRef);
-        if (!memberSnap.exists()) {
-          await setDoc(memberRef, {
-            tenantId: userData.tenantId,
-            name: userData.name,
-            role: userData.role,
-            loginCode: null,
-            createdAt: serverTimestamp(),
-          });
+      try {
+        const userSnap = await waitForUserDoc(uid, stale);
+        if (stale()) return;
+        if (!userSnap?.exists()) {
+          setLoading(false);
+          return;
         }
-        await setDoc(doc(db, "users", user.uid), { memberId: user.uid }, { merge: true });
-        memberId = user.uid;
-      }
-      const appUser: AppUser = {
-        id: memberId,
-        tenantId: userData.tenantId,
-        name: userData.name,
-        role: userData.role,
-      };
-      setCurrentUser(appUser);
-      setTenantId(userData.tenantId);
-
-      const deviceRef = doc(db, "devices", deviceId);
-      const deviceSnap = await getDoc(deviceRef);
-      if (!deviceSnap.exists()) {
-        await setDoc(deviceRef, {
+        const userData = userSnap.data() as UserDoc;
+        let memberId = userData.memberId ?? user.uid;
+        if (userData.memberId === undefined) {
+          const memberRef = doc(db, "members", user.uid);
+          const memberSnap = await getDoc(memberRef);
+          if (!memberSnap.exists()) {
+            await setDoc(memberRef, {
+              tenantId: userData.tenantId,
+              name: userData.name,
+              role: userData.role,
+              loginCode: null,
+              createdAt: serverTimestamp(),
+            });
+          }
+          await setDoc(doc(db, "users", user.uid), { memberId: user.uid }, { merge: true });
+          memberId = user.uid;
+        }
+        if (userData.chatIndexBuiltAt == null) {
+          await setDoc(
+            doc(db, "users", uid),
+            { chatIndexBuiltAt: serverTimestamp() },
+            { merge: true }
+          );
+        }
+        const appUser: AppUser = {
+          id: memberId,
           tenantId: userData.tenantId,
-          userId: user.uid,
-          approved: !user.isAnonymous,
-          pushToken: randomUuid(),
-          createdAt: serverTimestamp(),
-        });
-      } else if (!user.isAnonymous) {
-        await setDoc(
-          deviceRef,
-          {
+          name: userData.name,
+          role: userData.role,
+        };
+        setCurrentUser(appUser);
+        setTenantId(userData.tenantId);
+
+        const deviceRef = doc(db, "devices", deviceId);
+        const deviceSnap = await getDoc(deviceRef);
+        if (!deviceSnap.exists()) {
+          await setDoc(deviceRef, {
             tenantId: userData.tenantId,
             userId: user.uid,
-            approved: true,
-          },
-          { merge: true }
-        );
-      }
-
-      if (deviceUnsub.current) deviceUnsub.current();
-      deviceUnsub.current = onSnapshot(deviceRef, (snap) => {
-        if (snap.exists()) {
-          setDeviceApproved(snap.data().approved === true);
+            approved: !user.isAnonymous,
+            pushToken: randomUuid(),
+            createdAt: serverTimestamp(),
+          });
+        } else if (!user.isAnonymous) {
+          await setDoc(
+            deviceRef,
+            {
+              tenantId: userData.tenantId,
+              userId: user.uid,
+              approved: true,
+            },
+            { merge: true }
+          );
         }
+
+        if (deviceUnsub.current) deviceUnsub.current();
+        deviceUnsub.current = onSnapshot(deviceRef, (snap) => {
+          if (snap.exists()) {
+            setDeviceApproved(snap.data().approved === true);
+          }
+          setLoading(false);
+        });
+      } catch (err) {
+        console.error("Auth initialization error:", err);
         setLoading(false);
-      });
+      }
     });
 
     return () => {

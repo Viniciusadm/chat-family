@@ -1,10 +1,188 @@
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import { initializeApp } from "firebase-admin/app";
-import { onDocumentCreated } from "firebase-functions/v2/firestore";
+import { onDocumentCreated, onDocumentWritten } from "firebase-functions/v2/firestore";
 import { logger } from "firebase-functions";
 
 initializeApp();
 const db = getFirestore();
+
+type ChatPayload = {
+  tenantId?: unknown;
+  participants?: unknown;
+};
+
+function sortedParticipantKey(participants: string[]): string {
+  return [...participants].sort().join("\u0001");
+}
+
+async function addChatToMemberUsers(
+  chatId: string,
+  tenantId: string,
+  memberId: string
+): Promise<void> {
+  const usersSnap = await db.collection("users").where("memberId", "==", memberId).get();
+  if (usersSnap.empty) return;
+  let batch = db.batch();
+  let n = 0;
+  for (const userDoc of usersSnap.docs) {
+    batch.set(userDoc.ref.collection("chatList").doc(chatId), { tenantId });
+    n++;
+    if (n >= 450) {
+      await batch.commit();
+      batch = db.batch();
+      n = 0;
+    }
+  }
+  if (n > 0) await batch.commit();
+}
+
+async function removeChatFromMemberUsers(chatId: string, memberId: string): Promise<void> {
+  const usersSnap = await db.collection("users").where("memberId", "==", memberId).get();
+  if (usersSnap.empty) return;
+  let batch = db.batch();
+  let n = 0;
+  for (const userDoc of usersSnap.docs) {
+    batch.delete(userDoc.ref.collection("chatList").doc(chatId));
+    n++;
+    if (n >= 450) {
+      await batch.commit();
+      batch = db.batch();
+      n = 0;
+    }
+  }
+  if (n > 0) await batch.commit();
+}
+
+async function clearUserChatList(uid: string): Promise<void> {
+  const snap = await db.collection(`users/${uid}/chatList`).get();
+  if (snap.empty) return;
+  let batch = db.batch();
+  let n = 0;
+  for (const d of snap.docs) {
+    batch.delete(d.ref);
+    n++;
+    if (n >= 450) {
+      await batch.commit();
+      batch = db.batch();
+      n = 0;
+    }
+  }
+  if (n > 0) await batch.commit();
+}
+
+async function syncUserChatList(uid: string, tenantId: string, memberId: string): Promise<void> {
+  const chatsSnap = await db
+    .collection("chats")
+    .where("tenantId", "==", tenantId)
+    .where("participants", "array-contains", memberId)
+    .get();
+  let batch = db.batch();
+  let n = 0;
+  for (const chatDoc of chatsSnap.docs) {
+    batch.set(db.doc(`users/${uid}/chatList/${chatDoc.id}`), { tenantId });
+    n++;
+    if (n >= 450) {
+      await batch.commit();
+      batch = db.batch();
+      n = 0;
+    }
+  }
+  if (n > 0) await batch.commit();
+}
+
+export const onChatWrite = onDocumentWritten(
+  { document: "chats/{chatId}", region: "southamerica-east1" },
+  async (event) => {
+    const chatId = event.params.chatId;
+    const beforeSnap = event.data?.before;
+    const afterSnap = event.data?.after;
+
+    if (!afterSnap?.exists) {
+      const before = beforeSnap?.exists ? (beforeSnap.data() as ChatPayload) : undefined;
+      const oldP = Array.isArray(before?.participants)
+        ? (before.participants as string[])
+        : [];
+      for (const memberId of oldP) {
+        await removeChatFromMemberUsers(chatId, memberId);
+      }
+      return;
+    }
+
+    const after = afterSnap.data() as ChatPayload;
+    const tenantId = typeof after.tenantId === "string" ? after.tenantId : null;
+    if (!tenantId) return;
+    const newP = Array.isArray(after.participants) ? (after.participants as string[]) : [];
+
+    if (beforeSnap?.exists) {
+      const before = beforeSnap.data() as ChatPayload;
+      const oldP = Array.isArray(before.participants) ? (before.participants as string[]) : [];
+      const tenantSame = before.tenantId === after.tenantId;
+      const participantsSame = sortedParticipantKey(oldP) === sortedParticipantKey(newP);
+      if (tenantSame && participantsSame) {
+        return;
+      }
+      for (const memberId of oldP) {
+        if (!newP.includes(memberId)) {
+          await removeChatFromMemberUsers(chatId, memberId);
+        }
+      }
+    }
+
+    for (const memberId of newP) {
+      await addChatToMemberUsers(chatId, tenantId, memberId);
+    }
+  }
+);
+
+export const onUserWrite = onDocumentWritten(
+  { document: "users/{userId}", region: "southamerica-east1" },
+  async (event) => {
+    const uid = event.params.userId;
+    const afterSnap = event.data?.after;
+    if (!afterSnap?.exists) return;
+
+    const after = afterSnap.data() as {
+      tenantId?: unknown;
+      memberId?: unknown;
+      chatIndexBuiltAt?: unknown;
+    };
+    const tenantId = typeof after.tenantId === "string" ? after.tenantId : null;
+    const memberId = typeof after.memberId === "string" ? after.memberId : null;
+    if (!tenantId || !memberId) return;
+
+    const beforeSnap = event.data?.before;
+    const beforeExists = beforeSnap?.exists === true;
+    const before = beforeExists ? (beforeSnap!.data() as typeof after) : undefined;
+
+    const membershipChanged =
+      !beforeExists ||
+      before?.memberId !== memberId ||
+      before?.tenantId !== tenantId;
+
+    const indexFirstSet =
+      after.chatIndexBuiltAt != null &&
+      (before == null || before.chatIndexBuiltAt == null);
+
+    if (!membershipChanged && !indexFirstSet) {
+      return;
+    }
+
+    if (beforeExists && before != null) {
+      const oldMemberId =
+        typeof before.memberId === "string" ? before.memberId : null;
+      const oldTenantId = typeof before.tenantId === "string" ? before.tenantId : null;
+      if (
+        oldMemberId != null &&
+        oldTenantId != null &&
+        (oldMemberId !== memberId || oldTenantId !== tenantId)
+      ) {
+        await clearUserChatList(uid);
+      }
+    }
+
+    await syncUserChatList(uid, tenantId, memberId);
+  }
+);
 
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 
@@ -32,7 +210,7 @@ async function clearInvalidPushTokens(tokens: string[]): Promise<void> {
 export const onChatMessageCreated = onDocumentCreated(
   {
     document: "chats/{chatId}/messages/{messageId}",
-    region: "europe-west1",
+    region: "southamerica-east1",
   },
   async (event) => {
     const chatId = event.params.chatId;
