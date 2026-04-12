@@ -46,6 +46,7 @@ export function useChatReadReceipts(
         if (existing && existing.toMillis() >= targetMs) return;
         await updateDoc(chatRef, {
           [`readUpTo.${uid}`]: Timestamp.fromMillis(targetMs),
+          [`unreadBy.${uid}`]: 0,
         });
       })();
     }, 400);

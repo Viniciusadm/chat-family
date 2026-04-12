@@ -30,6 +30,7 @@ export function useChats(): { chats: Chat[]; loading: boolean } {
           participants: data.participants,
           isGroup: data.isGroup,
           name: data.name,
+          unreadCount: data.unreadBy?.[currentUser.id] ?? 0,
         };
         if (data.lastMessageAt) {
           chat.lastMessage = {

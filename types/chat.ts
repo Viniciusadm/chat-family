@@ -48,6 +48,7 @@ export interface ChatDoc {
   createdAt: Timestamp;
   updatedAt: Timestamp;
   readUpTo?: Record<string, Timestamp>;
+  unreadBy?: Record<string, number>;
 }
 
 export interface MessageDoc {
@@ -87,6 +88,7 @@ export interface Chat {
   participants: string[];
   isGroup: boolean;
   name: string;
+  unreadCount: number;
   readUpTo?: Record<string, Timestamp>;
   lastMessage?: {
     text: string | null;

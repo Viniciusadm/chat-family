@@ -1,9 +1,12 @@
 import { useAuth } from "@/context/AuthContext";
 import { db, storage } from "@/lib/firebase";
+import type { ChatDoc } from "@/types/chat";
 import {
   addDoc,
   collection,
   doc,
+  getDoc,
+  increment,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -12,6 +15,30 @@ import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { useState } from "react";
 
 export type SendableAudio = Blob | Uint8Array | ArrayBuffer;
+
+async function updateChatAfterOutgoingMessage(
+  chatId: string,
+  senderId: string,
+  lastMessageText: string | null,
+  lastMessageType: "text" | "audio"
+) {
+  const chatRef = doc(db, "chats", chatId);
+  const chatSnap = await getDoc(chatRef);
+  const participants =
+    (chatSnap.data() as ChatDoc | undefined)?.participants ?? [];
+  const updates: Record<string, unknown> = {
+    lastMessageText,
+    lastMessageType,
+    lastMessageAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+  for (const p of participants) {
+    if (p !== senderId) {
+      updates[`unreadBy.${p}`] = increment(1);
+    }
+  }
+  await updateDoc(chatRef, updates);
+}
 
 export function useSendMessage(chatId: string) {
   const { currentUser, tenantId } = useAuth();
@@ -29,12 +56,12 @@ export function useSendMessage(chatId: string) {
         audioDuration: null,
         createdAt: serverTimestamp(),
       });
-      await updateDoc(doc(db, "chats", chatId), {
-        lastMessageText: text.trim(),
-        lastMessageType: "text",
-        lastMessageAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
+      await updateChatAfterOutgoingMessage(
+        chatId,
+        currentUser.id,
+        text.trim(),
+        "text"
+      );
     } finally {
       setIsSending(false);
     }
@@ -71,12 +98,12 @@ export function useSendMessage(chatId: string) {
         audioDuration: null,
         createdAt: serverTimestamp(),
       });
-      await updateDoc(doc(db, "chats", chatId), {
-        lastMessageText: null,
-        lastMessageType: "audio",
-        lastMessageAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
+      await updateChatAfterOutgoingMessage(
+        chatId,
+        currentUser.id,
+        null,
+        "audio"
+      );
     } finally {
       setIsSending(false);
     }

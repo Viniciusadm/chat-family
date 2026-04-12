@@ -4,12 +4,9 @@ import {
   collection,
   doc,
   getDoc,
-  getDocs,
   onSnapshot,
-  query,
   serverTimestamp,
   setDoc,
-  where,
   type DocumentSnapshot,
 } from "firebase/firestore";
 import {
@@ -23,7 +20,7 @@ import {
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { auth, db } from "@/lib/firebase";
 import { randomUuid } from "@/lib/randomUuid";
-import type { AppUser, LoginCodeDoc, MemberDoc, UserDoc } from "@/types/chat";
+import type { AppUser, LoginCodeDoc, UserDoc } from "@/types/chat";
 
 const DEVICE_ID_KEY = "deviceId";
 
@@ -243,44 +240,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!code) throw new Error("Informe o código");
 
     const codeSnap = await getDoc(doc(db, "loginCodes", code));
-    type Payload = {
-      memberId: string;
-      tenantId: string;
-      name: string;
-      role: "adult" | "child";
-    };
-    let payload: Payload | null = null;
-
-    if (codeSnap.exists()) {
-      const d = codeSnap.data() as LoginCodeDoc;
-      payload = {
-        memberId: d.memberId,
-        tenantId: d.tenantId,
-        name: d.name,
-        role: d.role,
-      };
+    if (!codeSnap.exists()) {
+      throw new Error("Código inválido");
     }
+    const d = codeSnap.data() as LoginCodeDoc;
+    const payload = {
+      memberId: d.memberId,
+      tenantId: d.tenantId,
+      name: d.name,
+      role: d.role,
+    };
 
     const cred = await signInAnonymously(auth);
     const uid = cred.user.uid;
-
-    if (!payload) {
-      const snap = await getDocs(
-        query(collection(db, "members"), where("loginCode", "==", code))
-      );
-      if (snap.empty) {
-        await signOut(auth);
-        throw new Error("Código inválido");
-      }
-      const m = snap.docs[0]!;
-      const md = m.data() as MemberDoc;
-      payload = {
-        memberId: m.id,
-        tenantId: md.tenantId,
-        name: md.name,
-        role: md.role,
-      };
-    }
 
     await setDoc(doc(db, "users", uid), {
       memberId: payload.memberId,

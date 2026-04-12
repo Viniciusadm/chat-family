@@ -20,6 +20,10 @@ function formatTime(date: Date) {
   });
 }
 
+function unreadBadgeLabel(count: number) {
+  return count > 99 ? "99+" : String(count);
+}
+
 export default function ChatListScreen() {
   const router = useRouter();
   const { chats, loading } = useChats();
@@ -87,12 +91,25 @@ export default function ChatListScreen() {
                     </Text>
                   )}
                 </View>
-                {chat.lastMessage && (
-                  <Text style={styles.preview} numberOfLines={1}>
-                    {chat.lastMessage.type === "audio"
-                      ? "Áudio"
-                      : (chat.lastMessage.text ?? "")}
-                  </Text>
+                {(chat.lastMessage || chat.unreadCount > 0) && (
+                  <View style={styles.previewRow}>
+                    {chat.lastMessage ? (
+                      <Text style={styles.preview} numberOfLines={1}>
+                        {chat.lastMessage.type === "audio"
+                          ? "Áudio"
+                          : (chat.lastMessage.text ?? "")}
+                      </Text>
+                    ) : (
+                      <View style={styles.previewSpacer} />
+                    )}
+                    {chat.unreadCount > 0 ? (
+                      <View style={styles.unreadBadge}>
+                        <Text style={styles.unreadBadgeText}>
+                          {unreadBadgeLabel(chat.unreadCount)}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
                 )}
               </View>
             </Pressable>
@@ -156,10 +173,34 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.timestamp,
   },
-  preview: {
+  previewRow: {
     marginTop: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    minHeight: 22,
+  },
+  preview: {
+    flex: 1,
     fontSize: 14,
     color: colors.mutedForeground,
+  },
+  previewSpacer: {
+    flex: 1,
+  },
+  unreadBadge: {
+    minWidth: 22,
+    height: 22,
+    paddingHorizontal: 6,
+    borderRadius: 11,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  unreadBadgeText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.primaryForeground,
   },
   empty: {
     flex: 1,

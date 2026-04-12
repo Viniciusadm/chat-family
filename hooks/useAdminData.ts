@@ -152,6 +152,7 @@ export function useAdminData() {
               participants: data.participants,
               isGroup: data.isGroup,
               name: data.name,
+              unreadCount: 0,
             };
           })
         );

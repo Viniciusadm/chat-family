@@ -4,23 +4,26 @@ import * as Notifications from "expo-notifications";
 import { useCallback, useEffect, useState } from "react";
 import { Platform } from "react-native";
 
-if (Platform.OS === "android") {
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowBanner: true,
-      shouldShowList: true,
-      shouldPlaySound: true,
-      shouldSetBadge: false,
-    }),
-  });
-}
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowBanner: true,
+    shouldShowList: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
 
 export function useExpoPushToken() {
   const [token, setToken] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    if (Platform.OS !== "android") return null;
     if (!Device.isDevice) return null;
+    if (Platform.OS === "android") {
+      await Notifications.setNotificationChannelAsync("default", {
+        name: "default",
+        importance: Notifications.AndroidImportance.DEFAULT,
+      });
+    }
     const { status: existing } = await Notifications.getPermissionsAsync();
     let final = existing;
     if (existing !== "granted") {

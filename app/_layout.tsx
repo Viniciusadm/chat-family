@@ -1,3 +1,4 @@
+import { NotificationNavigation } from "@/components/NotificationNavigation";
 import { PushTokenSync } from "@/components/PushTokenSync";
 import { AuthProvider } from "@/context/AuthContext";
 import { Stack } from "expo-router";
@@ -7,12 +8,15 @@ import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-cont
 function RootLayoutNav() {
   const insets = useSafeAreaInsets();
   return (
-    <Stack
-      screenOptions={{
-        headerShown: false,
-        contentStyle: { paddingBottom: insets.bottom },
-      }}
-    />
+    <>
+      <NotificationNavigation />
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { paddingBottom: insets.bottom },
+        }}
+      />
+    </>
   );
 }
 
