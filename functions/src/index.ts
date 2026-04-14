@@ -1,6 +1,11 @@
-import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { FieldValue, getFirestore, type Timestamp } from "firebase-admin/firestore";
 import { initializeApp } from "firebase-admin/app";
-import { onDocumentCreated, onDocumentWritten } from "firebase-functions/v2/firestore";
+import { onCall, HttpsError } from "firebase-functions/v2/https";
+import {
+  onDocumentCreated,
+  onDocumentUpdated,
+  onDocumentWritten,
+} from "firebase-functions/v2/firestore";
 import { logger } from "firebase-functions";
 
 initializeApp();
@@ -184,6 +189,144 @@ export const onUserWrite = onDocumentWritten(
   }
 );
 
+type DeviceData = {
+  userId?: string;
+  approved?: boolean;
+  tenantId?: string;
+  sessionAt?: Timestamp;
+};
+
+async function deactivateOtherDevices(userId: string, keepDeviceId: string): Promise<void> {
+  const snap = await db.collection("devices").where("userId", "==", userId).get();
+  if (snap.empty) return;
+  let batch = db.batch();
+  let n = 0;
+  for (const d of snap.docs) {
+    const ref = d.ref;
+    if (d.id === keepDeviceId) {
+      batch.update(ref, { active: true });
+    } else {
+      batch.update(ref, { active: false });
+    }
+    n++;
+    if (n >= 450) {
+      await batch.commit();
+      batch = db.batch();
+      n = 0;
+    }
+  }
+  if (n > 0) await batch.commit();
+}
+
+async function ensureSingleActiveForApprovedUser(
+  userId: string,
+  deviceId: string,
+  approved: boolean
+): Promise<void> {
+  if (!approved) return;
+  await deactivateOtherDevices(userId, deviceId);
+}
+
+function sessionAtChanged(
+  before: DeviceData | undefined,
+  after: DeviceData | undefined
+): boolean {
+  const a = after?.sessionAt;
+  const b = before?.sessionAt;
+  if (!a) return false;
+  if (!b) return true;
+  return a.toMillis() !== b.toMillis();
+}
+
+export const onDeviceCreated = onDocumentCreated(
+  { document: "devices/{deviceId}", region: "southamerica-east1" },
+  async (event) => {
+    const deviceId = event.params.deviceId;
+    const snap = event.data;
+    if (!snap) return;
+    const data = snap.data() as DeviceData;
+    const userId = typeof data.userId === "string" ? data.userId : null;
+    if (!userId) return;
+    const approved = data.approved === true;
+    try {
+      if (approved) {
+        await ensureSingleActiveForApprovedUser(userId, deviceId, true);
+      } else {
+        await db.doc(`devices/${deviceId}`).update({ active: true });
+      }
+    } catch (e) {
+      logger.error("onDeviceCreated failed", e);
+    }
+  }
+);
+
+export const onDeviceUpdated = onDocumentUpdated(
+  { document: "devices/{deviceId}", region: "southamerica-east1" },
+  async (event) => {
+    const deviceId = event.params.deviceId;
+    const beforeSnap = event.data?.before;
+    const afterSnap = event.data?.after;
+    if (!afterSnap?.exists) return;
+    const before = beforeSnap?.exists ? (beforeSnap.data() as DeviceData) : undefined;
+    const after = afterSnap.data() as DeviceData;
+    const userId = typeof after.userId === "string" ? after.userId : null;
+    if (!userId) return;
+
+    const approvedAfter = after.approved === true;
+    const becameApproved = approvedAfter && before?.approved === false;
+
+    try {
+      if (becameApproved) {
+        await ensureSingleActiveForApprovedUser(userId, deviceId, true);
+        return;
+      }
+      if (approvedAfter && sessionAtChanged(before, after)) {
+        await ensureSingleActiveForApprovedUser(userId, deviceId, true);
+      }
+    } catch (e) {
+      logger.error("onDeviceUpdated failed", e);
+    }
+  }
+);
+
+export const approveDevice = onCall({ region: "southamerica-east1" }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "Authentication required.");
+  }
+  const raw = request.data as { deviceId?: unknown };
+  const deviceId = typeof raw.deviceId === "string" ? raw.deviceId : null;
+  if (!deviceId) {
+    throw new HttpsError("invalid-argument", "deviceId is required.");
+  }
+
+  const adultSnap = await db.doc(`users/${uid}`).get();
+  if (!adultSnap.exists) {
+    throw new HttpsError("permission-denied", "User not found.");
+  }
+  const adult = adultSnap.data() as { tenantId?: string; role?: string };
+  if (adult.role !== "adult") {
+    throw new HttpsError("permission-denied", "Only adults can approve devices.");
+  }
+  const tenantId = typeof adult.tenantId === "string" ? adult.tenantId : null;
+  if (!tenantId) {
+    throw new HttpsError("failed-precondition", "Missing tenant.");
+  }
+
+  const deviceRef = db.doc(`devices/${deviceId}`);
+  const deviceSnap = await deviceRef.get();
+  if (!deviceSnap.exists) {
+    throw new HttpsError("not-found", "Device not found.");
+  }
+  const dev = deviceSnap.data() as { tenantId?: string };
+  if (dev.tenantId !== tenantId) {
+    throw new HttpsError("permission-denied", "Device belongs to another tenant.");
+  }
+
+  await deviceRef.update({ approved: true });
+  return { ok: true };
+});
+
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 
 function isExpoPushToken(token: unknown): token is string {
@@ -279,8 +422,10 @@ export const onChatMessageCreated = onDocumentCreated(
             pushToken?: string;
             tenantId?: string;
             approved?: boolean;
+            active?: boolean;
           };
           if (d.tenantId !== tenantId || d.approved !== true) continue;
+          if (d.active === false) continue;
           const t = d.pushToken;
           if (!isExpoPushToken(t)) continue;
           uniqueTokensSet.add(t);

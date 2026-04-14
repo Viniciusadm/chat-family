@@ -17,6 +17,20 @@ service cloud.firestore {
     function chatDoc(chatId) {
       return get(/databases/$(database)/documents/chats/$(chatId));
     }
+    function isExpoPushTokenCreate() {
+      return request.resource.data.pushToken is string
+        && request.resource.data.pushToken.matches('^ExponentPushToken\\[.+\\]$');
+    }
+    function deviceCreateKeys() {
+      return request.resource.data.keys().hasOnly([
+        'userId', 'tenantId', 'pushToken', 'approved', 'createdAt', 'lastActiveAt', 'sessionAt'
+      ]);
+    }
+    function deviceOwnerUpdateKeys() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+        'pushToken', 'lastActiveAt', 'sessionAt'
+      ]);
+    }
 
     match /loginCodes/{code} {
       allow get: if true;
@@ -69,11 +83,18 @@ service cloud.firestore {
       );
       allow create: if request.auth != null &&
         request.resource.data.userId == request.auth.uid &&
-        request.resource.data.tenantId is string;
-      allow update: if request.auth != null && resource.data.tenantId == userTenant() && (
-        resource.data.userId == request.auth.uid ||
-        isTenantAdult()
-      );
+        request.resource.data.tenantId is string &&
+        request.resource.data.approved is bool &&
+        isExpoPushTokenCreate() &&
+        deviceCreateKeys() &&
+        !request.resource.data.keys().hasAny(['active']);
+      allow update: if request.auth != null &&
+        resource.data.userId == request.auth.uid &&
+        request.resource.data.userId == resource.data.userId &&
+        request.resource.data.tenantId == resource.data.tenantId &&
+        request.resource.data.approved == resource.data.approved &&
+        request.resource.data.active == resource.data.active &&
+        deviceOwnerUpdateKeys();
       allow delete: if request.auth != null && resource.data.tenantId == userTenant() && isTenantAdult();
     }
 

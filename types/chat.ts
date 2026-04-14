@@ -34,8 +34,11 @@ export interface DeviceDoc {
   tenantId: string;
   userId: string;
   approved: boolean;
+  active?: boolean;
   pushToken: string;
   createdAt: Timestamp;
+  lastActiveAt?: Timestamp;
+  sessionAt?: Timestamp;
 }
 
 export interface ChatDoc {
@@ -79,6 +82,7 @@ export interface Device {
   tenantId: string;
   userId: string;
   approved: boolean;
+  active?: boolean;
   pushToken: string;
   createdAt: Date;
 }

@@ -26,6 +26,12 @@ export default ({ config }: { config: ExpoConfig }): ExpoConfig => ({
   ],
   extra: {
     ...config.extra,
+    eas: {
+      ...((config.extra as { eas?: { projectId?: string } } | undefined)?.eas ?? {}),
+      projectId:
+        (config.extra as { eas?: { projectId?: string } } | undefined)?.eas?.projectId ??
+        "3c81d144-9377-4842-962f-ce4c62ec61d2",
+    },
     firebase: {
       apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY ?? "",
       authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN ?? "",

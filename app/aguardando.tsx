@@ -8,15 +8,15 @@ import { StyleSheet, Text, View } from "react-native";
 
 export default function AguardandoScreen() {
   const router = useRouter();
-  const { firebaseUser, deviceApproved, loading } = useAuth();
+  const { firebaseUser, deviceApproved, loading, sessionReady, needsPushToken } = useAuth();
 
   useEffect(() => {
-    if (!loading && deviceApproved === true) {
+    if (!loading && sessionReady && deviceApproved === true) {
       router.replace("/");
     }
-  }, [deviceApproved, loading, router]);
+  }, [deviceApproved, loading, sessionReady, router]);
 
-  if (loading) {
+  if (loading || (firebaseUser && !sessionReady)) {
     return (
       <View style={[styles.screen, styles.centerOnly]}>
         <LoadingDots />
@@ -25,6 +25,10 @@ export default function AguardandoScreen() {
   }
 
   if (!firebaseUser) {
+    return <Redirect href="/login" />;
+  }
+
+  if (needsPushToken) {
     return <Redirect href="/login" />;
   }
 

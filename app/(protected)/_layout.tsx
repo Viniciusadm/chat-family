@@ -5,9 +5,9 @@ import { Redirect, Stack } from "expo-router";
 import { StyleSheet, View } from "react-native";
 
 export default function ProtectedLayout() {
-  const { firebaseUser, deviceApproved, loading } = useAuth();
+  const { firebaseUser, deviceApproved, loading, sessionReady, needsPushToken } = useAuth();
 
-  if (loading) {
+  if (loading || (firebaseUser && !sessionReady)) {
     return (
       <View style={styles.center}>
         <LoadingDots />
@@ -19,8 +19,20 @@ export default function ProtectedLayout() {
     return <Redirect href="/login" />;
   }
 
+  if (needsPushToken) {
+    return <Redirect href="/login" />;
+  }
+
   if (deviceApproved === false) {
     return <Redirect href="/aguardando" />;
+  }
+
+  if (deviceApproved !== true) {
+    return (
+      <View style={styles.center}>
+        <LoadingDots />
+      </View>
+    );
   }
 
   return <Stack screenOptions={{ headerShown: false }} />;

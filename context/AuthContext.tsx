@@ -17,8 +17,9 @@ import {
   signOut,
   type User as FirebaseUser,
 } from "firebase/auth";
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { auth, db } from "@/lib/firebase";
+import { fetchExpoPushToken, isValidExpoPushTokenString } from "@/lib/expoPushToken";
 import { randomUuid } from "@/lib/randomUuid";
 import type { AppUser, LoginCodeDoc, UserDoc } from "@/types/chat";
 
@@ -74,11 +75,14 @@ interface AuthContextValue {
   tenantId: string | null;
   deviceId: string;
   deviceApproved: boolean | null;
+  sessionReady: boolean;
+  needsPushToken: boolean;
   loading: boolean;
   loginWithEmail: (email: string, password: string) => Promise<void>;
   registerWithEmail: (email: string, password: string, name: string) => Promise<void>;
   loginWithChildCode: (code: string) => Promise<void>;
   logout: () => Promise<void>;
+  retryDeviceRegistration: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -88,9 +92,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [deviceApproved, setDeviceApproved] = useState<boolean | null>(null);
+  const [sessionReady, setSessionReady] = useState(false);
+  const [needsPushToken, setNeedsPushToken] = useState(false);
   const [loading, setLoading] = useState(true);
   const [deviceId, setDeviceId] = useState("");
   const deviceUnsub = useRef<(() => void) | null>(null);
+  const signingOutRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -102,6 +109,108 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  const attachDeviceSnapshot = useCallback(
+    (deviceRef: ReturnType<typeof doc>) => {
+      if (deviceUnsub.current) deviceUnsub.current();
+      deviceUnsub.current = onSnapshot(deviceRef, (snap) => {
+        if (signingOutRef.current) return;
+        if (!snap.exists()) {
+          setDeviceApproved(null);
+          setLoading(false);
+          setSessionReady(true);
+          setNeedsPushToken(false);
+          return;
+        }
+        const data = snap.data();
+        if (data.active === false) {
+          signingOutRef.current = true;
+          if (deviceUnsub.current) {
+            deviceUnsub.current();
+            deviceUnsub.current = null;
+          }
+          signOut(auth).catch(() => {});
+          return;
+        }
+        setDeviceApproved(data.approved === true);
+        setLoading(false);
+        setSessionReady(true);
+        setNeedsPushToken(false);
+      });
+    },
+    []
+  );
+
+  const syncDeviceWithToken = useCallback(
+    async (
+      user: FirebaseUser,
+      uid: string,
+      userData: UserDoc,
+      did: string,
+      isStale: () => boolean
+    ): Promise<boolean> => {
+      const pushToken = await fetchExpoPushToken();
+      if (isStale()) return false;
+
+      if (!pushToken || !isValidExpoPushTokenString(pushToken)) {
+        setDeviceApproved(null);
+        setSessionReady(true);
+        setNeedsPushToken(true);
+        setLoading(false);
+        return false;
+      }
+
+      const deviceRef = doc(db, "devices", did);
+      const deviceSnap = await getDoc(deviceRef);
+      if (isStale()) return false;
+
+      const basePayload = {
+        tenantId: userData.tenantId,
+        userId: uid,
+        pushToken,
+        lastActiveAt: serverTimestamp(),
+        sessionAt: serverTimestamp(),
+      };
+
+      if (!deviceSnap.exists()) {
+        await setDoc(deviceRef, {
+          ...basePayload,
+          approved: !user.isAnonymous,
+          createdAt: serverTimestamp(),
+        });
+      } else {
+        const mergePayload: Record<string, unknown> = {
+          ...basePayload,
+        };
+        if (!user.isAnonymous) {
+          mergePayload.approved = true;
+        }
+        await setDoc(deviceRef, mergePayload, { merge: true });
+      }
+
+      if (isStale()) return false;
+
+      attachDeviceSnapshot(deviceRef);
+      return true;
+    },
+    [attachDeviceSnapshot]
+  );
+
+  const retryDeviceRegistration = useCallback(async () => {
+    const user = auth.currentUser;
+    if (!user || !deviceId) return;
+    setLoading(true);
+    setNeedsPushToken(false);
+    const uid = user.uid;
+    const stale = () => false;
+    const userSnap = await getDoc(doc(db, "users", uid));
+    if (!userSnap.exists()) {
+      setLoading(false);
+      return;
+    }
+    const userData = userSnap.data() as UserDoc;
+    await syncDeviceWithToken(user, uid, userData, deviceId, stale);
+  }, [deviceId, syncDeviceWithToken]);
+
   useEffect(() => {
     if (!deviceId) return;
 
@@ -109,16 +218,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const unsub = onAuthStateChanged(auth, async (user) => {
       setFirebaseUser(user);
+      signingOutRef.current = false;
 
       if (!user) {
+        if (deviceUnsub.current) deviceUnsub.current();
+        deviceUnsub.current = null;
         setCurrentUser(null);
         setTenantId(null);
         setDeviceApproved(null);
+        setSessionReady(true);
+        setNeedsPushToken(false);
         setLoading(false);
         return;
       }
 
       setLoading(true);
+      setSessionReady(false);
+      setNeedsPushToken(false);
 
       const uid = user.uid;
       const stale = () =>
@@ -129,6 +245,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (stale()) return;
         if (!userSnap?.exists()) {
           setLoading(false);
+          setSessionReady(true);
           return;
         }
         const userData = userSnap.data() as UserDoc;
@@ -164,38 +281,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setCurrentUser(appUser);
         setTenantId(userData.tenantId);
 
-        const deviceRef = doc(db, "devices", deviceId);
-        const deviceSnap = await getDoc(deviceRef);
-        if (!deviceSnap.exists()) {
-          await setDoc(deviceRef, {
-            tenantId: userData.tenantId,
-            userId: user.uid,
-            approved: !user.isAnonymous,
-            pushToken: randomUuid(),
-            createdAt: serverTimestamp(),
-          });
-        } else if (!user.isAnonymous) {
-          await setDoc(
-            deviceRef,
-            {
-              tenantId: userData.tenantId,
-              userId: user.uid,
-              approved: true,
-            },
-            { merge: true }
-          );
-        }
-
-        if (deviceUnsub.current) deviceUnsub.current();
-        deviceUnsub.current = onSnapshot(deviceRef, (snap) => {
-          if (snap.exists()) {
-            setDeviceApproved(snap.data().approved === true);
-          }
-          setLoading(false);
-        });
+        await syncDeviceWithToken(user, uid, userData, deviceId, stale);
       } catch (err) {
         console.error("Auth initialization error:", err);
         setLoading(false);
+        setSessionReady(true);
       }
     });
 
@@ -204,7 +294,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       unsub();
       if (deviceUnsub.current) deviceUnsub.current();
     };
-  }, [deviceId]);
+  }, [deviceId, syncDeviceWithToken]);
 
   const loginWithEmail = async (email: string, password: string) => {
     await signInWithEmailAndPassword(auth, email, password);
@@ -212,6 +302,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const registerWithEmail = async (email: string, password: string, name: string) => {
     if (!deviceId) throw new Error("Dispositivo ainda a inicializar.");
+    const pushToken = await fetchExpoPushToken();
+    if (!pushToken || !isValidExpoPushTokenString(pushToken)) {
+      throw new Error("Não foi possível obter token de notificação. Verifique permissões.");
+    }
     const cred = await createUserWithEmailAndPassword(auth, email, password);
     const uid = cred.user.uid;
 
@@ -241,13 +335,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       tenantId: tenantRef.id,
       userId: uid,
       approved: true,
-      pushToken: randomUuid(),
+      pushToken,
       createdAt: serverTimestamp(),
+      lastActiveAt: serverTimestamp(),
+      sessionAt: serverTimestamp(),
     });
   };
 
   const loginWithChildCode = async (rawCode: string) => {
     if (!deviceId) throw new Error("Dispositivo ainda a inicializar.");
+    const pushToken = await fetchExpoPushToken();
+    if (!pushToken || !isValidExpoPushTokenString(pushToken)) {
+      throw new Error("Não foi possível obter token de notificação. Verifique permissões.");
+    }
     const code = rawCode.trim().toUpperCase();
     if (!code) throw new Error("Informe o código");
 
@@ -278,8 +378,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       tenantId: payload.tenantId,
       userId: uid,
       approved: false,
-      pushToken: randomUuid(),
+      pushToken,
       createdAt: serverTimestamp(),
+      lastActiveAt: serverTimestamp(),
+      sessionAt: serverTimestamp(),
     });
   };
 
@@ -295,11 +397,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         tenantId,
         deviceId,
         deviceApproved,
+        sessionReady,
+        needsPushToken,
         loading,
         loginWithEmail,
         registerWithEmail,
         loginWithChildCode,
         logout,
+        retryDeviceRegistration,
       }}
     >
       {children}

@@ -1,5 +1,6 @@
 import { useAuth } from "@/context/AuthContext";
-import { db, storage } from "@/lib/firebase";
+import { db, functions, storage } from "@/lib/firebase";
+import { httpsCallable } from "firebase/functions";
 import { randomUuid } from "@/lib/randomUuid";
 import type {
   AppMember,
@@ -194,7 +195,8 @@ export function useAdminData() {
   };
 
   const approveDevice = async (deviceIdParam: string) => {
-    await updateDoc(doc(db, "devices", deviceIdParam), { approved: true });
+    const fn = httpsCallable(functions, "approveDevice");
+    await fn({ deviceId: deviceIdParam });
   };
 
   const rejectDevice = async (deviceIdParam: string) => {

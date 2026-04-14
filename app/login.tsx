@@ -3,11 +3,12 @@ import { useAuth } from "@/context/AuthContext";
 import { colors } from "@/theme/colors";
 import { Ionicons } from "@expo/vector-icons";
 import { auth } from "@/lib/firebase";
-import { fetchSignInMethodsForEmail } from "firebase/auth";
+import { fetchSignInMethodsForEmail, signOut } from "firebase/auth";
 import { Redirect, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -36,6 +37,9 @@ export default function LoginScreen() {
     firebaseUser,
     deviceApproved,
     loading,
+    sessionReady,
+    needsPushToken,
+    retryDeviceRegistration,
     loginWithEmail,
     registerWithEmail,
     loginWithChildCode,
@@ -52,13 +56,47 @@ export default function LoginScreen() {
   const [childError, setChildError] = useState("");
 
   useEffect(() => {
-    if (loading || !firebaseUser) return;
+    if (loading || !firebaseUser || !sessionReady || needsPushToken) return;
     if (deviceApproved === false) {
       router.replace("/aguardando");
     } else if (deviceApproved === true) {
       router.replace("/");
     }
-  }, [loading, firebaseUser, deviceApproved, router]);
+  }, [loading, firebaseUser, deviceApproved, sessionReady, needsPushToken, router]);
+
+  if (loading && !sessionReady) {
+    return (
+      <View style={styles.loadingScreen}>
+        <LoadingDots />
+      </View>
+    );
+  }
+
+  if (firebaseUser && sessionReady && needsPushToken) {
+    return (
+      <View style={styles.pushGate}>
+        <Text style={styles.pushGateTitle}>Notificações necessárias</Text>
+        <Text style={styles.pushGateSub}>
+          Ative as notificações para este app nas configurações do sistema e tente novamente.
+        </Text>
+        <Pressable
+          style={styles.primaryBtn}
+          onPress={() => Linking.openSettings()}
+        >
+          <Text style={styles.primaryBtnText}>Abrir configurações</Text>
+        </Pressable>
+        <Pressable
+          style={styles.secondaryBtn}
+          onPress={() => retryDeviceRegistration()}
+        >
+          <Text style={styles.secondaryBtnText}>Tentar novamente</Text>
+        </Pressable>
+        <Pressable style={styles.textLink} onPress={() => signOut(auth)}>
+          <Text style={styles.textLinkLabel}>Sair</Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   if (loading) {
     return (
@@ -348,6 +386,45 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     alignItems: "center",
     justifyContent: "center",
+  },
+  pushGate: {
+    flex: 1,
+    backgroundColor: colors.background,
+    paddingHorizontal: 24,
+    justifyContent: "center",
+    gap: 16,
+  },
+  pushGateTitle: {
+    fontSize: 22,
+    fontWeight: "600",
+    color: colors.foreground,
+    textAlign: "center",
+  },
+  pushGateSub: {
+    fontSize: 15,
+    color: colors.mutedForeground,
+    textAlign: "center",
+    lineHeight: 22,
+  },
+  secondaryBtn: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  secondaryBtnText: {
+    color: colors.foreground,
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  textLink: {
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  textLinkLabel: {
+    fontSize: 15,
+    color: colors.mutedForeground,
   },
   screen: {
     flex: 1,
