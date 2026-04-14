@@ -29,7 +29,9 @@ export async function fetchExpoPushToken(): Promise<string | null> {
       projectId ? { projectId: String(projectId) } : undefined
     );
     return t.data;
-  } catch {
-    return null;
+  } catch (e) {
+    throw new Error(
+      `Falha ao obter token de notificação: ${e instanceof Error ? e.message : String(e)}`
+    );
   }
 }

@@ -39,6 +39,7 @@ export default function LoginScreen() {
     loading,
     sessionReady,
     needsPushToken,
+    pushTokenError,
     retryDeviceRegistration,
     loginWithEmail,
     registerWithEmail,
@@ -76,15 +77,21 @@ export default function LoginScreen() {
     return (
       <View style={styles.pushGate}>
         <Text style={styles.pushGateTitle}>Notificações necessárias</Text>
-        <Text style={styles.pushGateSub}>
-          Ative as notificações para este app nas configurações do sistema e tente novamente.
-        </Text>
-        <Pressable
-          style={styles.primaryBtn}
-          onPress={() => Linking.openSettings()}
-        >
-          <Text style={styles.primaryBtnText}>Abrir configurações</Text>
-        </Pressable>
+        {pushTokenError ? (
+          <Text style={styles.pushGateSub}>{pushTokenError}</Text>
+        ) : (
+          <>
+            <Text style={styles.pushGateSub}>
+              Ative as notificações para este app nas configurações do sistema e tente novamente.
+            </Text>
+            <Pressable
+              style={styles.primaryBtn}
+              onPress={() => Linking.openSettings()}
+            >
+              <Text style={styles.primaryBtnText}>Abrir configurações</Text>
+            </Pressable>
+          </>
+        )}
         <Pressable
           style={styles.secondaryBtn}
           onPress={() => retryDeviceRegistration()}

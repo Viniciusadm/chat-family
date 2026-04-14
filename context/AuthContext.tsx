@@ -77,6 +77,7 @@ interface AuthContextValue {
   deviceApproved: boolean | null;
   sessionReady: boolean;
   needsPushToken: boolean;
+  pushTokenError: string | null;
   loading: boolean;
   loginWithEmail: (email: string, password: string) => Promise<void>;
   registerWithEmail: (email: string, password: string, name: string) => Promise<void>;
@@ -94,6 +95,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [deviceApproved, setDeviceApproved] = useState<boolean | null>(null);
   const [sessionReady, setSessionReady] = useState(false);
   const [needsPushToken, setNeedsPushToken] = useState(false);
+  const [pushTokenError, setPushTokenError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [deviceId, setDeviceId] = useState("");
   const deviceUnsub = useRef<(() => void) | null>(null);
@@ -148,13 +150,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       did: string,
       isStale: () => boolean
     ): Promise<boolean> => {
-      const pushToken = await fetchExpoPushToken();
+      let pushToken: string | null;
+      try {
+        pushToken = await fetchExpoPushToken();
+      } catch (e) {
+        if (isStale()) return false;
+        setDeviceApproved(null);
+        setSessionReady(true);
+        setNeedsPushToken(true);
+        setPushTokenError(e instanceof Error ? e.message : String(e));
+        setLoading(false);
+        return false;
+      }
       if (isStale()) return false;
 
       if (!pushToken || !isValidExpoPushTokenString(pushToken)) {
         setDeviceApproved(null);
         setSessionReady(true);
         setNeedsPushToken(true);
+        setPushTokenError(null);
         setLoading(false);
         return false;
       }
@@ -200,6 +214,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!user || !deviceId) return;
     setLoading(true);
     setNeedsPushToken(false);
+    setPushTokenError(null);
     const uid = user.uid;
     const stale = () => false;
     const userSnap = await getDoc(doc(db, "users", uid));
@@ -228,6 +243,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setDeviceApproved(null);
         setSessionReady(true);
         setNeedsPushToken(false);
+        setPushTokenError(null);
         setLoading(false);
         return;
       }
@@ -235,6 +251,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(true);
       setSessionReady(false);
       setNeedsPushToken(false);
+      setPushTokenError(null);
 
       const uid = user.uid;
       const stale = () =>
@@ -407,6 +424,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         deviceApproved,
         sessionReady,
         needsPushToken,
+        pushTokenError,
         loading,
         loginWithEmail,
         registerWithEmail,
