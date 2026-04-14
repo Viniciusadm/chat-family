@@ -331,15 +331,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       createdAt: serverTimestamp(),
     });
 
-    await setDoc(doc(db, "devices", deviceId), {
-      tenantId: tenantRef.id,
-      userId: uid,
-      approved: true,
-      pushToken,
-      createdAt: serverTimestamp(),
-      lastActiveAt: serverTimestamp(),
-      sessionAt: serverTimestamp(),
-    });
+    await setDoc(
+      doc(db, "devices", deviceId),
+      {
+        tenantId: tenantRef.id,
+        userId: uid,
+        approved: true,
+        pushToken,
+        createdAt: serverTimestamp(),
+        lastActiveAt: serverTimestamp(),
+        sessionAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
   };
 
   const loginWithChildCode = async (rawCode: string) => {
@@ -374,15 +378,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       createdAt: serverTimestamp(),
     });
 
-    await setDoc(doc(db, "devices", deviceId), {
-      tenantId: payload.tenantId,
-      userId: uid,
-      approved: false,
-      pushToken,
-      createdAt: serverTimestamp(),
-      lastActiveAt: serverTimestamp(),
-      sessionAt: serverTimestamp(),
-    });
+    await setDoc(
+      doc(db, "devices", deviceId),
+      {
+        tenantId: payload.tenantId,
+        userId: uid,
+        approved: false,
+        pushToken,
+        createdAt: serverTimestamp(),
+        lastActiveAt: serverTimestamp(),
+        sessionAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
   };
 
   const logout = async () => {
