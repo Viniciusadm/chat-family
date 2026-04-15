@@ -4,7 +4,7 @@ export default ({ config }: { config: ExpoConfig }): ExpoConfig => ({
   ...config,
   android: {
     ...config.android,
-    googleServicesFile: process.env.GOOGLE_SERVICES_JSON,
+    googleServicesFile: process.env.EXPO_PUBLIC_GOOGLE_SERVICES_FILE,
   },
   plugins: [
     ...(config.plugins ?? []),
