@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1062330341911",
+    "project_id": "chat-85983",
+    "storage_bucket": "chat-85983.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1062330341911:android:00613965806416c1229a52",
+        "android_client_info": {
+          "package_name": "com.archieapps.chatapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB9GYL3q-MQYqeGSD2xr-WPYIEDkoR3DCk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

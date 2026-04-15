@@ -1,13 +1,49 @@
+import path from "path";
 import type { ExpoConfig } from "expo/config";
 
-export default ({ config }: { config: ExpoConfig }): ExpoConfig => ({
-  ...config,
+export default (): ExpoConfig => ({
+  name: "chat",
+  slug: "chat",
+  version: "1.0.0",
+  orientation: "portrait",
+  icon: "./assets/images/icon.png",
+  scheme: "chat",
+  userInterfaceStyle: "automatic",
+  newArchEnabled: true,
+  ios: {
+    supportsTablet: true,
+    bundleIdentifier: "com.archieapps.chatapp",
+  },
   android: {
-    ...config.android,
-    googleServicesFile: process.env.EXPO_PUBLIC_GOOGLE_SERVICES_FILE,
+    package: "com.archieapps.chatapp",
+    adaptiveIcon: {
+      backgroundColor: "#E6F4FE",
+      foregroundImage: "./assets/images/android-icon-foreground.png",
+      backgroundImage: "./assets/images/android-icon-background.png",
+      monochromeImage: "./assets/images/android-icon-monochrome.png",
+    },
+    edgeToEdgeEnabled: true,
+    predictiveBackGestureEnabled: false,
+    googleServicesFile: path.join(__dirname, "google-services.json"),
+  },
+  web: {
+    output: "static",
+    favicon: "./assets/images/favicon.png",
   },
   plugins: [
-    ...(config.plugins ?? []),
+    "expo-router",
+    [
+      "expo-splash-screen",
+      {
+        image: "./assets/images/splash-icon.png",
+        imageWidth: 200,
+        resizeMode: "contain",
+        backgroundColor: "#ffffff",
+        dark: {
+          backgroundColor: "#000000",
+        },
+      },
+    ],
     "expo-notifications",
     [
       "expo-av",
@@ -17,13 +53,14 @@ export default ({ config }: { config: ExpoConfig }): ExpoConfig => ({
       },
     ],
   ],
+  experiments: {
+    typedRoutes: true,
+    reactCompiler: true,
+  },
   extra: {
-    ...config.extra,
+    router: {},
     eas: {
-      ...((config.extra as { eas?: { projectId?: string } } | undefined)?.eas ?? {}),
-      projectId:
-        (config.extra as { eas?: { projectId?: string } } | undefined)?.eas?.projectId ??
-        "3c81d144-9377-4842-962f-ce4c62ec61d2",
+      projectId: "3c81d144-9377-4842-962f-ce4c62ec61d2",
     },
     firebase: {
       apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY ?? "",
@@ -34,4 +71,5 @@ export default ({ config }: { config: ExpoConfig }): ExpoConfig => ({
       appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID ?? "",
     },
   },
+  owner: "viniciusadm",
 });
