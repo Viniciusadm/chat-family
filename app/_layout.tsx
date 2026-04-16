@@ -3,19 +3,19 @@ import { PushTokenSync } from "@/components/PushTokenSync";
 import { AuthProvider } from "@/context/AuthContext";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 
 function RootLayoutNav() {
-  const insets = useSafeAreaInsets();
   return (
     <>
       <NotificationNavigation />
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { paddingBottom: insets.bottom },
-        }}
-      />
+      <SafeAreaView style={{ flex: 1 }} edges={["bottom"]}>
+        <Stack
+          screenOptions={{
+            headerShown: false,
+          }}
+        />
+      </SafeAreaView>
     </>
   );
 }

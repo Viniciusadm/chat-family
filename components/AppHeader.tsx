@@ -1,7 +1,7 @@
 import { colors } from "@/theme/colors";
 import { Ionicons } from "@expo/vector-icons";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 type Ion = keyof typeof Ionicons.glyphMap;
 
@@ -18,57 +18,65 @@ export function AppHeader({
   rightIcon,
   onRightPress,
 }: AppHeaderProps) {
-  const insets = useSafeAreaInsets();
   return (
-    <View style={[styles.bar, { paddingTop: Math.max(insets.top, 12) }]}>
-      {onBack ? (
-        <Pressable
-          onPress={onBack}
-          style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed]}
-          hitSlop={8}
+    <SafeAreaView edges={["top"]} style={styles.container}>
+      <View style={styles.bar}>
+        {onBack ? (
+          <Pressable
+            onPress={onBack}
+            style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed]}
+            hitSlop={8}
+          >
+            <Ionicons
+              name="chevron-back"
+              size={24}
+              color={colors.chatHeaderForeground}
+            />
+          </Pressable>
+        ) : (
+          <View style={styles.iconPlaceholder} />
+        )}
+
+        <Text
+          style={[
+            styles.title,
+            onBack ? styles.titleWithBack : styles.titleLarge,
+          ]}
+          numberOfLines={1}
         >
-          <Ionicons
-            name="chevron-back"
-            size={24}
-            color={colors.chatHeaderForeground}
-          />
-        </Pressable>
-      ) : (
-        <View style={styles.iconPlaceholder} />
-      )}
-      <Text
-        style={[styles.title, onBack ? styles.titleWithBack : styles.titleLarge]}
-        numberOfLines={1}
-      >
-        {title}
-      </Text>
-      {rightIcon && onRightPress ? (
-        <Pressable
-          onPress={onRightPress}
-          style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed]}
-          hitSlop={8}
-        >
-          <Ionicons
-            name={rightIcon}
-            size={22}
-            color={colors.chatHeaderForeground}
-          />
-        </Pressable>
-      ) : (
-        <View style={styles.iconPlaceholder} />
-      )}
-    </View>
+          {title}
+        </Text>
+
+        {rightIcon && onRightPress ? (
+          <Pressable
+            onPress={onRightPress}
+            style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed]}
+            hitSlop={8}
+          >
+            <Ionicons
+              name={rightIcon}
+              size={22}
+              color={colors.chatHeaderForeground}
+            />
+          </Pressable>
+        ) : (
+          <View style={styles.iconPlaceholder} />
+        )}
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    backgroundColor: colors.chatHeader,
+  },
   bar: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     paddingHorizontal: 12,
     paddingBottom: 14,
-    backgroundColor: colors.chatHeader,
   },
   iconBtn: {
     width: 36,

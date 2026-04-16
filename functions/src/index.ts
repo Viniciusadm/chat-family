@@ -350,6 +350,86 @@ async function clearInvalidPushTokens(tokens: string[]): Promise<void> {
   }
 }
 
+const PUSH_BODY_MAX_CHARS = 3500;
+const PUSH_RECENT_MESSAGE_LIMIT = 8;
+const PUSH_LINE_PREVIEW_MAX = 280;
+
+function linePreviewFromMessage(m: { text?: string | null; audioUrl?: string | null }): string {
+  let s: string;
+  if (m.text != null && String(m.text).trim().length > 0) {
+    s = String(m.text).trim();
+  } else if (m.audioUrl) {
+    s = "Áudio";
+  } else {
+    s = "Nova mensagem";
+  }
+  if (s.length > PUSH_LINE_PREVIEW_MAX) {
+    return `${s.slice(0, PUSH_LINE_PREVIEW_MAX - 1)}…`;
+  }
+  return s;
+}
+
+function truncatePushBody(body: string, maxChars: number): string {
+  if (body.length <= maxChars) return body;
+  return `${body.slice(0, maxChars - 1)}…`;
+}
+
+async function buildAggregatedChatPushBody(chatId: string, tenantId: string): Promise<string> {
+  const messagesSnap = await db
+    .collection("chats")
+    .doc(chatId)
+    .collection("messages")
+    .orderBy("createdAt", "desc")
+    .limit(PUSH_RECENT_MESSAGE_LIMIT)
+    .get();
+
+  if (messagesSnap.empty) {
+    return "Nova mensagem";
+  }
+
+  const docs = [...messagesSnap.docs].reverse();
+  const senderIds = new Set<string>();
+  for (const d of docs) {
+    const row = d.data() as { tenantId?: string; senderId?: string };
+    if (row.tenantId !== tenantId) continue;
+    if (typeof row.senderId === "string" && row.senderId.length > 0) {
+      senderIds.add(row.senderId);
+    }
+  }
+
+  const nameByMemberId = new Map<string, string>();
+  await Promise.all(
+    [...senderIds].map(async (id) => {
+      const m = await db.doc(`members/${id}`).get();
+      const n =
+        m.exists && typeof (m.data() as { name?: string }).name === "string"
+          ? (m.data() as { name: string }).name
+          : "Alguém";
+      nameByMemberId.set(id, n);
+    }),
+  );
+
+  const lines: string[] = [];
+  for (const d of docs) {
+    const data = d.data() as {
+      tenantId?: string;
+      senderId?: string;
+      text?: string | null;
+      audioUrl?: string | null;
+    };
+    if (data.tenantId !== tenantId) continue;
+    const sid = typeof data.senderId === "string" ? data.senderId : "";
+    if (!sid) continue;
+    const name = nameByMemberId.get(sid) ?? "Alguém";
+    lines.push(`${name}: ${linePreviewFromMessage(data)}`);
+  }
+
+  if (lines.length === 0) {
+    return "Nova mensagem";
+  }
+  return truncatePushBody(lines.join("\n"), PUSH_BODY_MAX_CHARS);
+}
+
 export const onChatMessageCreated = onDocumentCreated(
   {
     document: "chats/{chatId}/messages/{messageId}",
@@ -401,14 +481,7 @@ export const onChatMessageCreated = onDocumentCreated(
         ? chat.name
         : senderName;
 
-    let body: string;
-    if (msg.text != null && String(msg.text).trim().length > 0) {
-      body = String(msg.text).trim();
-    } else if (msg.audioUrl) {
-      body = "Áudio";
-    } else {
-      body = "Nova mensagem";
-    }
+    const body = await buildAggregatedChatPushBody(chatId, tenantId);
 
     const uniqueTokensSet = new Set<string>();
 
@@ -450,6 +523,8 @@ export const onChatMessageCreated = onDocumentCreated(
           body,
           data: { chatId, tenantId },
           channelId: "default",
+          tag: chatId,
+          collapseId: chatId,
         }),
       });
     } catch (e) {
