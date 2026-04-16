@@ -9,10 +9,12 @@ import { colors } from "@/theme/colors";
 import type { Message } from "@/types/chat";
 import type { Timestamp } from "firebase/firestore";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   FlatList,
+  Keyboard,
   KeyboardAvoidingView,
+  Platform,
   StyleSheet,
   View,
 } from "react-native";
@@ -42,6 +44,7 @@ export default function ChatScreen() {
   const { messages } = useMessages(chatId ?? "");
   const { readUpTo } = useChatReadReceipts(chatId ?? "", messages);
   const listRef = useRef<FlatList<Message>>(null);
+  const [androidKeyboardInset, setAndroidKeyboardInset] = useState(0);
 
   const chat = chats.find((c) => c.id === chatId);
   const participants = chat?.participants ?? [];
@@ -51,15 +54,32 @@ export default function ChatScreen() {
     listRef.current?.scrollToEnd({ animated: true });
   }, [messages.length]);
 
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+    const show = Keyboard.addListener("keyboardDidShow", (e) => {
+      setAndroidKeyboardInset(e.endCoordinates.height);
+    });
+    const hide = Keyboard.addListener("keyboardDidHide", () => {
+      setAndroidKeyboardInset(0);
+    });
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+
   if (!chatId) {
     return null;
   }
 
   return (
     <KeyboardAvoidingView
-      style={styles.screen}
-      behavior="padding"
-      keyboardVerticalOffset={0}
+      style={[
+        styles.screen,
+        Platform.OS === "android" && { paddingBottom: androidKeyboardInset },
+      ]}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      enabled={Platform.OS === "ios"}
     >
       <AppHeader
         title={chat?.name ?? ""}

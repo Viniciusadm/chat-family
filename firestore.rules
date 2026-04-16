@@ -74,7 +74,8 @@ service cloud.firestore {
 
     match /devices/{deviceId} {
       allow read: if request.auth != null && (
-        resource == null || (
+        !exists(/databases/$(database)/documents/devices/$(deviceId)) ||
+        (
           resource.data.tenantId == userTenant() && (
             resource.data.userId == request.auth.uid ||
             isTenantAdult()

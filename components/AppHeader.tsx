@@ -33,19 +33,19 @@ export function AppHeader({
               color={colors.chatHeaderForeground}
             />
           </Pressable>
-        ) : (
-          <View style={styles.iconPlaceholder} />
-        )}
+        ) : null}
 
-        <Text
-          style={[
-            styles.title,
-            onBack ? styles.titleWithBack : styles.titleLarge,
-          ]}
-          numberOfLines={1}
-        >
-          {title}
-        </Text>
+        <View style={styles.titleWrap}>
+          <Text
+            style={[
+              styles.title,
+              onBack ? styles.titleWithBack : styles.titleLarge,
+            ]}
+            numberOfLines={1}
+          >
+            {title}
+          </Text>
+        </View>
 
         {rightIcon && onRightPress ? (
           <Pressable
@@ -76,7 +76,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     paddingHorizontal: 12,
-    paddingBottom: 14,
+    paddingBottom: 10,
+    paddingTop: 10,
   },
   iconBtn: {
     width: 36,
@@ -92,8 +93,13 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.7,
   },
-  title: {
+  titleWrap: {
     flex: 1,
+    alignSelf: "stretch",
+    justifyContent: "center",
+    minHeight: 36,
+  },
+  title: {
     fontWeight: "600",
     color: colors.chatHeaderForeground,
   },
