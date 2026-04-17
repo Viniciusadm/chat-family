@@ -2,7 +2,6 @@ import { AppHeader } from "@/components/AppHeader";
 import { ChatBubble } from "@/components/ChatBubble";
 import { ChatInput } from "@/components/ChatInput";
 import { ScreenContainer } from "@/components/ScreenContainer";
-import { useLayoutInsets } from "@/hooks/useLayoutInsets";
 import { useAuth } from "@/context/AuthContext";
 import { useChatReadReceipts } from "@/hooks/useChatReadReceipts";
 import { useChats } from "@/hooks/useChats";
@@ -39,7 +38,6 @@ export default function ChatScreen() {
   const { messages } = useMessages(chatId ?? "");
   const { readUpTo } = useChatReadReceipts(chatId ?? "", messages);
   const listRef = useRef<FlatList<Message>>(null);
-  const layoutInsets = useLayoutInsets();
 
   const chat = chats.find((c) => c.id === chatId);
   const participants = chat?.participants ?? [];
@@ -54,43 +52,40 @@ export default function ChatScreen() {
   }
 
   return (
-    <View
-      style={[
-        styles.screen,
-        { paddingBottom: layoutInsets.safeArea.bottom },
-      ]}
+    <ScreenContainer
+      behavior="padding"
+      edges={["bottom"]}
+      style={styles.screen}
     >
-      <ScreenContainer behavior="translate" edges={[]} style={{ flex: 1 }}>
-        <AppHeader
-          title={chat?.name ?? ""}
-          onBack={() => router.back()}
+      <AppHeader
+        title={chat?.name ?? ""}
+        onBack={() => router.back()}
+      />
+      <View style={styles.messagesWrap}>
+        <FlatList
+          ref={listRef}
+          data={messages}
+          keyExtractor={(m) => m.id}
+          contentContainerStyle={styles.listContent}
+          onContentSizeChange={() =>
+            listRef.current?.scrollToEnd({ animated: false })
+          }
+          renderItem={({ item }) => (
+            <ChatBubble
+              message={item}
+              isSelf={item.senderId === currentUser?.id}
+              readReceipt={readReceiptStatus(
+                item,
+                currentUser?.id,
+                participants,
+                readUpTo
+              )}
+            />
+          )}
         />
-        <View style={styles.messagesWrap}>
-          <FlatList
-            ref={listRef}
-            data={messages}
-            keyExtractor={(m) => m.id}
-            contentContainerStyle={styles.listContent}
-            onContentSizeChange={() =>
-              listRef.current?.scrollToEnd({ animated: false })
-            }
-            renderItem={({ item }) => (
-              <ChatBubble
-                message={item}
-                isSelf={item.senderId === currentUser?.id}
-                readReceipt={readReceiptStatus(
-                  item,
-                  currentUser?.id,
-                  participants,
-                  readUpTo
-                )}
-              />
-            )}
-          />
-        </View>
-        <ChatInput chatId={chatId} />
-      </ScreenContainer>
-    </View>
+      </View>
+      <ChatInput chatId={chatId} />
+    </ScreenContainer>
   );
 }
 
