@@ -1,3 +1,4 @@
+import { ScreenContainer } from "@/components/ScreenContainer";
 import { LoadingDots } from "@/components/LoadingDots";
 import { useAuth } from "@/context/AuthContext";
 import { colors } from "@/theme/colors";
@@ -7,10 +8,8 @@ import { fetchSignInMethodsForEmail, signOut } from "firebase/auth";
 import { Redirect, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
-  KeyboardAvoidingView,
   Linking,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -67,15 +66,15 @@ export default function LoginScreen() {
 
   if (loading && !sessionReady) {
     return (
-      <View style={styles.loadingScreen}>
+      <ScreenContainer style={styles.loadingScreen} edges={["top", "bottom"]}>
         <LoadingDots />
-      </View>
+      </ScreenContainer>
     );
   }
 
   if (firebaseUser && sessionReady && needsPushToken) {
     return (
-      <View style={styles.pushGate}>
+      <ScreenContainer style={styles.pushGate} edges={["top", "bottom"]}>
         <Text style={styles.pushGateTitle}>Notificações necessárias</Text>
         {pushTokenError ? (
           <Text style={styles.pushGateSub}>{pushTokenError}</Text>
@@ -101,15 +100,15 @@ export default function LoginScreen() {
         <Pressable style={styles.textLink} onPress={() => signOut(auth)}>
           <Text style={styles.textLinkLabel}>Sair</Text>
         </Pressable>
-      </View>
+      </ScreenContainer>
     );
   }
 
   if (loading) {
     return (
-      <View style={styles.loadingScreen}>
+      <ScreenContainer style={styles.loadingScreen} edges={["top", "bottom"]}>
         <LoadingDots />
-      </View>
+      </ScreenContainer>
     );
   }
 
@@ -176,10 +175,7 @@ export default function LoginScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.screen}
-      behavior="padding"
-    >
+    <ScreenContainer style={styles.screen} edges={["top", "bottom"]}>
       <ScrollView
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
@@ -383,7 +379,7 @@ export default function LoginScreen() {
           </View>
         </View>
       </Modal>
-    </KeyboardAvoidingView>
+    </ScreenContainer>
   );
 }
 

@@ -1,6 +1,8 @@
 import { AppHeader } from "@/components/AppHeader";
 import { ChatBubble } from "@/components/ChatBubble";
 import { ChatInput } from "@/components/ChatInput";
+import { ScreenContainer } from "@/components/ScreenContainer";
+import { useLayoutInsets } from "@/hooks/useLayoutInsets";
 import { useAuth } from "@/context/AuthContext";
 import { useChatReadReceipts } from "@/hooks/useChatReadReceipts";
 import { useChats } from "@/hooks/useChats";
@@ -9,15 +11,8 @@ import { colors } from "@/theme/colors";
 import type { Message } from "@/types/chat";
 import type { Timestamp } from "firebase/firestore";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
-import {
-  FlatList,
-  Keyboard,
-  KeyboardAvoidingView,
-  Platform,
-  StyleSheet,
-  View,
-} from "react-native";
+import { useEffect, useRef } from "react";
+import { FlatList, StyleSheet, View } from "react-native";
 
 function readReceiptStatus(
   message: Message,
@@ -44,7 +39,7 @@ export default function ChatScreen() {
   const { messages } = useMessages(chatId ?? "");
   const { readUpTo } = useChatReadReceipts(chatId ?? "", messages);
   const listRef = useRef<FlatList<Message>>(null);
-  const [androidKeyboardInset, setAndroidKeyboardInset] = useState(0);
+  const layoutInsets = useLayoutInsets();
 
   const chat = chats.find((c) => c.id === chatId);
   const participants = chat?.participants ?? [];
@@ -54,62 +49,48 @@ export default function ChatScreen() {
     listRef.current?.scrollToEnd({ animated: true });
   }, [messages.length]);
 
-  useEffect(() => {
-    if (Platform.OS !== "android") return;
-    const show = Keyboard.addListener("keyboardDidShow", (e) => {
-      setAndroidKeyboardInset(e.endCoordinates.height);
-    });
-    const hide = Keyboard.addListener("keyboardDidHide", () => {
-      setAndroidKeyboardInset(0);
-    });
-    return () => {
-      show.remove();
-      hide.remove();
-    };
-  }, []);
-
   if (!chatId) {
     return null;
   }
 
   return (
-    <KeyboardAvoidingView
+    <View
       style={[
         styles.screen,
-        Platform.OS === "android" && { paddingBottom: androidKeyboardInset },
+        { paddingBottom: layoutInsets.safeArea.bottom },
       ]}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      enabled={Platform.OS === "ios"}
     >
-      <AppHeader
-        title={chat?.name ?? ""}
-        onBack={() => router.back()}
-      />
-      <View style={styles.messagesWrap}>
-        <FlatList
-          ref={listRef}
-          data={messages}
-          keyExtractor={(m) => m.id}
-          contentContainerStyle={styles.listContent}
-          onContentSizeChange={() =>
-            listRef.current?.scrollToEnd({ animated: false })
-          }
-          renderItem={({ item }) => (
-            <ChatBubble
-              message={item}
-              isSelf={item.senderId === currentUser?.id}
-              readReceipt={readReceiptStatus(
-                item,
-                currentUser?.id,
-                participants,
-                readUpTo
-              )}
-            />
-          )}
+      <ScreenContainer behavior="translate" edges={[]} style={{ flex: 1 }}>
+        <AppHeader
+          title={chat?.name ?? ""}
+          onBack={() => router.back()}
         />
-      </View>
-      <ChatInput chatId={chatId} />
-    </KeyboardAvoidingView>
+        <View style={styles.messagesWrap}>
+          <FlatList
+            ref={listRef}
+            data={messages}
+            keyExtractor={(m) => m.id}
+            contentContainerStyle={styles.listContent}
+            onContentSizeChange={() =>
+              listRef.current?.scrollToEnd({ animated: false })
+            }
+            renderItem={({ item }) => (
+              <ChatBubble
+                message={item}
+                isSelf={item.senderId === currentUser?.id}
+                readReceipt={readReceiptStatus(
+                  item,
+                  currentUser?.id,
+                  participants,
+                  readUpTo
+                )}
+              />
+            )}
+          />
+        </View>
+        <ChatInput chatId={chatId} />
+      </ScreenContainer>
+    </View>
   );
 }
 

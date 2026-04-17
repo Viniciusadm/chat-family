@@ -1,4 +1,5 @@
 import { AppHeader } from "@/components/AppHeader";
+import { ScreenContainer } from "@/components/ScreenContainer";
 import { LoadingDots } from "@/components/LoadingDots";
 import { useAuth } from "@/context/AuthContext";
 import { useChats } from "@/hooks/useChats";
@@ -34,7 +35,7 @@ export default function ChatListScreen() {
     !firebaseUser.isAnonymous;
 
   return (
-    <View style={styles.screen}>
+    <ScreenContainer style={styles.screen} edges={["bottom"]}>
       <AppHeader
         title="Conversas"
         rightIcon={canAccessAdmin ? "settings-outline" : undefined}
@@ -116,7 +117,7 @@ export default function ChatListScreen() {
           )}
         />
       )}
-    </View>
+    </ScreenContainer>
   );
 }
 

@@ -1,4 +1,5 @@
 import { AppHeader } from "@/components/AppHeader";
+import { ScreenContainer } from "@/components/ScreenContainer";
 import { LoadingDots } from "@/components/LoadingDots";
 import { useAuth } from "@/context/AuthContext";
 import { useAdminData } from "@/hooks/useAdminData";
@@ -146,7 +147,7 @@ export default function AdminScreen() {
   };
 
   return (
-    <View style={styles.screen}>
+    <ScreenContainer style={styles.screen} edges={["bottom"]}>
       <AppHeader
         title="Gerenciamento"
         onBack={() => router.back()}
@@ -560,7 +561,7 @@ export default function AdminScreen() {
           </View>
         </View>
       </Modal>
-    </View>
+    </ScreenContainer>
   );
 }
 

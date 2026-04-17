@@ -1,16 +1,17 @@
+import { ScreenContainer } from "@/components/ScreenContainer";
 import { colors } from "@/theme/colors";
 import { Link } from "expo-router";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text } from "react-native";
 
 export default function NotFoundScreen() {
   return (
-    <View style={styles.screen}>
+    <ScreenContainer style={styles.screen} edges={["top", "bottom"]}>
       <Text style={styles.code}>404</Text>
       <Text style={styles.msg}>Oops! Página não encontrada</Text>
       <Link href="/" style={styles.link}>
         <Text style={styles.linkText}>Voltar ao início</Text>
       </Link>
-    </View>
+    </ScreenContainer>
   );
 }
 

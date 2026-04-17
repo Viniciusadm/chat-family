@@ -1,3 +1,4 @@
+import { ScreenContainer } from "@/components/ScreenContainer";
 import { LoadingDots } from "@/components/LoadingDots";
 import { useAuth } from "@/context/AuthContext";
 import { colors } from "@/theme/colors";
@@ -18,9 +19,12 @@ export default function AguardandoScreen() {
 
   if (loading || (firebaseUser && !sessionReady)) {
     return (
-      <View style={[styles.screen, styles.centerOnly]}>
+      <ScreenContainer
+        style={[styles.screen, styles.centerOnly]}
+        edges={["top", "bottom"]}
+      >
         <LoadingDots />
-      </View>
+      </ScreenContainer>
     );
   }
 
@@ -37,7 +41,7 @@ export default function AguardandoScreen() {
   }
 
   return (
-    <View style={styles.screen}>
+    <ScreenContainer style={styles.screen} edges={["top", "bottom"]}>
       <View style={styles.iconWrap}>
         <Ionicons name="time-outline" size={40} color={colors.primary} />
       </View>
@@ -48,7 +52,7 @@ export default function AguardandoScreen() {
       <View style={styles.dots}>
         <LoadingDots />
       </View>
-    </View>
+    </ScreenContainer>
   );
 }
 
