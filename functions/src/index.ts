@@ -354,6 +354,12 @@ const PUSH_BODY_MAX_CHARS = 3500;
 const PUSH_RECENT_MESSAGE_LIMIT = 8;
 const PUSH_LINE_PREVIEW_MAX = 280;
 
+type UnreadMessage = {
+  senderId: string;
+  text?: string | null;
+  audioUrl?: string | null;
+};
+
 function linePreviewFromMessage(m: { text?: string | null; audioUrl?: string | null }): string {
   let s: string;
   if (m.text != null && String(m.text).trim().length > 0) {
@@ -374,7 +380,18 @@ function truncatePushBody(body: string, maxChars: number): string {
   return `${body.slice(0, maxChars - 1)}…`;
 }
 
-async function buildAggregatedChatPushBody(chatId: string, tenantId: string): Promise<string> {
+async function fetchUnreadMessagesForUser(
+  chatId: string,
+  tenantId: string,
+  uid: string,
+): Promise<UnreadMessage[]> {
+  const chatSnap = await db.doc(`chats/${chatId}`).get();
+  const chatData = chatSnap.exists
+    ? (chatSnap.data() as { readUpTo?: Record<string, Timestamp> })
+    : undefined;
+  const readUpTo = chatData?.readUpTo?.[uid];
+  const readUpToMs = readUpTo ? readUpTo.toMillis() : null;
+
   const messagesSnap = await db
     .collection("chats")
     .doc(chatId)
@@ -383,50 +400,52 @@ async function buildAggregatedChatPushBody(chatId: string, tenantId: string): Pr
     .limit(PUSH_RECENT_MESSAGE_LIMIT)
     .get();
 
-  if (messagesSnap.empty) {
-    return "Nova mensagem";
-  }
+  if (messagesSnap.empty) return [];
 
   const docs = [...messagesSnap.docs].reverse();
-  const senderIds = new Set<string>();
+  const unread: UnreadMessage[] = [];
   for (const d of docs) {
-    const row = d.data() as { tenantId?: string; senderId?: string };
-    if (row.tenantId !== tenantId) continue;
-    if (typeof row.senderId === "string" && row.senderId.length > 0) {
-      senderIds.add(row.senderId);
-    }
-  }
-
-  const nameByMemberId = new Map<string, string>();
-  await Promise.all(
-    [...senderIds].map(async (id) => {
-      const m = await db.doc(`members/${id}`).get();
-      const n =
-        m.exists && typeof (m.data() as { name?: string }).name === "string"
-          ? (m.data() as { name: string }).name
-          : "Alguém";
-      nameByMemberId.set(id, n);
-    }),
-  );
-
-  const lines: string[] = [];
-  for (const d of docs) {
-    const data = d.data() as {
+    const row = d.data() as {
       tenantId?: string;
       senderId?: string;
       text?: string | null;
       audioUrl?: string | null;
+      createdAt?: Timestamp;
     };
-    if (data.tenantId !== tenantId) continue;
-    const sid = typeof data.senderId === "string" ? data.senderId : "";
-    if (!sid) continue;
-    const name = nameByMemberId.get(sid) ?? "Alguém";
-    lines.push(`${name}: ${linePreviewFromMessage(data)}`);
+    if (row.tenantId !== tenantId) continue;
+    if (typeof row.senderId !== "string" || row.senderId.length === 0) continue;
+    if (readUpToMs != null) {
+      const createdMs = row.createdAt ? row.createdAt.toMillis() : null;
+      if (createdMs == null || createdMs <= readUpToMs) continue;
+    }
+    unread.push({
+      senderId: row.senderId,
+      text: row.text ?? null,
+      audioUrl: row.audioUrl ?? null,
+    });
+  }
+  return unread;
+}
+
+function buildBodyFromMessages(
+  messages: UnreadMessage[],
+  nameByMemberId: Map<string, string>,
+  fallback: UnreadMessage | null,
+  fallbackName: string,
+): string {
+  const source: Array<{ name: string; msg: UnreadMessage }> = [];
+  if (messages.length > 0) {
+    for (const m of messages) {
+      const name = nameByMemberId.get(m.senderId) ?? "Alguém";
+      source.push({ name, msg: m });
+    }
+  } else if (fallback) {
+    source.push({ name: fallbackName, msg: fallback });
   }
 
-  if (lines.length === 0) {
-    return "Nova mensagem";
-  }
+  if (source.length === 0) return "Nova mensagem";
+
+  const lines = source.map(({ name, msg }) => `${name}: ${linePreviewFromMessage(msg)}`);
   return truncatePushBody(lines.join("\n"), PUSH_BODY_MAX_CHARS);
 }
 
@@ -481,15 +500,33 @@ export const onChatMessageCreated = onDocumentCreated(
         ? chat.name
         : senderName;
 
-    const body = await buildAggregatedChatPushBody(chatId, tenantId);
+    const currentMessage: UnreadMessage = {
+      senderId: senderMemberId,
+      text: msg.text ?? null,
+      audioUrl: msg.audioUrl ?? null,
+    };
 
-    const uniqueTokensSet = new Set<string>();
+    type PushRequest = {
+      to: string[];
+      title: string;
+      body: string;
+      data: { chatId: string; tenantId: string };
+      channelId: string;
+      tag: string;
+      collapseId: string;
+      priority: "high";
+    };
+
+    const requests: PushRequest[] = [];
+    const tokenByFlatIndex: string[] = [];
+    const requestIndexByFlatIndex: number[] = [];
 
     for (const memberId of recipients) {
       const usersSnap = await db.collection("users").where("memberId", "==", memberId).get();
       for (const userDoc of usersSnap.docs) {
         const uid = userDoc.id;
         const devicesSnap = await db.collection("devices").where("userId", "==", uid).get();
+        const tokens: string[] = [];
         for (const dev of devicesSnap.docs) {
           const d = dev.data() as {
             pushToken?: string;
@@ -501,13 +538,50 @@ export const onChatMessageCreated = onDocumentCreated(
           if (d.active === false) continue;
           const t = d.pushToken;
           if (!isExpoPushToken(t)) continue;
-          uniqueTokensSet.add(t);
+          if (!tokens.includes(t)) tokens.push(t);
+        }
+        if (tokens.length === 0) continue;
+
+        const unread = await fetchUnreadMessagesForUser(chatId, tenantId, uid);
+        const senderIds = new Set<string>();
+        for (const m of unread) senderIds.add(m.senderId);
+        if (unread.length === 0) senderIds.add(senderMemberId);
+
+        const nameByMemberId = new Map<string, string>();
+        nameByMemberId.set(senderMemberId, senderName);
+        await Promise.all(
+          [...senderIds].map(async (id) => {
+            if (nameByMemberId.has(id)) return;
+            const m = await db.doc(`members/${id}`).get();
+            const n =
+              m.exists && typeof (m.data() as { name?: string }).name === "string"
+                ? (m.data() as { name: string }).name
+                : "Alguém";
+            nameByMemberId.set(id, n);
+          }),
+        );
+
+        const body = buildBodyFromMessages(unread, nameByMemberId, currentMessage, senderName);
+
+        const requestIndex = requests.length;
+        requests.push({
+          to: tokens,
+          title,
+          body,
+          data: { chatId, tenantId },
+          channelId: "default",
+          tag: chatId,
+          collapseId: chatId,
+          priority: "high",
+        });
+        for (const t of tokens) {
+          tokenByFlatIndex.push(t);
+          requestIndexByFlatIndex.push(requestIndex);
         }
       }
     }
 
-    const uniqueTokens = [...uniqueTokensSet];
-    if (uniqueTokens.length === 0) return;
+    if (requests.length === 0) return;
 
     let res: Response;
     try {
@@ -517,15 +591,7 @@ export const onChatMessageCreated = onDocumentCreated(
           Accept: "application/json",
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          to: uniqueTokens,
-          title,
-          body,
-          data: { chatId, tenantId },
-          channelId: "default",
-          tag: chatId,
-          collapseId: chatId,
-        }),
+        body: JSON.stringify(requests),
       });
     } catch (e) {
       logger.error("Expo push fetch failed", e);
@@ -542,7 +608,7 @@ export const onChatMessageCreated = onDocumentCreated(
 
     const tickets = Array.isArray(json.data) ? json.data : [];
     const badTokens: string[] = [];
-    uniqueTokens.forEach((token, i) => {
+    tokenByFlatIndex.forEach((token, i) => {
       const ticket = tickets[i];
       if (!ticket || ticket.status !== "error") return;
       const err = ticket.details?.error;
