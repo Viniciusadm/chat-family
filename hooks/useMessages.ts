@@ -3,12 +3,27 @@ import type { Message, MessageDoc } from "@/types/chat";
 import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
 import { useEffect, useState } from "react";
 
+type MessagesState = {
+  chatId: string;
+  messages: Message[];
+  loading: boolean;
+};
+
 export function useMessages(chatId: string): { messages: Message[]; loading: boolean } {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [state, setState] = useState<MessagesState>({
+    chatId: "",
+    messages: [],
+    loading: true,
+  });
 
   useEffect(() => {
-    if (!chatId) return;
+    if (!chatId) {
+      setState({ chatId: "", messages: [], loading: false });
+      return;
+    }
+
+    let active = true;
+    setState({ chatId, messages: [], loading: true });
 
     const q = query(
       collection(db, "chats", chatId, "messages"),
@@ -16,6 +31,7 @@ export function useMessages(chatId: string): { messages: Message[]; loading: boo
     );
 
     const unsub = onSnapshot(q, (snap) => {
+      if (!active) return;
       const result: Message[] = snap.docs.map((d) => {
         const data = d.data() as MessageDoc;
         const isAudio = data.audioUrl != null;
@@ -31,12 +47,18 @@ export function useMessages(chatId: string): { messages: Message[]; loading: boo
           createdAtMs: data.createdAt ? data.createdAt.toMillis() : Date.now(),
         };
       });
-      setMessages(result);
-      setLoading(false);
+      setState({ chatId, messages: result, loading: false });
     });
 
-    return unsub;
+    return () => {
+      active = false;
+      unsub();
+    };
   }, [chatId]);
 
-  return { messages, loading };
+  if (state.chatId !== chatId) {
+    return { messages: [], loading: true };
+  }
+
+  return { messages: state.messages, loading: state.loading };
 }

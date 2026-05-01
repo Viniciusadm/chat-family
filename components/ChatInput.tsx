@@ -1,75 +1,120 @@
 import { useSendMessage } from "@/hooks/useSendMessage";
 import { colors } from "@/theme/colors";
 import { Ionicons } from "@expo/vector-icons";
-import { Audio } from "expo-av";
-import { useCallback, useRef, useState } from "react";
 import {
-  Keyboard,
+  RecordingPresets,
+  requestRecordingPermissionsAsync,
+  setAudioModeAsync,
+  useAudioRecorder,
+} from "expo-audio";
+import {
+  forwardRef,
+  useCallback,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from "react";
+import {
   Pressable,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 interface ChatInputProps {
   chatId: string;
+  keyboardVisible?: boolean;
 }
 
-export function ChatInput({ chatId }: ChatInputProps) {
+export interface ChatInputHandle {
+  focus: () => void;
+}
+
+export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
+function ChatInput({ chatId, keyboardVisible = false }, ref) {
   const { sendText, sendAudio, isSending } = useSendMessage(chatId);
+  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const insets = useSafeAreaInsets();
+  const bottomPadding = 12 + (keyboardVisible ? 0 : insets.bottom);
   const [text, setText] = useState("");
   const [isRecording, setIsRecording] = useState(false);
-  const recordingRef = useRef<Audio.Recording | null>(null);
+  const inputRef = useRef<TextInput>(null);
+  const recordingActiveRef = useRef(false);
   const recordSessionRef = useRef(0);
+
+  useImperativeHandle(ref, () => ({
+    focus: () => {
+      if (isRecording) return;
+      inputRef.current?.focus();
+    },
+  }), [isRecording]);
 
   const handleSendText = useCallback(async () => {
     const trimmed = text.trim();
     if (!trimmed || isSending) return;
     setText("");
-    Keyboard.dismiss();
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+    });
     await sendText(trimmed);
   }, [text, isSending, sendText]);
 
+  const restorePlaybackMode = async () => {
+    try {
+      await setAudioModeAsync({
+        allowsRecording: false,
+        playsInSilentMode: true,
+      });
+    } catch {
+      //
+    }
+  };
+
   const startRecording = async () => {
-    if (isSending || text.trim()) return;
+    if (isSending || isRecording || text.trim()) return;
     const session = ++recordSessionRef.current;
     try {
-      const perm = await Audio.requestPermissionsAsync();
+      const perm = await requestRecordingPermissionsAsync();
       if (!perm.granted || recordSessionRef.current !== session) return;
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
+      await setAudioModeAsync({
+        allowsRecording: true,
+        playsInSilentMode: true,
+        shouldPlayInBackground: false,
       });
-      const recording = new Audio.Recording();
-      await recording.prepareToRecordAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
-      await recording.startAsync();
+      await audioRecorder.prepareToRecordAsync();
       if (recordSessionRef.current !== session) {
-        await recording.stopAndUnloadAsync();
+        await restorePlaybackMode();
         return;
       }
-      recordingRef.current = recording;
+      audioRecorder.record();
+      if (recordSessionRef.current !== session) {
+        await audioRecorder.stop().catch(() => {});
+        recordingActiveRef.current = false;
+        await restorePlaybackMode();
+        return;
+      }
+      recordingActiveRef.current = true;
       setIsRecording(true);
     } catch {
       if (recordSessionRef.current === session) {
-        recordingRef.current = null;
+        recordingActiveRef.current = false;
         setIsRecording(false);
       }
+      await restorePlaybackMode();
     }
   };
 
   const stopRecordingAndSend = async () => {
     recordSessionRef.current += 1;
-    const recording = recordingRef.current;
-    recordingRef.current = null;
+    const wasRecording = recordingActiveRef.current;
+    recordingActiveRef.current = false;
     setIsRecording(false);
-    if (!recording) return;
+    if (!wasRecording) return;
     try {
-      await recording.stopAndUnloadAsync();
-      const uri = recording.getURI();
+      await audioRecorder.stop();
+      const uri = audioRecorder.uri;
       if (!uri) return;
       const res = await fetch(uri);
       const blob = await res.blob();
@@ -80,18 +125,11 @@ export function ChatInput({ chatId }: ChatInputProps) {
     } catch {
       //
     }
-    try {
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
-      });
-    } catch {
-      //
-    }
+    await restorePlaybackMode();
   };
 
   return (
-    <View style={styles.bar}>
+    <View style={[styles.bar, { paddingBottom: bottomPadding }]}>
       <View style={styles.row}>
         <View
           style={[
@@ -101,6 +139,7 @@ export function ChatInput({ chatId }: ChatInputProps) {
           pointerEvents={isRecording ? "none" : "auto"}
         >
           <TextInput
+            ref={inputRef}
             value={text}
             onChangeText={setText}
             placeholder="Digite uma mensagem"
@@ -157,7 +196,7 @@ export function ChatInput({ chatId }: ChatInputProps) {
       </View>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   bar: {
@@ -166,7 +205,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.chatInputBg,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    paddingBottom: 12,
   },
   row: {
     flexDirection: "row",

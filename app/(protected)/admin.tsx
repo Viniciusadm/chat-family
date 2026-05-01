@@ -31,13 +31,6 @@ function formatTime(date: Date) {
 export default function AdminScreen() {
   const router = useRouter();
   const { currentUser, firebaseUser, logout } = useAuth();
-  if (
-    currentUser?.role !== "adult" ||
-    !firebaseUser ||
-    firebaseUser.isAnonymous
-  ) {
-    return <Redirect href="/" />;
-  }
 
   const {
     members,
@@ -71,6 +64,14 @@ export default function AdminScreen() {
   );
 
   const [chatToDelete, setChatToDelete] = useState<Chat | null>(null);
+
+  if (
+    currentUser?.role !== "adult" ||
+    !firebaseUser ||
+    firebaseUser.isAnonymous
+  ) {
+    return <Redirect href="/" />;
+  }
 
   const copyLoginCode = async (code: string) => {
     await Clipboard.setStringAsync(code);

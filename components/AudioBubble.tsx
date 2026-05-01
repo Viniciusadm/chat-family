@@ -1,6 +1,10 @@
 import { colors } from "@/theme/colors";
 import { Ionicons } from "@expo/vector-icons";
-import { Audio } from "expo-av";
+import {
+  setAudioModeAsync,
+  useAudioPlayer,
+  useAudioPlayerStatus,
+} from "expo-audio";
 import { useCallback, useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
@@ -16,73 +20,40 @@ function formatTime(seconds: number) {
 }
 
 export function AudioBubble({ audioUrl, isSelf }: AudioBubbleProps) {
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [duration, setDuration] = useState(0);
+  const player = useAudioPlayer({ uri: audioUrl }, { updateInterval: 200 });
+  const status = useAudioPlayerStatus(player);
+  const [wasPlaying, setWasPlaying] = useState(false);
 
   useEffect(() => {
-    let active = true;
-    let loaded: Audio.Sound | null = null;
-    (async () => {
-      try {
-        await Audio.setAudioModeAsync({
-          playsInSilentModeIOS: true,
-          staysActiveInBackground: false,
-        });
-        const { sound: s } = await Audio.Sound.createAsync(
-          { uri: audioUrl },
-          { shouldPlay: false },
-          (status) => {
-            if (!status.isLoaded) return;
-            if (status.durationMillis != null && status.durationMillis > 0) {
-              setDuration(status.durationMillis / 1000);
-            }
-            if (status.positionMillis != null && status.durationMillis) {
-              setProgress(
-                status.positionMillis / Math.max(status.durationMillis, 1)
-              );
-            }
-            if (status.didJustFinish) {
-              setIsPlaying(false);
-              setProgress(0);
-            }
-          }
-        );
-        if (!active) {
-          await s.unloadAsync();
-          return;
-        }
-        loaded = s;
-        setSound(s);
-        const st = await s.getStatusAsync();
-        if (st.isLoaded && st.durationMillis) {
-          setDuration(st.durationMillis / 1000);
-        }
-      } catch {
-        if (active) setSound(null);
-      }
-    })();
-    return () => {
-      active = false;
-      if (loaded) {
-        loaded.unloadAsync().catch(() => {});
-      }
-    };
-  }, [audioUrl]);
+    setAudioModeAsync({
+      playsInSilentMode: true,
+      shouldPlayInBackground: false,
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!status.didJustFinish) return;
+    setWasPlaying(false);
+    player.seekTo(0).catch(() => {});
+  }, [player, status.didJustFinish]);
 
   const togglePlay = useCallback(async () => {
-    if (!sound) return;
-    if (isPlaying) {
-      await sound.pauseAsync();
-      setIsPlaying(false);
+    if (status.playing) {
+      player.pause();
+      setWasPlaying(false);
     } else {
-      await sound.playAsync();
-      setIsPlaying(true);
+      if (status.didJustFinish || status.currentTime >= status.duration) {
+        await player.seekTo(0);
+      }
+      player.play();
+      setWasPlaying(true);
     }
-  }, [sound, isPlaying]);
+  }, [player, status.currentTime, status.didJustFinish, status.duration, status.playing]);
 
+  const duration = status.duration || 0;
+  const progress = duration > 0 ? Math.min(status.currentTime / duration, 1) : 0;
   const currentTime = progress * duration;
+  const isPlaying = status.playing || wasPlaying;
 
   return (
     <View style={styles.row}>

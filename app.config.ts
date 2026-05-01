@@ -61,12 +61,13 @@ export default (): ExpoConfig => {
     android: {
       package: ANDROID_PACKAGE,
       adaptiveIcon: {
-        backgroundColor: "#E6F4FE",
+        backgroundColor: "#1fa85c",
         foregroundImage: "./assets/images/android-icon-foreground.png",
         backgroundImage: "./assets/images/android-icon-background.png",
         monochromeImage: "./assets/images/android-icon-monochrome.png",
       },
       edgeToEdgeEnabled: true,
+      softwareKeyboardLayoutMode: "resize",
       predictiveBackGestureEnabled: false,
       googleServicesFile: path.join(__dirname, "google-services.json"),
     },
@@ -82,15 +83,15 @@ export default (): ExpoConfig => {
           image: "./assets/images/splash-icon.png",
           imageWidth: 200,
           resizeMode: "contain",
-          backgroundColor: "#ffffff",
+          backgroundColor: "#1fa85c",
           dark: {
-            backgroundColor: "#000000",
+            backgroundColor: "#1fa85c",
           },
         },
       ],
       "expo-notifications",
       [
-        "expo-av",
+        "expo-audio",
         {
           microphonePermission:
             "Permitir acesso ao microfone para enviar mensagens de voz.",

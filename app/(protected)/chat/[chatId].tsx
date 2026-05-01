@@ -1,7 +1,6 @@
 import { AppHeader } from "@/components/AppHeader";
 import { ChatBubble } from "@/components/ChatBubble";
-import { ChatInput } from "@/components/ChatInput";
-import { ScreenContainer } from "@/components/ScreenContainer";
+import { ChatInput, type ChatInputHandle } from "@/components/ChatInput";
 import { useAuth } from "@/context/AuthContext";
 import { useChatReadReceipts } from "@/hooks/useChatReadReceipts";
 import { useChats } from "@/hooks/useChats";
@@ -10,8 +9,16 @@ import { colors } from "@/theme/colors";
 import type { Message } from "@/types/chat";
 import type { Timestamp } from "firebase/firestore";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useRef } from "react";
-import { FlatList, StyleSheet, View } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Dimensions,
+  FlatList,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  View,
+} from "react-native";
 
 function readReceiptStatus(
   message: Message,
@@ -30,32 +37,74 @@ function readReceiptStatus(
   return allRead ? "read" : "sent";
 }
 
+function getKeyboardOverlap(screenY: number): number {
+  const windowHeight = Dimensions.get("window").height;
+  return Math.max(0, windowHeight - screenY);
+}
+
+function useAndroidKeyboardOverlap() {
+  const [overlap, setOverlap] = useState(0);
+
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+
+    const show = Keyboard.addListener("keyboardDidShow", (event) => {
+      setOverlap(getKeyboardOverlap(event.endCoordinates.screenY));
+    });
+    const change = Keyboard.addListener("keyboardDidChangeFrame", (event) => {
+      setOverlap(getKeyboardOverlap(event.endCoordinates.screenY));
+    });
+    const hide = Keyboard.addListener("keyboardDidHide", () => {
+      setOverlap(0);
+    });
+
+    return () => {
+      show.remove();
+      change.remove();
+      hide.remove();
+    };
+  }, []);
+
+  return overlap;
+}
+
 export default function ChatScreen() {
   const { chatId } = useLocalSearchParams<{ chatId: string }>();
   const router = useRouter();
   const { currentUser } = useAuth();
   const { chats } = useChats();
-  const { messages } = useMessages(chatId ?? "");
-  const { readUpTo } = useChatReadReceipts(chatId ?? "", messages);
-  const listRef = useRef<FlatList<Message>>(null);
+  const { messages, loading } = useMessages(chatId ?? "");
+  const visibleMessages = loading ? [] : messages;
+  const { readUpTo } = useChatReadReceipts(chatId ?? "", visibleMessages);
+  const keyboardOverlap = useAndroidKeyboardOverlap();
+  const inputRef = useRef<ChatInputHandle>(null);
 
   const chat = chats.find((c) => c.id === chatId);
   const participants = chat?.participants ?? [];
 
-  useEffect(() => {
-    if (messages.length === 0) return;
-    listRef.current?.scrollToEnd({ animated: true });
-  }, [messages.length]);
+  const reversedMessages = useMemo(
+    () => [...visibleMessages].reverse(),
+    [visibleMessages]
+  );
+
+  const keepComposerFocused = useCallback(() => {
+    if (keyboardOverlap <= 0) return;
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+    });
+    setTimeout(() => {
+      inputRef.current?.focus();
+    }, 50);
+  }, [keyboardOverlap]);
 
   if (!chatId) {
     return null;
   }
 
   return (
-    <ScreenContainer
-      behavior="padding"
-      edges={["bottom"]}
-      style={styles.screen}
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      style={[styles.screen, { paddingBottom: keyboardOverlap }]}
     >
       <AppHeader
         title={chat?.name ?? ""}
@@ -63,13 +112,14 @@ export default function ChatScreen() {
       />
       <View style={styles.messagesWrap}>
         <FlatList
-          ref={listRef}
-          data={messages}
+          key={chatId}
+          inverted
+          data={reversedMessages}
           keyExtractor={(m) => m.id}
           contentContainerStyle={styles.listContent}
-          onContentSizeChange={() =>
-            listRef.current?.scrollToEnd({ animated: false })
-          }
+          keyboardDismissMode="none"
+          keyboardShouldPersistTaps="always"
+          onTouchStart={keepComposerFocused}
           renderItem={({ item }) => (
             <ChatBubble
               message={item}
@@ -84,8 +134,12 @@ export default function ChatScreen() {
           )}
         />
       </View>
-      <ChatInput chatId={chatId} />
-    </ScreenContainer>
+      <ChatInput
+        ref={inputRef}
+        chatId={chatId}
+        keyboardVisible={keyboardOverlap > 0}
+      />
+    </KeyboardAvoidingView>
   );
 }
 
@@ -99,6 +153,5 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingVertical: 16,
-    flexGrow: 1,
   },
 });
