@@ -74,7 +74,6 @@ export function useChats(): { chats: Chat[]; loading: boolean } {
           return;
         }
 
-        setLoading(true);
         const byId = new Map<string, Chat>();
 
         const emit = () => {

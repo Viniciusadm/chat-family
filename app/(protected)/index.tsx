@@ -1,6 +1,5 @@
 import { AppHeader } from "@/components/AppHeader";
 import { ScreenContainer } from "@/components/ScreenContainer";
-import { LoadingDots } from "@/components/LoadingDots";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { useAuth } from "@/context/AuthContext";
 import { useChats } from "@/hooks/useChats";
@@ -67,10 +66,8 @@ export default function ChatListScreen() {
             : []),
         ]}
       />
-      {loading ? (
-        <View style={styles.center}>
-          <LoadingDots />
-        </View>
+      {chats.length === 0 && loading ? (
+        <View style={styles.center} />
       ) : chats.length === 0 ? (
         <View style={styles.empty}>
           <View style={styles.emptyIconWrap}>
