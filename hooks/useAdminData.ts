@@ -252,6 +252,11 @@ export function useAdminData() {
     await deleteDoc(doc(db, "chats", chatId));
   };
 
+  const deleteChildMember = async (memberId: string, deleteMessages: boolean) => {
+    const fn = httpsCallable(functions, "deleteChildMember");
+    await fn({ memberId, deleteMessages });
+  };
+
   return {
     members,
     sessionUserNames,
@@ -264,5 +269,6 @@ export function useAdminData() {
     createChat,
     updateChat,
     deleteChat,
+    deleteChildMember,
   };
 }

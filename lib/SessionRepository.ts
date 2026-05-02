@@ -126,4 +126,11 @@ export const SessionRepository = {
       [photoUrl, photoPath, new Date().toISOString(), firebaseUid]
     );
   },
+
+  async deleteSession(firebaseUid: string) {
+    const db = await getDatabase();
+    await db.runAsync("DELETE FROM app_sessions WHERE firebase_uid = ?", [
+      firebaseUid,
+    ]);
+  },
 };

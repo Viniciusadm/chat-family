@@ -4,7 +4,8 @@ import { LoadingDots } from "@/components/LoadingDots";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { useAuth } from "@/context/AuthContext";
 import { useAdminData } from "@/hooks/useAdminData";
-import type { Chat, UserRole } from "@/types/chat";
+import { getChatDisplayName } from "@/lib/chatDisplayName";
+import type { AppMember, Chat, UserRole } from "@/types/chat";
 import { colors } from "@/theme/colors";
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
@@ -45,6 +46,7 @@ export default function AdminScreen() {
     createChat,
     updateChat,
     deleteChat,
+    deleteChildMember,
   } = useAdminData();
 
   const [showAddUser, setShowAddUser] = useState(false);
@@ -65,6 +67,12 @@ export default function AdminScreen() {
   );
 
   const [chatToDelete, setChatToDelete] = useState<Chat | null>(null);
+  const [childToDelete, setChildToDelete] = useState<AppMember | null>(null);
+  const [deleteChildMessages, setDeleteChildMessages] = useState(false);
+  const [deletingChild, setDeletingChild] = useState(false);
+  const memberProfiles = Object.fromEntries(
+    members.map((member) => [member.id, { name: member.name }])
+  );
 
   if (
     currentUser?.role !== "adult" ||
@@ -110,14 +118,18 @@ export default function AdminScreen() {
     );
   };
 
+  const defaultChatName = (participantIds: string[]) => {
+    if (participantIds.length === 2) return "";
+
+    return participantIds
+      .map((id) => members.find((m) => m.id === id)?.name)
+      .filter(Boolean)
+      .join(", ");
+  };
+
   const handleCreateChat = async () => {
     if (selectedParticipants.length < 2) return;
-    const name =
-      chatName.trim() ||
-      selectedParticipants
-        .map((id) => members.find((m) => m.id === id)?.name)
-        .filter(Boolean)
-        .join(", ");
+    const name = chatName.trim() || defaultChatName(selectedParticipants);
     await createChat(name, selectedParticipants);
     setChatName("");
     setSelectedParticipants([]);
@@ -132,12 +144,7 @@ export default function AdminScreen() {
 
   const handleUpdateChat = async () => {
     if (!editingChatId || editChatParticipants.length < 2) return;
-    const name =
-      editChatName.trim() ||
-      editChatParticipants
-        .map((id) => members.find((m) => m.id === id)?.name)
-        .filter(Boolean)
-        .join(", ");
+    const name = editChatName.trim() || defaultChatName(editChatParticipants);
     await updateChat(editingChatId, name, editChatParticipants);
     setEditingChatId(null);
   };
@@ -146,6 +153,34 @@ export default function AdminScreen() {
     if (!chatToDelete) return;
     await deleteChat(chatToDelete.id);
     setChatToDelete(null);
+  };
+
+  const openDeleteChild = (member: AppMember) => {
+    setChildToDelete(member);
+    setDeleteChildMessages(false);
+  };
+
+  const closeDeleteChild = () => {
+    if (deletingChild) return;
+    setChildToDelete(null);
+    setDeleteChildMessages(false);
+  };
+
+  const handleConfirmDeleteChild = async () => {
+    if (!childToDelete || deletingChild) return;
+    setDeletingChild(true);
+    try {
+      await deleteChildMember(childToDelete.id, deleteChildMessages);
+      setChildToDelete(null);
+      setDeleteChildMessages(false);
+    } catch (e) {
+      Alert.alert(
+        "",
+        e instanceof Error ? e.message : "Não foi possível apagar a criança."
+      );
+    } finally {
+      setDeletingChild(false);
+    }
   };
 
   return (
@@ -214,6 +249,19 @@ export default function AdminScreen() {
                     {member.role === "adult" ? "Adulto" : "Criança"}
                   </Text>
                 </View>
+                {member.role === "child" ? (
+                  <Pressable
+                    onPress={() => openDeleteChild(member)}
+                    style={styles.iconAct}
+                    hitSlop={8}
+                  >
+                    <Ionicons
+                      name="trash-outline"
+                      size={22}
+                      color={colors.destructive}
+                    />
+                  </Pressable>
+                ) : null}
               </View>
             </View>
           ))}
@@ -275,43 +323,51 @@ export default function AdminScreen() {
           )}
 
           <SectionTitle icon="chatbubbles-outline" label="Conversas" />
-          {chats.map((chat) => (
-            <View key={chat.id} style={styles.card}>
-              <View style={styles.cardRow}>
-                <ProfileAvatar
-                  name={chat.name}
-                  icon="chatbubble-outline"
-                  size={40}
-                />
-                <View style={styles.cardBody}>
-                  <Text style={styles.cardTitle}>{chat.name}</Text>
-                  <Text style={styles.cardMeta}>
-                    {chat.participants.length} membros
-                  </Text>
+          {chats.map((chat) => {
+            const displayName = getChatDisplayName(
+              chat,
+              currentUser.id,
+              memberProfiles
+            );
+
+            return (
+              <View key={chat.id} style={styles.card}>
+                <View style={styles.cardRow}>
+                  <ProfileAvatar
+                    name={displayName}
+                    icon="chatbubble-outline"
+                    size={40}
+                  />
+                  <View style={styles.cardBody}>
+                    <Text style={styles.cardTitle}>{displayName}</Text>
+                    <Text style={styles.cardMeta}>
+                      {chat.participants.length} membros
+                    </Text>
+                  </View>
+                  <Pressable
+                    onPress={() => openEditChat(chat)}
+                    style={styles.iconAct}
+                  >
+                    <Ionicons
+                      name="pencil-outline"
+                      size={22}
+                      color={colors.primary}
+                    />
+                  </Pressable>
+                  <Pressable
+                    onPress={() => setChatToDelete(chat)}
+                    style={styles.iconAct}
+                  >
+                    <Ionicons
+                      name="trash-outline"
+                      size={22}
+                      color={colors.destructive}
+                    />
+                  </Pressable>
                 </View>
-                <Pressable
-                  onPress={() => openEditChat(chat)}
-                  style={styles.iconAct}
-                >
-                  <Ionicons
-                    name="pencil-outline"
-                    size={22}
-                    color={colors.primary}
-                  />
-                </Pressable>
-                <Pressable
-                  onPress={() => setChatToDelete(chat)}
-                  style={styles.iconAct}
-                >
-                  <Ionicons
-                    name="trash-outline"
-                    size={22}
-                    color={colors.destructive}
-                  />
-                </Pressable>
               </View>
-            </View>
-          ))}
+            );
+          })}
           <Pressable
             onPress={() => setShowCreateChat(true)}
             style={({ pressed }) => [
@@ -554,6 +610,56 @@ export default function AdminScreen() {
                 style={styles.modalDanger}
               >
                 <Text style={styles.primaryText}>Apagar</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={childToDelete !== null} transparent animationType="fade">
+        <View style={styles.modalRoot}>
+          <Pressable
+            style={styles.modalOverlay}
+            onPress={closeDeleteChild}
+          />
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Apagar criança?</Text>
+            <Text style={styles.deleteDesc}>
+              Tem certeza que deseja apagar {childToDelete?.name}? Esta ação
+              não pode ser desfeita e a criança será deslogada dos dispositivos
+              já conectados.
+            </Text>
+            <Pressable
+              onPress={() => setDeleteChildMessages((value) => !value)}
+              style={styles.checkRow}
+              disabled={deletingChild}
+            >
+              <Ionicons
+                name={deleteChildMessages ? "checkbox" : "square-outline"}
+                size={22}
+                color={deleteChildMessages ? colors.primary : colors.border}
+              />
+              <Text style={styles.checkLabel}>apagar também as mensagens</Text>
+            </Pressable>
+            <View style={styles.modalActions}>
+              <Pressable
+                onPress={closeDeleteChild}
+                style={styles.modalGhost}
+                disabled={deletingChild}
+              >
+                <Text style={styles.ghostText}>Cancelar</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => void handleConfirmDeleteChild()}
+                style={[
+                  styles.modalDanger,
+                  deletingChild && styles.btnDisabled,
+                ]}
+                disabled={deletingChild}
+              >
+                <Text style={styles.primaryText}>
+                  {deletingChild ? "Apagando..." : "Apagar"}
+                </Text>
               </Pressable>
             </View>
           </View>

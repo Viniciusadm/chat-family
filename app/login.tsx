@@ -8,6 +8,7 @@ import { fetchSignInMethodsForEmail, signOut } from "firebase/auth";
 import { Redirect, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
+  Alert,
   Linking,
   Modal,
   Pressable,
@@ -47,6 +48,8 @@ export default function LoginScreen() {
     loginWithEmail,
     registerWithEmail,
     loginWithChildCode,
+    deletedAccountMessage,
+    clearDeletedAccountMessage,
   } = useAuth();
 
   const [view, setView] = useState<ViewMode>("login");
@@ -58,6 +61,12 @@ export default function LoginScreen() {
   const [showChildModal, setShowChildModal] = useState(false);
   const [childCode, setChildCode] = useState("");
   const [childError, setChildError] = useState("");
+
+  useEffect(() => {
+    if (!deletedAccountMessage) return;
+    Alert.alert("", deletedAccountMessage);
+    clearDeletedAccountMessage();
+  }, [clearDeletedAccountMessage, deletedAccountMessage]);
 
   useEffect(() => {
     if (loading || !sessionReady || needsPushToken) return;

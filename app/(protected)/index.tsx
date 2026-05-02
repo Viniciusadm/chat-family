@@ -5,6 +5,7 @@ import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { useAuth } from "@/context/AuthContext";
 import { useChats } from "@/hooks/useChats";
 import { useMemberProfiles } from "@/hooks/useMemberProfiles";
+import { getChatDisplayName } from "@/lib/chatDisplayName";
 import { colors } from "@/theme/colors";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -97,6 +98,11 @@ export default function ChatListScreen() {
             const otherProfile = otherParticipantId
               ? memberProfiles[otherParticipantId]
               : undefined;
+            const displayName = getChatDisplayName(
+              chat,
+              currentUser?.id,
+              memberProfiles
+            );
 
             return (
               <Pressable
@@ -115,7 +121,7 @@ export default function ChatListScreen() {
                 <View style={styles.rowBody}>
                   <View style={styles.rowTop}>
                     <Text style={styles.chatName} numberOfLines={1}>
-                      {chat.name}
+                      {displayName}
                     </Text>
                     {chat.lastMessage && (
                       <Text style={styles.time}>

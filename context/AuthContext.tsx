@@ -26,6 +26,8 @@ import { SessionRepository } from "@/lib/SessionRepository";
 import type { AppUser, LoginCodeDoc, UserDoc } from "@/types/chat";
 
 const DEVICE_ID_KEY = "deviceId";
+const ACCOUNT_DELETED_MESSAGE = "A conta foi apagada.";
+const USER_DOC_WAIT_MS = 8000;
 
 function waitForUserDoc(
   uid: string,
@@ -39,7 +41,9 @@ function waitForUserDoc(
       if (first?.exists()) return first;
       return new Promise<DocumentSnapshot | null>((resolve) => {
         let unsub: () => void;
+        const timeout = setTimeout(() => done(null), USER_DOC_WAIT_MS);
         const done = (value: DocumentSnapshot | null) => {
+          clearTimeout(timeout);
           unsub();
           resolve(value);
         };
@@ -88,6 +92,8 @@ interface AuthContextValue {
   logout: () => Promise<void>;
   retryDeviceRegistration: () => Promise<void>;
   setCurrentUserPhoto: (photoUrl: string | null, photoPath: string | null) => Promise<void>;
+  deletedAccountMessage: string | null;
+  clearDeletedAccountMessage: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -102,11 +108,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [needsPushToken, setNeedsPushToken] = useState(false);
   const [pushTokenError, setPushTokenError] = useState<string | null>(null);
   const [isOfflineSession, setIsOfflineSession] = useState(false);
+  const [deletedAccountMessage, setDeletedAccountMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [deviceId, setDeviceId] = useState("");
   const deviceIdRef = useRef("");
   const deviceUnsub = useRef<(() => void) | null>(null);
   const signingOutRef = useRef(false);
+
+  const clearDeletedAccountMessage = useCallback(() => {
+    setDeletedAccountMessage(null);
+  }, []);
+
+  const resetSignedOutState = useCallback(() => {
+    setCurrentUser(null);
+    setTenantId(null);
+    setDeviceApproved(null);
+    setSessionReady(true);
+    setNeedsPushToken(false);
+    setPushTokenError(null);
+    setIsOfflineSession(false);
+    setLoading(false);
+  }, []);
+
+  const signOutDeletedAccount = useCallback(async (uid: string) => {
+    signingOutRef.current = true;
+    if (deviceUnsub.current) {
+      deviceUnsub.current();
+      deviceUnsub.current = null;
+    }
+    await SessionRepository.deleteSession(uid);
+    setDeletedAccountMessage(ACCOUNT_DELETED_MESSAGE);
+    resetSignedOutState();
+    await signOut(auth).catch(() => {});
+  }, [resetSignedOutState]);
 
   useEffect(() => {
     let cancelled = false;
@@ -135,6 +169,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         const data = snap.data();
         if (data.active === false) {
+          const reason = typeof data.deactivationReason === "string"
+            ? data.deactivationReason
+            : null;
+          if (reason === "account-deleted") {
+            void signOutDeletedAccount(uid);
+            return;
+          }
           signingOutRef.current = true;
           if (deviceUnsub.current) {
             deviceUnsub.current();
@@ -151,7 +192,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setNeedsPushToken(false);
       });
     },
-    []
+    [signOutDeletedAccount]
   );
 
   const syncDeviceWithToken = useCallback(
@@ -258,6 +299,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const stale = () => false;
     const userSnap = await getDoc(doc(db, "users", uid));
     if (!userSnap.exists()) {
+      const cachedSession = await SessionRepository.getSession(uid);
+      if (cachedSession) {
+        await signOutDeletedAccount(uid);
+        return;
+      }
       setLoading(false);
       return;
     }
@@ -310,14 +356,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             // Fall through to the signed-out state if local session restore fails.
           }
         }
-        setCurrentUser(null);
-        setTenantId(null);
-        setDeviceApproved(null);
-        setSessionReady(true);
-        setNeedsPushToken(false);
-        setPushTokenError(null);
-        setIsOfflineSession(false);
-        setLoading(false);
+        resetSignedOutState();
         return;
       }
 
@@ -357,9 +396,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const userSnap = await waitForUserDoc(uid, stale);
         if (stale()) return;
         if (!userSnap?.exists()) {
-          if (cachedSession?.deviceApproved === true) {
-            setLoading(false);
-            setSessionReady(true);
+          if (cachedSession) {
+            await signOutDeletedAccount(uid);
             return;
           }
           setLoading(false);
@@ -433,7 +471,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       unsub();
       if (deviceUnsub.current) deviceUnsub.current();
     };
-  }, [deviceId, isOnline, syncDeviceWithToken]);
+  }, [deviceId, isOnline, resetSignedOutState, signOutDeletedAccount, syncDeviceWithToken]);
 
   const loginWithEmail = async (email: string, password: string) => {
     await signInWithEmailAndPassword(auth, email, password);
@@ -580,6 +618,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         logout,
         retryDeviceRegistration,
         setCurrentUserPhoto,
+        deletedAccountMessage,
+        clearDeletedAccountMessage,
       }}
     >
       {children}

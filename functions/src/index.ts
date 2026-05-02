@@ -1,5 +1,13 @@
-import { FieldValue, getFirestore, type Timestamp } from "firebase-admin/firestore";
+import {
+  FieldValue,
+  getFirestore,
+  type DocumentReference,
+  type QuerySnapshot,
+  type Timestamp,
+} from "firebase-admin/firestore";
 import { initializeApp } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
+import { getStorage } from "firebase-admin/storage";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import {
   onDocumentCreated,
@@ -10,6 +18,8 @@ import { logger } from "firebase-functions";
 
 initializeApp();
 const db = getFirestore();
+const adminAuth = getAuth();
+const storageBucket = getStorage().bucket();
 
 type ChatPayload = {
   tenantId?: unknown;
@@ -324,6 +334,214 @@ export const approveDevice = onCall({ region: "southamerica-east1" }, async (req
   }
 
   await deviceRef.update({ approved: true });
+  return { ok: true };
+});
+
+type AdultUserData = {
+  tenantId?: string;
+  role?: string;
+};
+
+type MemberData = {
+  tenantId?: string;
+  name?: string;
+  role?: string;
+  loginCode?: string | null;
+};
+
+type MessageData = {
+  tenantId?: string;
+  senderId?: string;
+  audioUrl?: string | null;
+};
+
+async function assertTenantAdult(uid: string): Promise<string> {
+  const adultSnap = await db.doc(`users/${uid}`).get();
+  if (!adultSnap.exists) {
+    throw new HttpsError("permission-denied", "User not found.");
+  }
+  const adult = adultSnap.data() as AdultUserData;
+  if (adult.role !== "adult") {
+    throw new HttpsError("permission-denied", "Only adults can delete children.");
+  }
+  const tenantId = typeof adult.tenantId === "string" ? adult.tenantId : null;
+  if (!tenantId) {
+    throw new HttpsError("failed-precondition", "Missing tenant.");
+  }
+  return tenantId;
+}
+
+async function deleteRefsInBatches(refs: DocumentReference[]): Promise<void> {
+  for (let i = 0; i < refs.length; i += 450) {
+    const batch = db.batch();
+    refs.slice(i, i + 450).forEach((ref) => batch.delete(ref));
+    await batch.commit();
+  }
+}
+
+async function deleteAuthUsers(uids: string[]): Promise<void> {
+  for (let i = 0; i < uids.length; i += 1000) {
+    const chunk = uids.slice(i, i + 1000);
+    if (chunk.length === 0) continue;
+    const result = await adminAuth.deleteUsers(chunk);
+    if (result.failureCount > 0) {
+      logger.warn("Failed to delete some child auth users", {
+        errors: result.errors.map((e) => ({ uid: chunk[e.index], error: e.error.message })),
+      });
+    }
+  }
+}
+
+async function deleteAudioFile(path: string): Promise<void> {
+  try {
+    await storageBucket.file(path).delete({ ignoreNotFound: true });
+  } catch (e) {
+    logger.warn("Failed to delete audio file", { path, error: e });
+  }
+}
+
+async function preserveDeletedChildChatNames(
+  memberId: string,
+  tenantId: string,
+  memberName: string
+): Promise<QuerySnapshot> {
+  const chatsSnap = await db
+    .collection("chats")
+    .where("tenantId", "==", tenantId)
+    .where("participants", "array-contains", memberId)
+    .get();
+
+  let batch = db.batch();
+  let n = 0;
+  for (const chatDoc of chatsSnap.docs) {
+    const chat = chatDoc.data() as {
+      isGroup?: boolean;
+      name?: string;
+      participants?: string[];
+    };
+    const participants = Array.isArray(chat.participants) ? chat.participants : [];
+    const name = typeof chat.name === "string" ? chat.name.trim() : "";
+    if (chat.isGroup === true || participants.length !== 2 || name.length > 0) {
+      continue;
+    }
+    batch.update(chatDoc.ref, {
+      name: memberName,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    n++;
+    if (n >= 450) {
+      await batch.commit();
+      batch = db.batch();
+      n = 0;
+    }
+  }
+  if (n > 0) await batch.commit();
+
+  return chatsSnap;
+}
+
+async function deleteChildMessages(
+  chatsSnap: QuerySnapshot,
+  tenantId: string,
+  memberId: string
+): Promise<void> {
+  for (const chatDoc of chatsSnap.docs) {
+    const messagesSnap = await chatDoc.ref
+      .collection("messages")
+      .where("senderId", "==", memberId)
+      .get();
+    const refs: DocumentReference[] = [];
+    for (const messageDoc of messagesSnap.docs) {
+      const message = messageDoc.data() as MessageData;
+      if (message.tenantId !== tenantId || message.senderId !== memberId) continue;
+      if (typeof message.audioUrl === "string" && message.audioUrl.length > 0) {
+        await deleteAudioFile(message.audioUrl);
+      }
+      refs.push(messageDoc.ref);
+    }
+    await deleteRefsInBatches(refs);
+  }
+}
+
+async function deleteChildSessions(memberId: string, tenantId: string): Promise<string[]> {
+  const usersSnap = await db.collection("users").where("memberId", "==", memberId).get();
+  const uids: string[] = [];
+  for (const userDoc of usersSnap.docs) {
+    const userData = userDoc.data() as { tenantId?: string };
+    if (userData.tenantId !== tenantId) continue;
+    uids.push(userDoc.id);
+
+    const devicesSnap = await db.collection("devices").where("userId", "==", userDoc.id).get();
+    let deviceBatch = db.batch();
+    let deviceCount = 0;
+    for (const deviceDoc of devicesSnap.docs) {
+      const device = deviceDoc.data() as { tenantId?: string };
+      if (device.tenantId !== tenantId) continue;
+      deviceBatch.update(deviceDoc.ref, {
+        active: false,
+        deactivationReason: "account-deleted",
+      });
+      deviceCount++;
+      if (deviceCount >= 450) {
+        await deviceBatch.commit();
+        deviceBatch = db.batch();
+        deviceCount = 0;
+      }
+    }
+    if (deviceCount > 0) await deviceBatch.commit();
+
+    await clearUserChatList(userDoc.id);
+    await userDoc.ref.delete();
+  }
+  return uids;
+}
+
+export const deleteChildMember = onCall({ region: "southamerica-east1" }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "Authentication required.");
+  }
+
+  const raw = request.data as {
+    memberId?: unknown;
+    deleteMessages?: unknown;
+  };
+  const memberId = typeof raw.memberId === "string" ? raw.memberId : null;
+  const shouldDeleteMessages = raw.deleteMessages === true;
+  if (!memberId) {
+    throw new HttpsError("invalid-argument", "memberId is required.");
+  }
+
+  const tenantId = await assertTenantAdult(uid);
+  const memberRef = db.doc(`members/${memberId}`);
+  const memberSnap = await memberRef.get();
+  if (!memberSnap.exists) {
+    throw new HttpsError("not-found", "Child not found.");
+  }
+  const member = memberSnap.data() as MemberData;
+  if (member.tenantId !== tenantId) {
+    throw new HttpsError("permission-denied", "Child belongs to another tenant.");
+  }
+  if (member.role !== "child") {
+    throw new HttpsError("failed-precondition", "Only child users can be deleted here.");
+  }
+  const memberName = typeof member.name === "string" && member.name.trim().length > 0
+    ? member.name.trim()
+    : "Criança apagada";
+
+  const chatsSnap = await preserveDeletedChildChatNames(memberId, tenantId, memberName);
+  if (shouldDeleteMessages) {
+    await deleteChildMessages(chatsSnap, tenantId, memberId);
+  }
+
+  const childAuthUids = await deleteChildSessions(memberId, tenantId);
+
+  if (typeof member.loginCode === "string" && member.loginCode.length > 0) {
+    await db.doc(`loginCodes/${member.loginCode}`).delete();
+  }
+  await memberRef.delete();
+  await deleteAuthUsers(childAuthUids);
+
   return { ok: true };
 });
 

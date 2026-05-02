@@ -7,6 +7,7 @@ import { useChats } from "@/hooks/useChats";
 import { useConnectivity } from "@/hooks/useConnectivity";
 import { useMemberProfiles } from "@/hooks/useMemberProfiles";
 import { useMessages } from "@/hooks/useMessages";
+import { getChatDisplayName } from "@/lib/chatDisplayName";
 import { colors } from "@/theme/colors";
 import type { Message } from "@/types/chat";
 import type { Timestamp } from "firebase/firestore";
@@ -128,6 +129,7 @@ export default function ChatScreen() {
     [loading, messages]
   );
   const chat = chats.find((c) => c.id === chatId);
+  const chatTitle = getChatDisplayName(chat, currentUserId, memberProfiles);
   const participants = chat?.participants ?? [];
   const { readUpTo } = useChatReadReceipts(
     chatId ?? "",
@@ -300,7 +302,7 @@ export default function ChatScreen() {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
       style={[styles.screen, { paddingBottom: keyboardOverlap }]}
     >
-      <AppHeader title={chat?.name ?? ""} onBack={() => router.back()} />
+      <AppHeader title={chatTitle} onBack={() => router.back()} />
       <View style={styles.messagesWrap}>
         {activeDayLabel ? (
           <Animated.View style={[styles.dayBadge, { opacity: badgeOpacity }]}>
