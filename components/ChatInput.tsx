@@ -10,6 +10,7 @@ import {
 import {
   forwardRef,
   useCallback,
+  useEffect,
   useImperativeHandle,
   useRef,
   useState,
@@ -40,9 +41,34 @@ function ChatInput({ chatId, keyboardVisible = false }, ref) {
   const bottomPadding = 12 + (keyboardVisible ? 0 : insets.bottom);
   const [text, setText] = useState("");
   const [isRecording, setIsRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [recordingStartedWithKeyboard, setRecordingStartedWithKeyboard] =
+    useState(false);
   const inputRef = useRef<TextInput>(null);
   const recordingActiveRef = useRef(false);
   const recordSessionRef = useRef(0);
+  const keyboardVisibleRef = useRef(keyboardVisible);
+  const recordingStartMsRef = useRef(0);
+
+  useEffect(() => {
+    keyboardVisibleRef.current = keyboardVisible;
+  }, [keyboardVisible]);
+
+  useEffect(() => {
+    if (!isRecording) return;
+
+    const updateElapsed = () => {
+      setRecordingSeconds(
+        Math.floor((Date.now() - recordingStartMsRef.current) / 1000)
+      );
+    };
+
+    updateElapsed();
+    const interval = setInterval(updateElapsed, 250);
+    return () => {
+      clearInterval(interval);
+    };
+  }, [isRecording]);
 
   useImperativeHandle(ref, () => ({
     focus: () => {
@@ -61,6 +87,24 @@ function ChatInput({ chatId, keyboardVisible = false }, ref) {
     await sendText(trimmed);
   }, [text, isSending, sendText]);
 
+  const preserveKeyboardIfNeeded = useCallback(() => {
+    if (!keyboardVisibleRef.current) return;
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+    });
+    setTimeout(() => {
+      inputRef.current?.focus();
+    }, 50);
+  }, []);
+
+  const resetRecordingState = useCallback(() => {
+    recordingActiveRef.current = false;
+    recordingStartMsRef.current = 0;
+    setIsRecording(false);
+    setRecordingSeconds(0);
+    setRecordingStartedWithKeyboard(false);
+  }, []);
+
   const restorePlaybackMode = async () => {
     try {
       await setAudioModeAsync({
@@ -75,6 +119,7 @@ function ChatInput({ chatId, keyboardVisible = false }, ref) {
   const startRecording = async () => {
     if (isSending || isRecording || text.trim()) return;
     const session = ++recordSessionRef.current;
+    const startedWithKeyboard = keyboardVisibleRef.current;
     try {
       const perm = await requestRecordingPermissionsAsync();
       if (!perm.granted || recordSessionRef.current !== session) return;
@@ -91,16 +136,21 @@ function ChatInput({ chatId, keyboardVisible = false }, ref) {
       audioRecorder.record();
       if (recordSessionRef.current !== session) {
         await audioRecorder.stop().catch(() => {});
-        recordingActiveRef.current = false;
+        resetRecordingState();
         await restorePlaybackMode();
         return;
       }
       recordingActiveRef.current = true;
+      recordingStartMsRef.current = Date.now();
+      setRecordingSeconds(0);
+      setRecordingStartedWithKeyboard(startedWithKeyboard);
       setIsRecording(true);
+      if (startedWithKeyboard) {
+        preserveKeyboardIfNeeded();
+      }
     } catch {
       if (recordSessionRef.current === session) {
-        recordingActiveRef.current = false;
-        setIsRecording(false);
+        resetRecordingState();
       }
       await restorePlaybackMode();
     }
@@ -109,8 +159,7 @@ function ChatInput({ chatId, keyboardVisible = false }, ref) {
   const stopRecordingAndSend = async () => {
     recordSessionRef.current += 1;
     const wasRecording = recordingActiveRef.current;
-    recordingActiveRef.current = false;
-    setIsRecording(false);
+    resetRecordingState();
     if (!wasRecording) return;
     try {
       await audioRecorder.stop();
@@ -141,12 +190,15 @@ function ChatInput({ chatId, keyboardVisible = false }, ref) {
           <TextInput
             ref={inputRef}
             value={text}
-            onChangeText={setText}
             placeholder="Digite uma mensagem"
             placeholderTextColor={colors.mutedForeground}
             style={styles.input}
             multiline={false}
-            editable={!isRecording}
+            editable={!isRecording || recordingStartedWithKeyboard}
+            onChangeText={(value) => {
+              if (recordingActiveRef.current) return;
+              setText(value);
+            }}
             onSubmitEditing={() => void handleSendText()}
             returnKeyType="send"
             blurOnSubmit={false}
@@ -183,6 +235,10 @@ function ChatInput({ chatId, keyboardVisible = false }, ref) {
               <View style={styles.recInner}>
                 <View style={styles.recDot} />
                 <Text style={styles.recText}>Solte para enviar</Text>
+                <Text style={styles.recTimer}>
+                  {Math.floor(recordingSeconds / 60)}:
+                  {(recordingSeconds % 60).toString().padStart(2, "0")}
+                </Text>
               </View>
             ) : (
               <Ionicons
@@ -270,6 +326,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: colors.recording,
+  },
+  recTimer: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: colors.foreground,
+    minWidth: 38,
+    textAlign: "right",
   },
   pressed: {
     opacity: 0.85,

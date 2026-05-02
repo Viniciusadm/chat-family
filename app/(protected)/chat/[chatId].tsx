@@ -74,7 +74,10 @@ export default function ChatScreen() {
   const { currentUser } = useAuth();
   const { chats } = useChats();
   const { messages, loading } = useMessages(chatId ?? "");
-  const visibleMessages = loading ? [] : messages;
+  const visibleMessages = useMemo(
+    () => (loading ? [] : messages),
+    [loading, messages]
+  );
   const { readUpTo } = useChatReadReceipts(chatId ?? "", visibleMessages);
   const keyboardOverlap = useAndroidKeyboardOverlap();
   const inputRef = useRef<ChatInputHandle>(null);

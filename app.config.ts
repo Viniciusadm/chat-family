@@ -46,7 +46,7 @@ function firebaseOptionsFromGoogleServices(packageName: string): FirebaseOptions
 export default (): ExpoConfig => {
   const firebase = firebaseOptionsFromGoogleServices(ANDROID_PACKAGE);
   return {
-    name: "chat",
+    name: "Chat Family",
     slug: "chat",
     version: "1.0.0",
     orientation: "portrait",
