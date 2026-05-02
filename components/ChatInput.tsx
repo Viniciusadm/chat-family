@@ -139,6 +139,7 @@ function ChatInput({ chatId, keyboardVisible = false }, ref) {
     resetRecordingState();
     if (!wasRecording) return;
     try {
+      const durationMillis = audioRecorder.getStatus().durationMillis;
       await audioRecorder.stop();
       const uri = audioRecorder.uri;
       if (!uri) return;
@@ -147,6 +148,7 @@ function ChatInput({ chatId, keyboardVisible = false }, ref) {
       await sendAudio(blob, {
         extension: "m4a",
         contentType: "audio/mp4",
+        duration: durationMillis > 0 ? durationMillis / 1000 : undefined,
       });
     } catch {
       //

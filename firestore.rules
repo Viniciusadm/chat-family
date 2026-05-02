@@ -94,7 +94,6 @@ service cloud.firestore {
         request.resource.data.userId == resource.data.userId &&
         request.resource.data.tenantId == resource.data.tenantId &&
         request.resource.data.approved == resource.data.approved &&
-        request.resource.data.active == resource.data.active &&
         deviceOwnerUpdateKeys();
       allow delete: if request.auth != null && resource.data.tenantId == userTenant() && isTenantAdult();
     }

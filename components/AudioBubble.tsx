@@ -11,6 +11,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-nati
 interface AudioBubbleProps {
   messageId: string;
   audioUrl: string;
+  audioDuration?: number;
   isSelf: boolean;
   shouldPlay: boolean;
   nextInSequenceId?: string;
@@ -31,6 +32,7 @@ const PLAYBACK_RATES: (1 | 1.5 | 2)[] = [1, 1.5, 2];
 export function AudioBubble({
   messageId,
   audioUrl,
+  audioDuration,
   isSelf,
   shouldPlay,
   nextInSequenceId,
@@ -152,7 +154,12 @@ export function AudioBubble({
     onPlaybackRateChange(nextRate);
   }, [onPlaybackRateChange, playbackRate]);
 
-  const duration = status.duration ?? null;
+  const statusDuration = Number.isFinite(status.duration) ? status.duration : 0;
+  const persistedDuration =
+    typeof audioDuration === "number" && Number.isFinite(audioDuration)
+      ? audioDuration
+      : 0;
+  const duration = statusDuration > 0 ? statusDuration : persistedDuration;
   const progress = duration > 0 ? Math.min(status.currentTime / duration, 1) : 0;
   const currentTime = duration ? progress * duration : 0;
   const isPlaying = status.playing;

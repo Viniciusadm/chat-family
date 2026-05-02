@@ -65,7 +65,7 @@ export function useSendMessage(chatId: string) {
 
   const sendAudio = async (
     audio: SendableAudio,
-    options?: { extension?: string; contentType?: string }
+    options?: { extension?: string; contentType?: string; duration?: number }
   ) => {
     if (!currentUser || !tenantId) return;
     if (!isOnline) return;
@@ -93,6 +93,7 @@ export function useSendMessage(chatId: string) {
         tenantId,
         senderId: currentUser.id,
         audioUrl,
+        audioDuration: options?.duration ?? null,
       });
       const sentAt = new Date();
       await MessageRepository.insertLocalMessage({
@@ -104,6 +105,7 @@ export function useSendMessage(chatId: string) {
         status: "sent",
         createdAt: sentAt,
         syncedAt: sentAt,
+        audioDuration: options?.duration ?? null,
       });
       void AudioCacheRepository.downloadMessageAudio({
         chatId,

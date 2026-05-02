@@ -72,6 +72,7 @@ export function ChatBubble({
           <AudioBubble
             messageId={message.id}
             audioUrl={audioSource}
+            audioDuration={message.audioDuration}
             isSelf={isSelf}
             shouldPlay={Boolean(shouldPlay)}
             nextInSequenceId={nextInSequenceId}

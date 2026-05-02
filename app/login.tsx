@@ -26,6 +26,9 @@ function registerErrorMessage(e: unknown): string {
     if (code === "auth/email-already-in-use") {
       return "Este e-mail já possui uma conta. Faça login ou use outro e-mail.";
     }
+    if (code === "permission-denied") {
+      return "Não foi possível registrar este aparelho. Saia e tente criar a conta novamente.";
+    }
   }
   return e instanceof Error ? e.message : "Erro ao criar conta";
 }

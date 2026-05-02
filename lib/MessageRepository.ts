@@ -12,6 +12,7 @@ type MessageRow = {
   synced_at: string | null;
   local_audio_uri: string | null;
   audio_downloaded_at: string | null;
+  audio_duration: number | null;
 };
 
 type MessageSyncRow = {
@@ -30,6 +31,7 @@ export type LocalMessageInput = {
   syncedAt?: Date | null;
   localAudioUri?: string | null;
   audioDownloadedAt?: Date | null;
+  audioDuration?: number | null;
 };
 
 type Listener = () => void;
@@ -53,6 +55,9 @@ function rowToMessage(row: MessageRow): Message {
     audioUrl: type === "audio" ? row.local_audio_uri ?? row.body ?? undefined : undefined,
     audioRemoteUrl: type === "audio" ? row.body ?? undefined : undefined,
     audioLocalUri: type === "audio" ? row.local_audio_uri ?? undefined : undefined,
+    audioDuration: type === "audio" && typeof row.audio_duration === "number"
+      ? row.audio_duration
+      : undefined,
     timestamp,
     createdAtMs: timestamp.getTime(),
     status: row.status === "loading" ? "loading" : "sent",
@@ -73,6 +78,7 @@ function inputParams(message: LocalMessageInput) {
     $audioDownloadedAt: message.audioDownloadedAt
       ? message.audioDownloadedAt.toISOString()
       : null,
+    $audioDuration: message.audioDuration ?? null,
   };
 }
 
@@ -123,7 +129,8 @@ export const MessageRepository = {
         created_at,
         synced_at,
         local_audio_uri,
-        audio_downloaded_at
+        audio_downloaded_at,
+        audio_duration
       ) VALUES (
         $id,
         $conversationId,
@@ -134,7 +141,8 @@ export const MessageRepository = {
         $createdAt,
         $syncedAt,
         $localAudioUri,
-        $audioDownloadedAt
+        $audioDownloadedAt,
+        $audioDuration
       )
       ON CONFLICT(id) DO UPDATE SET
         conversation_id = excluded.conversation_id,
@@ -154,7 +162,8 @@ export const MessageRepository = {
         audio_downloaded_at = COALESCE(
           excluded.audio_downloaded_at,
           messages.audio_downloaded_at
-        )`,
+        ),
+        audio_duration = COALESCE(excluded.audio_duration, messages.audio_duration)`,
       inputParams(message)
     );
     if (options.notify !== false) {
@@ -237,6 +246,7 @@ export const MessageRepository = {
       status: "sent",
       createdAt,
       syncedAt: new Date(),
+      audioDuration: isAudio ? data.audioDuration ?? null : null,
     }, options);
   },
 

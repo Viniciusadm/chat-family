@@ -68,12 +68,14 @@ export async function ensureAudioMessageInFirestore({
   tenantId,
   senderId,
   audioUrl,
+  audioDuration,
 }: {
   chatId: string;
   messageId: string;
   tenantId: string;
   senderId: string;
   audioUrl: string;
+  audioDuration: number | null;
 }) {
   const messageRef = doc(db, "chats", chatId, "messages", messageId);
   const existing = await getDoc(messageRef);
@@ -84,7 +86,7 @@ export async function ensureAudioMessageInFirestore({
     senderId,
     text: null,
     audioUrl,
-    audioDuration: null,
+    audioDuration,
     createdAt: serverTimestamp(),
   });
 }

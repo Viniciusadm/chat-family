@@ -101,13 +101,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [pushTokenError, setPushTokenError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [deviceId, setDeviceId] = useState("");
+  const deviceIdRef = useRef("");
   const deviceUnsub = useRef<(() => void) | null>(null);
   const signingOutRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
     getOrCreateDeviceId().then((id) => {
-      if (!cancelled) setDeviceId(id);
+      if (!cancelled) {
+        deviceIdRef.current = id;
+        setDeviceId(id);
+      }
     });
     return () => {
       cancelled = true;
@@ -242,7 +246,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const retryDeviceRegistration = useCallback(async () => {
     const user = auth.currentUser;
-    if (!user || !deviceId || !isOnline) return;
+    const activeDeviceId = deviceIdRef.current || deviceId;
+    if (!user || !activeDeviceId || !isOnline) return;
     setLoading(true);
     setNeedsPushToken(false);
     setPushTokenError(null);
@@ -254,7 +259,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     const userData = userSnap.data() as UserDoc;
-    await syncDeviceWithToken(user, uid, userData, deviceId, stale);
+    await syncDeviceWithToken(user, uid, userData, activeDeviceId, stale);
   }, [deviceId, isOnline, syncDeviceWithToken]);
 
   useEffect(() => {
@@ -361,11 +366,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           deviceApproved: cachedSession?.deviceApproved ?? null,
         });
 
+        const activeDeviceId = deviceIdRef.current || deviceId;
+        if (!activeDeviceId) {
+          setLoading(false);
+          setSessionReady(true);
+          return;
+        }
+
         await syncDeviceWithToken(
           user,
           uid,
           userData,
-          deviceId,
+          activeDeviceId,
           stale,
           cachedSession?.deviceApproved === true
         );
@@ -388,11 +400,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const registerWithEmail = async (email: string, password: string, name: string) => {
-    if (!deviceId) throw new Error("Dispositivo ainda a inicializar.");
+    if (!deviceIdRef.current && !deviceId) throw new Error("Dispositivo ainda a inicializar.");
     const pushToken = await fetchExpoPushToken();
     if (!pushToken || !isValidExpoPushTokenString(pushToken)) {
       throw new Error("Não foi possível obter token de notificação. Verifique permissões.");
     }
+    const registrationDeviceId = randomUuid();
+    await AsyncStorage.setItem(DEVICE_ID_KEY, registrationDeviceId);
+    deviceIdRef.current = registrationDeviceId;
+    setDeviceId(registrationDeviceId);
+
     const cred = await createUserWithEmailAndPassword(auth, email, password);
     const uid = cred.user.uid;
 
@@ -419,7 +436,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     await setDoc(
-      doc(db, "devices", deviceId),
+      doc(db, "devices", registrationDeviceId),
       {
         tenantId: tenantRef.id,
         userId: uid,
@@ -453,6 +470,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       name: d.name,
       role: d.role,
     };
+    const childDeviceId = randomUuid();
+    await AsyncStorage.setItem(DEVICE_ID_KEY, childDeviceId);
+    deviceIdRef.current = childDeviceId;
+    setDeviceId(childDeviceId);
 
     const cred = await signInAnonymously(auth);
     const uid = cred.user.uid;
@@ -466,7 +487,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     await setDoc(
-      doc(db, "devices", deviceId),
+      doc(db, "devices", childDeviceId),
       {
         tenantId: payload.tenantId,
         userId: uid,
