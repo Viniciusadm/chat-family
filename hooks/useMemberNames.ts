@@ -1,11 +1,13 @@
 import { useAuth } from "@/context/AuthContext";
+import { useConnectivity } from "@/hooks/useConnectivity";
 import { db } from "@/lib/firebase";
 import type { MemberDoc } from "@/types/chat";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { useEffect, useState } from "react";
 
 export function useMemberNames() {
-  const { tenantId, currentUser } = useAuth();
+  const { tenantId, currentUser, firebaseUser } = useAuth();
+  const { isOnline } = useConnectivity();
   const [memberNames, setMemberNames] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -14,6 +16,7 @@ export function useMemberNames() {
       setMemberNames({});
       return;
     }
+    if (!isOnline || !firebaseUser) return;
 
     const q = query(
       collection(db, "members"),
@@ -30,7 +33,7 @@ export function useMemberNames() {
     });
 
     return () => unsub();
-  }, [tenantId, currentUser?.tenantId]);
+  }, [tenantId, currentUser?.tenantId, firebaseUser, isOnline]);
 
   return memberNames;
 }

@@ -80,6 +80,7 @@ interface AuthContextValue {
   sessionReady: boolean;
   needsPushToken: boolean;
   pushTokenError: string | null;
+  isOfflineSession: boolean;
   loading: boolean;
   loginWithEmail: (email: string, password: string) => Promise<void>;
   registerWithEmail: (email: string, password: string, name: string) => Promise<void>;
@@ -99,6 +100,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [sessionReady, setSessionReady] = useState(false);
   const [needsPushToken, setNeedsPushToken] = useState(false);
   const [pushTokenError, setPushTokenError] = useState<string | null>(null);
+  const [isOfflineSession, setIsOfflineSession] = useState(false);
   const [loading, setLoading] = useState(true);
   const [deviceId, setDeviceId] = useState("");
   const deviceIdRef = useRef("");
@@ -274,16 +276,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!user) {
         if (deviceUnsub.current) deviceUnsub.current();
         deviceUnsub.current = null;
+        if (!isOnline) {
+          try {
+            const cachedSession = await SessionRepository.getLastApprovedSession();
+            if (!cancelled && cachedSession) {
+              setCurrentUser(cachedSession.currentUser);
+              setTenantId(cachedSession.currentUser.tenantId);
+              setDeviceApproved(true);
+              setSessionReady(true);
+              setNeedsPushToken(false);
+              setPushTokenError(null);
+              setIsOfflineSession(true);
+              setLoading(false);
+              return;
+            }
+          } catch {
+            // Fall through to the signed-out state if local session restore fails.
+          }
+        }
         setCurrentUser(null);
         setTenantId(null);
         setDeviceApproved(null);
         setSessionReady(true);
         setNeedsPushToken(false);
         setPushTokenError(null);
+        setIsOfflineSession(false);
         setLoading(false);
         return;
       }
 
+      setIsOfflineSession(false);
       setLoading(true);
       setSessionReady(false);
       setNeedsPushToken(false);
@@ -516,6 +538,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         sessionReady,
         needsPushToken,
         pushTokenError,
+        isOfflineSession,
         loading,
         loginWithEmail,
         registerWithEmail,

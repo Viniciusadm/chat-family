@@ -37,6 +37,7 @@ export default function LoginScreen() {
   const router = useRouter();
   const {
     firebaseUser,
+    currentUser,
     deviceApproved,
     loading,
     sessionReady,
@@ -59,13 +60,21 @@ export default function LoginScreen() {
   const [childError, setChildError] = useState("");
 
   useEffect(() => {
-    if (loading || !firebaseUser || !sessionReady || needsPushToken) return;
+    if (loading || !sessionReady || needsPushToken) return;
     if (deviceApproved === false) {
       router.replace("/aguardando");
-    } else if (deviceApproved === true) {
+    } else if ((firebaseUser || currentUser) && deviceApproved === true) {
       router.replace("/");
     }
-  }, [loading, firebaseUser, deviceApproved, sessionReady, needsPushToken, router]);
+  }, [
+    loading,
+    firebaseUser,
+    currentUser,
+    deviceApproved,
+    sessionReady,
+    needsPushToken,
+    router,
+  ]);
 
   if (loading && !sessionReady) {
     return (
@@ -115,7 +124,7 @@ export default function LoginScreen() {
     );
   }
 
-  if (firebaseUser && deviceApproved === true) {
+  if ((firebaseUser || currentUser) && deviceApproved === true) {
     return <Redirect href="/" />;
   }
 

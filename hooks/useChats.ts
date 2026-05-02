@@ -15,7 +15,10 @@ export function useChats(): { chats: Chat[]; loading: boolean } {
 
   const loadLocalChats = useCallback(
     async (active: () => boolean) => {
-      if (!tenantId) return;
+      if (!tenantId) {
+        setLoading(false);
+        return;
+      }
       const localChats = await ChatRepository.getLocalChats(tenantId);
       if (!active()) return;
       setChats(localChats);
@@ -25,16 +28,14 @@ export function useChats(): { chats: Chat[]; loading: boolean } {
   );
 
   useEffect(() => {
-    if (!firebaseUser || !tenantId || !currentUser) {
+    if (!tenantId || !currentUser) {
       setChats([]);
       setLoading(false);
       return;
     }
 
     let active = true;
-    const uid = firebaseUser.uid;
     const memberId = currentUser.id;
-    const listCol = collection(db, "users", uid, "chatList");
     const unsubs: (() => void)[] = [];
     void loadLocalChats(() => active);
 
@@ -48,6 +49,16 @@ export function useChats(): { chats: Chat[]; loading: boolean } {
         unsubLocal();
       };
     }
+
+    if (!firebaseUser) {
+      return () => {
+        active = false;
+        unsubLocal();
+      };
+    }
+
+    const uid = firebaseUser.uid;
+    const listCol = collection(db, "users", uid, "chatList");
 
     const unsubList = onSnapshot(
       listCol,

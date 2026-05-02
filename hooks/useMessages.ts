@@ -15,7 +15,7 @@ type MessagesState = {
 };
 
 export function useMessages(chatId: string): { messages: Message[]; loading: boolean } {
-  const { currentUser, tenantId } = useAuth();
+  const { currentUser, tenantId, firebaseUser } = useAuth();
   const { isOnline } = useConnectivity();
   const [state, setState] = useState<MessagesState>({
     chatId: "",
@@ -84,12 +84,12 @@ export function useMessages(chatId: string): { messages: Message[]; loading: boo
 
       void refreshLocalAudioCache(chatId, isActive, isOnline);
 
-      if (currentUser && tenantId) {
+      if (currentUser && tenantId && firebaseUser) {
         void syncPendingTextMessages(currentUser, tenantId, isOnline);
         void syncChatHistory(chatId, isOnline);
       }
 
-      if (!isOnline) return;
+      if (!isOnline || !firebaseUser) return;
 
       const q = query(
         collection(db, "chats", chatId, "messages"),
@@ -130,7 +130,15 @@ export function useMessages(chatId: string): { messages: Message[]; loading: boo
       unsubLocal?.();
       unsubFirestore?.();
     };
-  }, [chatId, currentUser, isOnline, loadLocalMessages, refreshLocalAudioCache, tenantId]);
+  }, [
+    chatId,
+    currentUser,
+    firebaseUser,
+    isOnline,
+    loadLocalMessages,
+    refreshLocalAudioCache,
+    tenantId,
+  ]);
 
   if (state.chatId !== chatId) {
     return { messages: [], loading: true };

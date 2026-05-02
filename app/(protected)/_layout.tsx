@@ -5,7 +5,15 @@ import { Redirect, Stack } from "expo-router";
 import { StyleSheet, View } from "react-native";
 
 export default function ProtectedLayout() {
-  const { firebaseUser, deviceApproved, loading, sessionReady, needsPushToken } = useAuth();
+  const {
+    currentUser,
+    firebaseUser,
+    deviceApproved,
+    loading,
+    sessionReady,
+    needsPushToken,
+  } = useAuth();
+  const hasApprovedSession = currentUser != null && deviceApproved === true;
 
   if (loading || (firebaseUser && !sessionReady)) {
     return (
@@ -15,7 +23,7 @@ export default function ProtectedLayout() {
     );
   }
 
-  if (!firebaseUser) {
+  if (!firebaseUser && !hasApprovedSession) {
     return <Redirect href="/login" />;
   }
 
@@ -27,7 +35,7 @@ export default function ProtectedLayout() {
     return <Redirect href="/aguardando" />;
   }
 
-  if (deviceApproved !== true) {
+  if (!hasApprovedSession) {
     return (
       <View style={styles.center}>
         <LoadingDots />

@@ -16,7 +16,7 @@ import { useState } from "react";
 export type SendableAudio = Blob | Uint8Array | ArrayBuffer;
 
 export function useSendMessage(chatId: string) {
-  const { currentUser, tenantId } = useAuth();
+  const { currentUser, tenantId, firebaseUser } = useAuth();
   const { isOnline } = useConnectivity();
   const [isSending, setIsSending] = useState(false);
 
@@ -41,7 +41,7 @@ export function useSendMessage(chatId: string) {
         type: "text",
         timestamp: createdAt,
       });
-      if (!isOnline) return;
+      if (!isOnline || !firebaseUser) return;
       await ensureTextMessageInFirestore({
         chatId,
         messageId,
@@ -68,7 +68,7 @@ export function useSendMessage(chatId: string) {
     options?: { extension?: string; contentType?: string; duration?: number }
   ) => {
     if (!currentUser || !tenantId) return;
-    if (!isOnline) return;
+    if (!isOnline || !firebaseUser) return;
     setIsSending(true);
     const messageId = randomUuid();
     try {

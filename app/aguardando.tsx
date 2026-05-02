@@ -9,7 +9,15 @@ import { StyleSheet, Text, View } from "react-native";
 
 export default function AguardandoScreen() {
   const router = useRouter();
-  const { firebaseUser, deviceApproved, loading, sessionReady, needsPushToken } = useAuth();
+  const {
+    currentUser,
+    firebaseUser,
+    deviceApproved,
+    loading,
+    sessionReady,
+    needsPushToken,
+  } = useAuth();
+  const hasApprovedSession = currentUser != null && deviceApproved === true;
 
   useEffect(() => {
     if (!loading && sessionReady && deviceApproved === true) {
@@ -28,7 +36,7 @@ export default function AguardandoScreen() {
     );
   }
 
-  if (!firebaseUser) {
+  if (!firebaseUser && !hasApprovedSession) {
     return <Redirect href="/login" />;
   }
 

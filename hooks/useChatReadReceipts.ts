@@ -18,7 +18,7 @@ export function useChatReadReceipts(
   messages: Message[],
   localReadUpTo?: Record<string, Timestamp>
 ): { readUpTo: Record<string, Timestamp> | null } {
-  const { currentUser } = useAuth();
+  const { currentUser, firebaseUser } = useAuth();
   const { isOnline } = useConnectivity();
   const isFocused = useIsFocused();
   const [readUpTo, setReadUpTo] = useState<Record<string, Timestamp> | null>(
@@ -47,7 +47,7 @@ export function useChatReadReceipts(
   }, [chatId, localReadUpTo]);
 
   useEffect(() => {
-    if (!chatId || !isOnline) return;
+    if (!chatId || !isOnline || !firebaseUser) return;
     const unsub = onSnapshot(
       doc(db, "chats", chatId),
       (snap) => {
@@ -57,10 +57,17 @@ export function useChatReadReceipts(
       () => {}
     );
     return unsub;
-  }, [chatId, isOnline]);
+  }, [chatId, firebaseUser, isOnline]);
 
   useEffect(() => {
-    if (!isOnline || !isFocused || !chatId || !currentUser?.id || messages.length === 0) {
+    if (
+      !isOnline ||
+      !firebaseUser ||
+      !isFocused ||
+      !chatId ||
+      !currentUser?.id ||
+      messages.length === 0
+    ) {
       return;
     }
     const uid = currentUser.id;
@@ -80,7 +87,7 @@ export function useChatReadReceipts(
       })().catch(() => {});
     }, 400);
     return () => clearTimeout(id);
-  }, [isOnline, isFocused, chatId, currentUser?.id, messages]);
+  }, [isOnline, firebaseUser, isFocused, chatId, currentUser?.id, messages]);
 
   return { readUpTo };
 }

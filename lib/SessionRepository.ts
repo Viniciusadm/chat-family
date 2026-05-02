@@ -43,6 +43,19 @@ export const SessionRepository = {
     return row ? rowToSession(row) : null;
   },
 
+  async getLastApprovedSession(): Promise<LocalSession | null> {
+    const db = await getDatabase();
+    const row = await db.getFirstAsync<SessionRow>(
+      `SELECT *
+       FROM app_sessions
+       WHERE device_approved = 1
+       ORDER BY updated_at DESC
+       LIMIT 1`
+    );
+
+    return row ? rowToSession(row) : null;
+  },
+
   async saveSession({
     firebaseUid,
     currentUser,
