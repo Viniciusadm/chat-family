@@ -1,5 +1,6 @@
 import { colors } from "@/theme/colors";
 import { Ionicons } from "@expo/vector-icons";
+import type { ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -10,6 +11,13 @@ interface AppHeaderProps {
   onBack?: () => void;
   rightIcon?: Ion;
   onRightPress?: () => void;
+  rightActions?: {
+    key: string;
+    icon?: Ion;
+    content?: ReactNode;
+    onPress: () => void;
+    accessibilityLabel?: string;
+  }[];
 }
 
 export function AppHeader({
@@ -17,7 +25,14 @@ export function AppHeader({
   onBack,
   rightIcon,
   onRightPress,
+  rightActions,
 }: AppHeaderProps) {
+  const actions =
+    rightActions ??
+    (rightIcon && onRightPress
+      ? [{ key: "right", icon: rightIcon, onPress: onRightPress }]
+      : []);
+
   return (
     <SafeAreaView edges={["top"]} style={styles.container}>
       <View style={styles.bar}>
@@ -47,18 +62,30 @@ export function AppHeader({
           </Text>
         </View>
 
-        {rightIcon && onRightPress ? (
-          <Pressable
-            onPress={onRightPress}
-            style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed]}
-            hitSlop={8}
-          >
-            <Ionicons
-              name={rightIcon}
-              size={22}
-              color={colors.chatHeaderForeground}
-            />
-          </Pressable>
+        {actions.length > 0 ? (
+          <View style={styles.actions}>
+            {actions.map((action) => (
+              <Pressable
+                key={action.key}
+                onPress={action.onPress}
+                accessibilityLabel={action.accessibilityLabel}
+                style={({ pressed }) => [
+                  styles.iconBtn,
+                  pressed && styles.pressed,
+                ]}
+                hitSlop={8}
+              >
+                {action.content ??
+                  (action.icon ? (
+                    <Ionicons
+                      name={action.icon}
+                      size={22}
+                      color={colors.chatHeaderForeground}
+                    />
+                  ) : null)}
+              </Pressable>
+            ))}
+          </View>
         ) : (
           <View style={styles.iconPlaceholder} />
         )}
@@ -89,6 +116,13 @@ const styles = StyleSheet.create({
   iconPlaceholder: {
     width: 36,
     height: 36,
+  },
+  actions: {
+    minWidth: 36,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 4,
   },
   pressed: {
     opacity: 0.7,

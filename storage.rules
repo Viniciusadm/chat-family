@@ -1,0 +1,36 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid));
+    }
+
+    function userTenant() {
+      return userDoc().data.tenantId;
+    }
+
+    function userMemberId() {
+      return userDoc().data.memberId;
+    }
+
+    match /profilePhotos/{tenantId}/{memberId}/{fileName} {
+      allow read: if signedIn() && tenantId == userTenant();
+      allow create, update: if signedIn()
+        && tenantId == userTenant()
+        && memberId == userMemberId()
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if signedIn()
+        && tenantId == userTenant()
+        && memberId == userMemberId();
+    }
+
+    match /audios/{allPaths=**} {
+      allow read, write: if signedIn();
+    }
+  }
+}

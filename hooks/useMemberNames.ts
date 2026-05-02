@@ -1,39 +1,8 @@
-import { useAuth } from "@/context/AuthContext";
-import { useConnectivity } from "@/hooks/useConnectivity";
-import { db } from "@/lib/firebase";
-import type { MemberDoc } from "@/types/chat";
-import { collection, onSnapshot, query, where } from "firebase/firestore";
-import { useEffect, useState } from "react";
+import { useMemberProfiles } from "@/hooks/useMemberProfiles";
 
 export function useMemberNames() {
-  const { tenantId, currentUser, firebaseUser } = useAuth();
-  const { isOnline } = useConnectivity();
-  const [memberNames, setMemberNames] = useState<Record<string, string>>({});
-
-  useEffect(() => {
-    const effectiveTenantId = tenantId ?? currentUser?.tenantId ?? null;
-    if (!effectiveTenantId) {
-      setMemberNames({});
-      return;
-    }
-    if (!isOnline || !firebaseUser) return;
-
-    const q = query(
-      collection(db, "members"),
-      where("tenantId", "==", effectiveTenantId)
-    );
-
-    const unsub = onSnapshot(q, (snap) => {
-      const map: Record<string, string> = {};
-      snap.docs.forEach((d) => {
-        const data = d.data() as MemberDoc;
-        map[d.id] = data.name;
-      });
-      setMemberNames(map);
-    });
-
-    return () => unsub();
-  }, [tenantId, currentUser?.tenantId, firebaseUser, isOnline]);
-
-  return memberNames;
+  const profiles = useMemberProfiles();
+  return Object.fromEntries(
+    Object.entries(profiles).map(([id, profile]) => [id, profile.name])
+  );
 }

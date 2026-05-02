@@ -59,17 +59,29 @@ service cloud.firestore {
       }
     }
 
-    match /members/{memberId} {
+    match /members/{memberDocId} {
       allow read: if request.auth != null && resource.data.tenantId == userTenant();
       allow create: if request.auth != null && (
-        (request.auth.uid == memberId && request.resource.data.tenantId is string) ||
+        (request.auth.uid == memberDocId && request.resource.data.tenantId is string) ||
         (
           isTenantAdult() &&
           request.resource.data.tenantId == userTenant() &&
           request.resource.data.keys().hasAll(['tenantId', 'name', 'role', 'loginCode', 'createdAt'])
         )
       );
-      allow update, delete: if request.auth != null && resource.data.tenantId == userTenant() && isTenantAdult();
+      allow update: if request.auth != null && (
+        (resource.data.tenantId == userTenant() && isTenantAdult()) ||
+        (
+          memberId() == memberDocId &&
+          resource.data.tenantId == userTenant() &&
+          request.resource.data.tenantId == resource.data.tenantId &&
+          request.resource.data.name == resource.data.name &&
+          request.resource.data.role == resource.data.role &&
+          request.resource.data.loginCode == resource.data.loginCode &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['photoUrl', 'photoPath'])
+        )
+      );
+      allow delete: if request.auth != null && resource.data.tenantId == userTenant() && isTenantAdult();
     }
 
     match /devices/{deviceId} {

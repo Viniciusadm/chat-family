@@ -1,8 +1,10 @@
 import { AppHeader } from "@/components/AppHeader";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { LoadingDots } from "@/components/LoadingDots";
+import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { useAuth } from "@/context/AuthContext";
 import { useChats } from "@/hooks/useChats";
+import { useMemberProfiles } from "@/hooks/useMemberProfiles";
 import { colors } from "@/theme/colors";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -29,6 +31,7 @@ export default function ChatListScreen() {
   const router = useRouter();
   const { chats, loading } = useChats();
   const { currentUser, firebaseUser } = useAuth();
+  const memberProfiles = useMemberProfiles();
   const canAccessAdmin =
     currentUser?.role === "adult" &&
     firebaseUser != null &&
@@ -38,10 +41,30 @@ export default function ChatListScreen() {
     <ScreenContainer style={styles.screen} edges={["bottom"]}>
       <AppHeader
         title="Conversas"
-        rightIcon={canAccessAdmin ? "settings-outline" : undefined}
-        onRightPress={
-          canAccessAdmin ? () => router.push("/admin") : undefined
-        }
+        rightActions={[
+          {
+            key: "profile",
+            content: (
+              <ProfileAvatar
+                name={currentUser?.name}
+                photoUrl={currentUser?.photoUrl}
+                size={30}
+              />
+            ),
+            onPress: () => router.push("/profile"),
+            accessibilityLabel: "Perfil",
+          },
+          ...(canAccessAdmin
+            ? [
+                {
+                  key: "admin",
+                  icon: "settings-outline" as const,
+                  onPress: () => router.push("/admin"),
+                  accessibilityLabel: "Gerenciamento",
+                },
+              ]
+            : []),
+        ]}
       />
       {loading ? (
         <View style={styles.center}>
@@ -66,55 +89,64 @@ export default function ChatListScreen() {
           data={chats}
           keyExtractor={(c) => c.id}
           contentContainerStyle={styles.list}
-          renderItem={({ item: chat }) => (
-            <Pressable
-              onPress={() => router.push(`/chat/${chat.id}`)}
-              style={({ pressed }) => [
-                styles.row,
-                pressed && styles.rowPressed,
-              ]}
-            >
-              <View style={styles.avatar}>
-                <Ionicons
-                  name="chatbubble-ellipses-outline"
-                  size={22}
-                  color={colors.primary}
+          renderItem={({ item: chat }) => {
+            const otherParticipantId =
+              !chat.isGroup && currentUser
+                ? chat.participants.find((id) => id !== currentUser.id)
+                : undefined;
+            const otherProfile = otherParticipantId
+              ? memberProfiles[otherParticipantId]
+              : undefined;
+
+            return (
+              <Pressable
+                onPress={() => router.push(`/chat/${chat.id}`)}
+                style={({ pressed }) => [
+                  styles.row,
+                  pressed && styles.rowPressed,
+                ]}
+              >
+                <ProfileAvatar
+                  name={otherProfile?.name ?? chat.name}
+                  photoUrl={otherProfile?.photoUrl}
+                  icon="chatbubble-ellipses-outline"
+                  size={48}
                 />
-              </View>
-              <View style={styles.rowBody}>
-                <View style={styles.rowTop}>
-                  <Text style={styles.chatName} numberOfLines={1}>
-                    {chat.name}
-                  </Text>
-                  {chat.lastMessage && (
-                    <Text style={styles.time}>
-                      {formatTime(chat.lastMessage.timestamp)}
+                <View style={styles.rowBody}>
+                  <View style={styles.rowTop}>
+                    <Text style={styles.chatName} numberOfLines={1}>
+                      {chat.name}
                     </Text>
+                    {chat.lastMessage && (
+                      <Text style={styles.time}>
+                        {formatTime(chat.lastMessage.timestamp)}
+                      </Text>
+                    )}
+                  </View>
+                  {(chat.lastMessage || chat.unreadCount > 0) && (
+                    <View style={styles.previewRow}>
+                      {chat.lastMessage ? (
+                        <Text style={styles.preview} numberOfLines={1}>
+                          {chat.lastMessage.type === "audio"
+                            ? "Áudio"
+                            : (chat.lastMessage.text ?? "")}
+                        </Text>
+                      ) : (
+                        <View style={styles.previewSpacer} />
+                      )}
+                      {chat.unreadCount > 0 ? (
+                        <View style={styles.unreadBadge}>
+                          <Text style={styles.unreadBadgeText}>
+                            {unreadBadgeLabel(chat.unreadCount)}
+                          </Text>
+                        </View>
+                      ) : null}
+                    </View>
                   )}
                 </View>
-                {(chat.lastMessage || chat.unreadCount > 0) && (
-                  <View style={styles.previewRow}>
-                    {chat.lastMessage ? (
-                      <Text style={styles.preview} numberOfLines={1}>
-                        {chat.lastMessage.type === "audio"
-                          ? "Áudio"
-                          : (chat.lastMessage.text ?? "")}
-                      </Text>
-                    ) : (
-                      <View style={styles.previewSpacer} />
-                    )}
-                    {chat.unreadCount > 0 ? (
-                      <View style={styles.unreadBadge}>
-                        <Text style={styles.unreadBadgeText}>
-                          {unreadBadgeLabel(chat.unreadCount)}
-                        </Text>
-                      </View>
-                    ) : null}
-                  </View>
-                )}
-              </View>
-            </Pressable>
-          )}
+              </Pressable>
+            );
+          }}
         />
       )}
     </ScreenContainer>
@@ -145,14 +177,6 @@ const styles = StyleSheet.create({
   },
   rowPressed: {
     backgroundColor: colors.muted,
-  },
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: "rgba(31, 168, 92, 0.12)",
-    alignItems: "center",
-    justifyContent: "center",
   },
   rowBody: {
     flex: 1,

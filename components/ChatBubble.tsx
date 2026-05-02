@@ -3,6 +3,7 @@ import { colors } from "@/theme/colors";
 import { MaterialIcons } from "@expo/vector-icons";
 import { StyleSheet, Text, View } from "react-native";
 import { AudioBubble } from "./AudioBubble";
+import { ProfileAvatar } from "./ProfileAvatar";
 
 interface ChatBubbleProps {
   message: Message;
@@ -16,6 +17,7 @@ interface ChatBubbleProps {
   onPlaybackRateChange: (rate: 1 | 1.5 | 2) => void;
   readReceipt?: "loading" | "sent" | "read";
   senderName?: string;
+  senderPhotoUrl?: string | null;
 }
 
 function formatTime(date: Date) {
@@ -37,6 +39,7 @@ export function ChatBubble({
   onPlaybackRateChange,
   readReceipt,
   senderName,
+  senderPhotoUrl,
 }: ChatBubbleProps) {
   const selfReadReceipt = isSelf ? readReceipt ?? "sent" : undefined;
   const audioSource =
@@ -50,6 +53,9 @@ export function ChatBubble({
     <View
       style={[styles.wrap, isSelf ? styles.wrapSelf : styles.wrapOther]}
     >
+      {!isSelf && senderName ? (
+        <ProfileAvatar name={senderName} photoUrl={senderPhotoUrl} size={28} />
+      ) : null}
       <View
         style={[
           styles.bubble,
@@ -123,12 +129,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     paddingHorizontal: 12,
     marginBottom: 8,
+    gap: 8,
   },
   wrapSelf: {
     justifyContent: "flex-end",
   },
   wrapOther: {
     justifyContent: "flex-start",
+    alignItems: "flex-end",
   },
   bubble: {
     maxWidth: "80%",

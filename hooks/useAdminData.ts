@@ -97,6 +97,8 @@ export function useAdminData() {
               name: data.name,
               role: data.role,
               loginCode: data.loginCode,
+              photoUrl: data.photoUrl ?? null,
+              photoPath: data.photoPath ?? null,
             };
           })
         );
@@ -184,6 +186,8 @@ export function useAdminData() {
       name,
       role,
       loginCode,
+      photoUrl: null,
+      photoPath: null,
       createdAt: serverTimestamp(),
     });
     await setDoc(doc(db, "loginCodes", loginCode), {

@@ -87,6 +87,7 @@ interface AuthContextValue {
   loginWithChildCode: (code: string) => Promise<void>;
   logout: () => Promise<void>;
   retryDeviceRegistration: () => Promise<void>;
+  setCurrentUserPhoto: (photoUrl: string | null, photoPath: string | null) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -264,6 +265,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await syncDeviceWithToken(user, uid, userData, activeDeviceId, stale);
   }, [deviceId, isOnline, syncDeviceWithToken]);
 
+  const setCurrentUserPhoto = useCallback(
+    async (photoUrl: string | null, photoPath: string | null) => {
+      const uid = auth.currentUser?.uid;
+      setCurrentUser((user) => {
+        if (!user) return user;
+        const next = { ...user, photoUrl, photoPath };
+        if (uid) {
+          void SessionRepository.updateProfilePhoto(uid, photoUrl, photoPath);
+        }
+        return next;
+      });
+    },
+    []
+  );
+
   useEffect(() => {
     if (!deviceId) return;
 
@@ -379,6 +395,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           tenantId: userData.tenantId,
           name: userData.name,
           role: userData.role,
+          photoUrl: userData.photoUrl ?? null,
+          photoPath: userData.photoPath ?? null,
         };
         setCurrentUser(appUser);
         setTenantId(userData.tenantId);
@@ -446,6 +464,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       name,
       role: "adult",
       loginCode: null,
+      photoUrl: null,
+      photoPath: null,
       createdAt: serverTimestamp(),
     });
 
@@ -454,6 +474,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       tenantId: tenantRef.id,
       name,
       role: "adult",
+      photoUrl: null,
+      photoPath: null,
       createdAt: serverTimestamp(),
     });
 
@@ -486,11 +508,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw new Error("Código inválido");
     }
     const d = codeSnap.data() as LoginCodeDoc;
+    const memberSnap = await getDoc(doc(db, "members", d.memberId));
+    const memberData = memberSnap.exists() ? memberSnap.data() : null;
     const payload = {
       memberId: d.memberId,
       tenantId: d.tenantId,
       name: d.name,
       role: d.role,
+      photoUrl:
+        memberData && typeof memberData.photoUrl === "string"
+          ? memberData.photoUrl
+          : null,
+      photoPath:
+        memberData && typeof memberData.photoPath === "string"
+          ? memberData.photoPath
+          : null,
     };
     const childDeviceId = randomUuid();
     await AsyncStorage.setItem(DEVICE_ID_KEY, childDeviceId);
@@ -505,6 +537,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       tenantId: payload.tenantId,
       name: payload.name,
       role: payload.role,
+      photoUrl: payload.photoUrl,
+      photoPath: payload.photoPath,
       createdAt: serverTimestamp(),
     });
 
@@ -545,6 +579,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loginWithChildCode,
         logout,
         retryDeviceRegistration,
+        setCurrentUserPhoto,
       }}
     >
       {children}

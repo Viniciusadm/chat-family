@@ -8,6 +8,8 @@ type SessionRow = {
   name: string;
   role: string;
   device_approved: number | null;
+  photo_url: string | null;
+  photo_path: string | null;
 };
 
 export type LocalSession = {
@@ -24,6 +26,8 @@ function rowToSession(row: SessionRow): LocalSession {
       tenantId: row.tenant_id,
       name: row.name,
       role: row.role === "child" ? "child" : "adult",
+      photoUrl: row.photo_url,
+      photoPath: row.photo_path,
     },
     deviceApproved:
       row.device_approved == null ? null : row.device_approved === 1,
@@ -74,8 +78,10 @@ export const SessionRepository = {
         name,
         role,
         device_approved,
+        photo_url,
+        photo_path,
         updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         firebaseUid,
         currentUser.id,
@@ -83,6 +89,8 @@ export const SessionRepository = {
         currentUser.name,
         currentUser.role,
         deviceApproved == null ? null : deviceApproved ? 1 : 0,
+        currentUser.photoUrl ?? null,
+        currentUser.photoPath ?? null,
         new Date().toISOString(),
       ]
     );
@@ -102,6 +110,20 @@ export const SessionRepository = {
         new Date().toISOString(),
         firebaseUid,
       ]
+    );
+  },
+
+  async updateProfilePhoto(
+    firebaseUid: string,
+    photoUrl: string | null,
+    photoPath: string | null
+  ) {
+    const db = await getDatabase();
+    await db.runAsync(
+      `UPDATE app_sessions
+       SET photo_url = ?, photo_path = ?, updated_at = ?
+       WHERE firebase_uid = ?`,
+      [photoUrl, photoPath, new Date().toISOString(), firebaseUid]
     );
   },
 };

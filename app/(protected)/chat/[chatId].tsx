@@ -5,7 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useChatReadReceipts } from "@/hooks/useChatReadReceipts";
 import { useChats } from "@/hooks/useChats";
 import { useConnectivity } from "@/hooks/useConnectivity";
-import { useMemberNames } from "@/hooks/useMemberNames";
+import { useMemberProfiles } from "@/hooks/useMemberProfiles";
 import { useMessages } from "@/hooks/useMessages";
 import { colors } from "@/theme/colors";
 import type { Message } from "@/types/chat";
@@ -122,7 +122,7 @@ export default function ChatScreen() {
   const { isOnline } = useConnectivity();
   const { chats } = useChats();
   const { messages, loading } = useMessages(chatId ?? "");
-  const memberNames = useMemberNames();
+  const memberProfiles = useMemberProfiles();
   const visibleMessages = useMemo(
     () => (loading ? [] : messages),
     [loading, messages]
@@ -365,8 +365,13 @@ export default function ChatScreen() {
                 onPlaybackRateChange={setAudioPlaybackRate}
                 senderName={
                   chat?.isGroup && item.message.senderId !== currentUserId
-                    ? memberNames[item.message.senderId] ?? "Participante"
+                    ? memberProfiles[item.message.senderId]?.name ?? "Participante"
                     : undefined
+                }
+                senderPhotoUrl={
+                  chat?.isGroup && item.message.senderId !== currentUserId
+                    ? memberProfiles[item.message.senderId]?.photoUrl ?? null
+                    : null
                 }
                 readReceipt={readReceiptStatus(
                   item.message,

@@ -71,6 +71,8 @@ async function migrate(db: SQLite.SQLiteDatabase) {
   await ensureColumn(db, "messages", "audio_downloaded_at", "TEXT");
   await ensureColumn(db, "messages", "audio_duration", "REAL");
   await ensureColumn(db, "chats", "read_up_to", "TEXT");
+  await ensureColumn(db, "app_sessions", "photo_url", "TEXT");
+  await ensureColumn(db, "app_sessions", "photo_path", "TEXT");
 }
 
 export async function getDatabase() {

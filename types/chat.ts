@@ -12,6 +12,8 @@ export interface MemberDoc {
   role: "adult" | "child";
   loginCode: string | null;
   createdAt: Timestamp;
+  photoUrl?: string | null;
+  photoPath?: string | null;
 }
 
 export interface LoginCodeDoc {
@@ -28,6 +30,8 @@ export interface UserDoc {
   role: "adult" | "child";
   createdAt: Timestamp;
   chatIndexBuiltAt?: Timestamp;
+  photoUrl?: string | null;
+  photoPath?: string | null;
 }
 
 export interface DeviceDoc {
@@ -73,6 +77,8 @@ export interface AppUser {
   tenantId: string;
   name: string;
   role: UserRole;
+  photoUrl?: string | null;
+  photoPath?: string | null;
 }
 
 export interface AppMember extends AppUser {

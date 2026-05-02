@@ -1,6 +1,7 @@
 import { AppHeader } from "@/components/AppHeader";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { LoadingDots } from "@/components/LoadingDots";
+import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { useAuth } from "@/context/AuthContext";
 import { useAdminData } from "@/hooks/useAdminData";
 import type { Chat, UserRole } from "@/types/chat";
@@ -170,13 +171,11 @@ export default function AdminScreen() {
           {members.map((member) => (
             <View key={member.id} style={styles.card}>
               <View style={styles.cardRow}>
-                <View style={styles.avatar}>
-                  <Ionicons
-                    name="person-outline"
-                    size={20}
-                    color={colors.primary}
-                  />
-                </View>
+                <ProfileAvatar
+                  name={member.name}
+                  photoUrl={member.photoUrl}
+                  size={40}
+                />
                 <View style={styles.cardBody}>
                   <Text style={styles.cardTitle}>{member.name}</Text>
                   {member.loginCode ? (
@@ -279,13 +278,11 @@ export default function AdminScreen() {
           {chats.map((chat) => (
             <View key={chat.id} style={styles.card}>
               <View style={styles.cardRow}>
-                <View style={styles.avatar}>
-                  <Ionicons
-                    name="chatbubble-outline"
-                    size={20}
-                    color={colors.primary}
-                  />
-                </View>
+                <ProfileAvatar
+                  name={chat.name}
+                  icon="chatbubble-outline"
+                  size={40}
+                />
                 <View style={styles.cardBody}>
                   <Text style={styles.cardTitle}>{chat.name}</Text>
                   <Text style={styles.cardMeta}>
@@ -621,14 +618,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-  },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(31, 168, 92, 0.12)",
-    alignItems: "center",
-    justifyContent: "center",
   },
   cardBody: {
     flex: 1,
