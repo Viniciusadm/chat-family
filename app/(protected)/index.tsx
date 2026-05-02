@@ -28,19 +28,16 @@ function unreadBadgeLabel(count: number) {
 export default function ChatListScreen() {
   const router = useRouter();
   const { chats, loading } = useChats();
-  const { currentUser, firebaseUser } = useAuth();
-  const canAccessAdmin =
-    currentUser?.role === "adult" &&
-    firebaseUser != null &&
-    !firebaseUser.isAnonymous;
+  const { firebaseUser } = useAuth();
+  const canAccessSettings = firebaseUser != null;
 
   return (
     <ScreenContainer style={styles.screen} edges={["bottom"]}>
       <AppHeader
         title="Conversas"
-        rightIcon={canAccessAdmin ? "settings-outline" : undefined}
+        rightIcon={canAccessSettings ? "settings-outline" : undefined}
         onRightPress={
-          canAccessAdmin ? () => router.push("/admin") : undefined
+          canAccessSettings ? () => router.push("/settings") : undefined
         }
       />
       {loading ? (

@@ -294,6 +294,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           tenantId: userData.tenantId,
           name: userData.name,
           role: userData.role,
+          photoUrl: userData.photoUrl ?? null,
+          photoPath: userData.photoPath ?? null,
         };
         setCurrentUser(appUser);
         setTenantId(userData.tenantId);
