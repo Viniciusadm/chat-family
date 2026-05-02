@@ -42,17 +42,10 @@ function ChatInput({ chatId, keyboardVisible = false }, ref) {
   const [text, setText] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
-  const [recordingStartedWithKeyboard, setRecordingStartedWithKeyboard] =
-    useState(false);
   const inputRef = useRef<TextInput>(null);
   const recordingActiveRef = useRef(false);
   const recordSessionRef = useRef(0);
-  const keyboardVisibleRef = useRef(keyboardVisible);
   const recordingStartMsRef = useRef(0);
-
-  useEffect(() => {
-    keyboardVisibleRef.current = keyboardVisible;
-  }, [keyboardVisible]);
 
   useEffect(() => {
     if (!isRecording) return;
@@ -87,22 +80,11 @@ function ChatInput({ chatId, keyboardVisible = false }, ref) {
     await sendText(trimmed);
   }, [text, isSending, sendText]);
 
-  const preserveKeyboardIfNeeded = useCallback(() => {
-    if (!keyboardVisibleRef.current) return;
-    requestAnimationFrame(() => {
-      inputRef.current?.focus();
-    });
-    setTimeout(() => {
-      inputRef.current?.focus();
-    }, 50);
-  }, []);
-
   const resetRecordingState = useCallback(() => {
     recordingActiveRef.current = false;
     recordingStartMsRef.current = 0;
     setIsRecording(false);
     setRecordingSeconds(0);
-    setRecordingStartedWithKeyboard(false);
   }, []);
 
   const restorePlaybackMode = async () => {
@@ -119,7 +101,6 @@ function ChatInput({ chatId, keyboardVisible = false }, ref) {
   const startRecording = async () => {
     if (isSending || isRecording || text.trim()) return;
     const session = ++recordSessionRef.current;
-    const startedWithKeyboard = keyboardVisibleRef.current;
     try {
       const perm = await requestRecordingPermissionsAsync();
       if (!perm.granted || recordSessionRef.current !== session) return;
@@ -143,11 +124,7 @@ function ChatInput({ chatId, keyboardVisible = false }, ref) {
       recordingActiveRef.current = true;
       recordingStartMsRef.current = Date.now();
       setRecordingSeconds(0);
-      setRecordingStartedWithKeyboard(startedWithKeyboard);
       setIsRecording(true);
-      if (startedWithKeyboard) {
-        preserveKeyboardIfNeeded();
-      }
     } catch {
       if (recordSessionRef.current === session) {
         resetRecordingState();
@@ -180,13 +157,7 @@ function ChatInput({ chatId, keyboardVisible = false }, ref) {
   return (
     <View style={[styles.bar, { paddingBottom: bottomPadding }]}>
       <View style={styles.row}>
-        <View
-          style={[
-            styles.inputShell,
-            isRecording && styles.inputCollapsed,
-          ]}
-          pointerEvents={isRecording ? "none" : "auto"}
-        >
+        <View style={styles.inputShell}>
           <TextInput
             ref={inputRef}
             value={text}
@@ -194,7 +165,7 @@ function ChatInput({ chatId, keyboardVisible = false }, ref) {
             placeholderTextColor={colors.mutedForeground}
             style={styles.input}
             multiline={false}
-            editable={!isRecording || recordingStartedWithKeyboard}
+            editable
             onChangeText={(value) => {
               if (recordingActiveRef.current) return;
               setText(value);
@@ -226,28 +197,27 @@ function ChatInput({ chatId, keyboardVisible = false }, ref) {
             onPressOut={() => void stopRecordingAndSend()}
             disabled={isSending}
             style={({ pressed }) => [
-              isRecording ? styles.recordBar : styles.roundBtn,
+              styles.roundBtn,
               pressed && !isRecording && styles.pressed,
               isSending && styles.disabled,
             ]}
           >
-            {isRecording ? (
-              <View style={styles.recInner}>
-                <View style={styles.recDot} />
-                <Text style={styles.recText}>Solte para enviar</Text>
-                <Text style={styles.recTimer}>
-                  {Math.floor(recordingSeconds / 60)}:
-                  {(recordingSeconds % 60).toString().padStart(2, "0")}
-                </Text>
-              </View>
-            ) : (
-              <Ionicons
-                name="mic"
-                size={20}
-                color={colors.primaryForeground}
-              />
-            )}
+            <Ionicons
+              name="mic"
+              size={20}
+              color={colors.primaryForeground}
+            />
           </Pressable>
+        )}
+        {isRecording && (
+          <View style={styles.recordingOverlay}>
+            <View style={styles.recDot} />
+            <Text style={styles.recText}>Solte para enviar</Text>
+            <Text style={styles.recTimer}>
+              {Math.floor(recordingSeconds / 60)}:
+              {(recordingSeconds % 60).toString().padStart(2, "0")}
+            </Text>
+          </View>
         )}
       </View>
     </View>
@@ -278,17 +248,6 @@ const styles = StyleSheet.create({
     minHeight: 44,
     justifyContent: "center",
   },
-  inputCollapsed: {
-    flex: 0,
-    width: 0,
-    minWidth: 0,
-    paddingHorizontal: 0,
-    paddingVertical: 0,
-    margin: 0,
-    borderWidth: 0,
-    opacity: 0,
-    overflow: "hidden",
-  },
   input: {
     fontSize: 15,
     color: colors.foreground,
@@ -302,18 +261,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  recordBar: {
-    flex: 1,
-    minHeight: 44,
+  recordingOverlay: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    right: 52,
     borderRadius: 12,
     backgroundColor: colors.muted,
-    justifyContent: "center",
-    paddingHorizontal: 14,
-  },
-  recInner: {
     flexDirection: "row",
     alignItems: "center",
+    paddingHorizontal: 14,
     gap: 10,
+    pointerEvents: "none",
   },
   recDot: {
     width: 10,

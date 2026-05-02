@@ -47,7 +47,7 @@ export default (): ExpoConfig => {
   const firebase = firebaseOptionsFromGoogleServices(ANDROID_PACKAGE);
   return {
     name: "Chat Family",
-    slug: "chat",
+    slug: "ChatFamily",
     version: "1.0.0",
     orientation: "portrait",
     icon: "./assets/images/icon.png",
