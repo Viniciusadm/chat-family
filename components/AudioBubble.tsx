@@ -5,12 +5,19 @@ import {
   useAudioPlayer,
   useAudioPlayerStatus,
 } from "expo-audio";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 interface AudioBubbleProps {
+  messageId: string;
   audioUrl: string;
   isSelf: boolean;
+  shouldPlay: boolean;
+  nextInSequenceId?: string;
+  playbackRate: 1 | 1.5 | 2;
+  onRequestPlay: (messageId: string) => void;
+  onAudioFinished: (nextMessageId?: string) => void;
+  onPlaybackRateChange: (rate: 1 | 1.5 | 2) => void;
 }
 
 function formatTime(seconds: number) {
@@ -19,10 +26,21 @@ function formatTime(seconds: number) {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-export function AudioBubble({ audioUrl, isSelf }: AudioBubbleProps) {
+const PLAYBACK_RATES: Array<1 | 1.5 | 2> = [1, 1.5, 2];
+
+export function AudioBubble({
+  messageId,
+  audioUrl,
+  isSelf,
+  shouldPlay,
+  nextInSequenceId,
+  playbackRate,
+  onRequestPlay,
+  onAudioFinished,
+  onPlaybackRateChange,
+}: AudioBubbleProps) {
   const player = useAudioPlayer({ uri: audioUrl }, { updateInterval: 200 });
   const status = useAudioPlayerStatus(player);
-  const [wasPlaying, setWasPlaying] = useState(false);
 
   useEffect(() => {
     setAudioModeAsync({
@@ -31,29 +49,44 @@ export function AudioBubble({ audioUrl, isSelf }: AudioBubbleProps) {
     }).catch(() => {});
   }, []);
 
+
+  useEffect(() => {
+    player.setPlaybackRate(playbackRate).catch(() => {});
+  }, [playbackRate, player]);
+
+  useEffect(() => {
+    if (!shouldPlay || !status.isLoaded || status.playing) return;
+    player.play();
+  }, [player, shouldPlay, status.isLoaded, status.playing]);
+
   useEffect(() => {
     if (!status.didJustFinish) return;
-    setWasPlaying(false);
-    player.seekTo(0).catch(() => {});
-  }, [player, status.didJustFinish]);
+    player.pause();
+    onAudioFinished(nextInSequenceId);
+  }, [nextInSequenceId, onAudioFinished, player, status.didJustFinish]);
 
   const togglePlay = useCallback(async () => {
     if (status.playing) {
       player.pause();
-      setWasPlaying(false);
     } else {
       if (status.didJustFinish || status.currentTime >= status.duration) {
         await player.seekTo(0);
       }
-      player.play();
-      setWasPlaying(true);
+      onRequestPlay(messageId);
+      await player.play();
     }
-  }, [player, status.currentTime, status.didJustFinish, status.duration, status.playing]);
+  }, [messageId, onRequestPlay, player, status.currentTime, status.didJustFinish, status.duration, status.playing]);
 
-  const duration = status.duration || 0;
+  const cyclePlaybackRate = useCallback(() => {
+    const index = PLAYBACK_RATES.indexOf(playbackRate);
+    const nextRate = PLAYBACK_RATES[(index + 1) % PLAYBACK_RATES.length];
+    onPlaybackRateChange(nextRate);
+  }, [onPlaybackRateChange, playbackRate]);
+
+  const duration = status.duration ?? null;
   const progress = duration > 0 ? Math.min(status.currentTime / duration, 1) : 0;
-  const currentTime = progress * duration;
-  const isPlaying = status.playing || wasPlaying;
+  const currentTime = duration ? progress * duration : 0;
+  const isPlaying = status.playing;
 
   return (
     <View style={styles.row}>
@@ -71,12 +104,19 @@ export function AudioBubble({ audioUrl, isSelf }: AudioBubbleProps) {
           style={isPlaying ? undefined : { marginLeft: 2 }}
         />
       </Pressable>
+      <Pressable onPress={cyclePlaybackRate} style={styles.rateBtn}>
+        <Text style={styles.rateText}>{playbackRate.toFixed(1)}x</Text>
+      </Pressable>
       <View style={styles.trackCol}>
         <View style={styles.track}>
           <View style={[styles.fill, { width: `${progress * 100}%` }]} />
         </View>
         <Text style={styles.time}>
-          {isPlaying ? formatTime(currentTime) : formatTime(duration)}
+          {!status.isLoaded
+            ? "Carregando..."
+            : isPlaying
+              ? formatTime(currentTime)
+              : formatTime(duration ?? 0)}
         </Text>
       </View>
     </View>
@@ -106,6 +146,17 @@ const styles = StyleSheet.create({
   trackCol: {
     flex: 1,
     gap: 4,
+  },
+  rateBtn: {
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    borderRadius: 10,
+    backgroundColor: "rgba(0,0,0,0.08)",
+  },
+  rateText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: colors.timestamp,
   },
   track: {
     height: 4,

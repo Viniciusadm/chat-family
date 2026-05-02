@@ -131,6 +131,32 @@ export default function ChatScreen() {
   const participants = chat?.participants ?? [];
 
   const [activeDayLabel, setActiveDayLabel] = useState<string>("");
+  const [activeAudioMessageId, setActiveAudioMessageId] = useState<string | null>(null);
+  const [audioPlaybackRate, setAudioPlaybackRate] = useState<1 | 1.5 | 2>(1);
+
+  const audioSequenceMap = useMemo(() => {
+    const sequence = new Map<string, string | undefined>();
+    for (let i = 0; i < visibleMessages.length; i += 1) {
+      const current = visibleMessages[i];
+      if (current.type !== "audio") continue;
+      const next = visibleMessages[i + 1];
+      if (
+        next &&
+        next.type === "audio" &&
+        next.senderId === current.senderId
+      ) {
+        sequence.set(current.id, next.id);
+      } else {
+        sequence.set(current.id, undefined);
+      }
+    }
+    return sequence;
+  }, [visibleMessages]);
+
+
+  useEffect(() => {
+    setActiveAudioMessageId(null);
+  }, [chatId]);
 
   const chatListData = useMemo<ChatListItem[]>(() => {
     const ordered = [...visibleMessages].reverse();
@@ -254,6 +280,14 @@ export default function ChatScreen() {
               <ChatBubble
                 message={item.message}
                 isSelf={item.message.senderId === currentUser?.id}
+                shouldPlay={activeAudioMessageId === item.message.id}
+                nextInSequenceId={audioSequenceMap.get(item.message.id)}
+                playbackRate={audioPlaybackRate}
+                onRequestPlay={setActiveAudioMessageId}
+                onAudioFinished={(nextMessageId) => {
+                  setActiveAudioMessageId(nextMessageId ?? null);
+                }}
+                onPlaybackRateChange={setAudioPlaybackRate}
                 senderName={
                   chat?.isGroup && item.message.senderId !== currentUser?.id
                     ? memberNames[item.message.senderId] ?? "Participante"

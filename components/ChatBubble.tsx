@@ -7,6 +7,12 @@ import { AudioBubble } from "./AudioBubble";
 interface ChatBubbleProps {
   message: Message;
   isSelf: boolean;
+  shouldPlay?: boolean;
+  nextInSequenceId?: string;
+  playbackRate: 1 | 1.5 | 2;
+  onRequestPlay: (messageId: string) => void;
+  onAudioFinished: (nextMessageId?: string) => void;
+  onPlaybackRateChange: (rate: 1 | 1.5 | 2) => void;
   readReceipt?: "sent" | "read";
   senderName?: string;
 }
@@ -18,7 +24,18 @@ function formatTime(date: Date) {
   });
 }
 
-export function ChatBubble({ message, isSelf, readReceipt, senderName }: ChatBubbleProps) {
+export function ChatBubble({
+  message,
+  isSelf,
+  shouldPlay,
+  nextInSequenceId,
+  playbackRate,
+  onRequestPlay,
+  onAudioFinished,
+  onPlaybackRateChange,
+  readReceipt,
+  senderName,
+}: ChatBubbleProps) {
   return (
     <View
       style={[styles.wrap, isSelf ? styles.wrapSelf : styles.wrapOther]}
@@ -31,7 +48,17 @@ export function ChatBubble({ message, isSelf, readReceipt, senderName }: ChatBub
       >
         {senderName ? <Text style={styles.senderName}>{senderName}</Text> : null}
         {message.type === "audio" && message.audioUrl ? (
-          <AudioBubble audioUrl={message.audioUrl} isSelf={isSelf} />
+          <AudioBubble
+            messageId={message.id}
+            audioUrl={message.audioUrl}
+            isSelf={isSelf}
+            shouldPlay={Boolean(shouldPlay)}
+            nextInSequenceId={nextInSequenceId}
+            playbackRate={playbackRate}
+            onRequestPlay={onRequestPlay}
+            onAudioFinished={onAudioFinished}
+            onPlaybackRateChange={onPlaybackRateChange}
+          />
         ) : (
           <Text
             style={[
