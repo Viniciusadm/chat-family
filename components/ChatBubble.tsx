@@ -8,6 +8,7 @@ interface ChatBubbleProps {
   message: Message;
   isSelf: boolean;
   readReceipt?: "sent" | "read";
+  senderName?: string;
 }
 
 function formatTime(date: Date) {
@@ -17,7 +18,7 @@ function formatTime(date: Date) {
   });
 }
 
-export function ChatBubble({ message, isSelf, readReceipt }: ChatBubbleProps) {
+export function ChatBubble({ message, isSelf, readReceipt, senderName }: ChatBubbleProps) {
   return (
     <View
       style={[styles.wrap, isSelf ? styles.wrapSelf : styles.wrapOther]}
@@ -28,6 +29,7 @@ export function ChatBubble({ message, isSelf, readReceipt }: ChatBubbleProps) {
           isSelf ? styles.bubbleSelf : styles.bubbleOther,
         ]}
       >
+        {senderName ? <Text style={styles.senderName}>{senderName}</Text> : null}
         {message.type === "audio" && message.audioUrl ? (
           <AudioBubble audioUrl={message.audioUrl} isSelf={isSelf} />
         ) : (
@@ -120,5 +122,11 @@ const styles = StyleSheet.create({
   },
   receiptIcon: {
     marginLeft: 2,
+  },
+  senderName: {
+    fontSize: 12,
+    fontWeight: "600",
+    marginBottom: 4,
+    color: colors.timestamp,
   },
 });

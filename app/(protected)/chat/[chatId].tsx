@@ -4,6 +4,7 @@ import { ChatInput, type ChatInputHandle } from "@/components/ChatInput";
 import { useAuth } from "@/context/AuthContext";
 import { useChatReadReceipts } from "@/hooks/useChatReadReceipts";
 import { useChats } from "@/hooks/useChats";
+import { useMemberNames } from "@/hooks/useMemberNames";
 import { useMessages } from "@/hooks/useMessages";
 import { colors } from "@/theme/colors";
 import type { Message } from "@/types/chat";
@@ -74,6 +75,7 @@ export default function ChatScreen() {
   const { currentUser } = useAuth();
   const { chats } = useChats();
   const { messages, loading } = useMessages(chatId ?? "");
+  const memberNames = useMemberNames();
   const visibleMessages = useMemo(
     () => (loading ? [] : messages),
     [loading, messages]
@@ -127,6 +129,11 @@ export default function ChatScreen() {
             <ChatBubble
               message={item}
               isSelf={item.senderId === currentUser?.id}
+              senderName={
+                chat?.isGroup && item.senderId !== currentUser?.id
+                  ? memberNames[item.senderId] ?? "Participante"
+                  : undefined
+              }
               readReceipt={readReceiptStatus(
                 item,
                 currentUser?.id,
