@@ -38,6 +38,11 @@ export function ChatBubble({
   readReceipt,
   senderName,
 }: ChatBubbleProps) {
+  const selfReadReceipt = isSelf ? readReceipt ?? "sent" : undefined;
+  const audioSource =
+    message.type === "audio"
+      ? message.audioLocalUri ?? message.audioRemoteUrl ?? message.audioUrl
+      : undefined;
   const audioUnavailableOffline =
     message.type === "audio" && !message.audioLocalUri && !isOnline;
 
@@ -63,10 +68,10 @@ export function ChatBubble({
           >
             Áudio indisponível offline
           </Text>
-        ) : message.type === "audio" && message.audioUrl ? (
+        ) : message.type === "audio" && audioSource ? (
           <AudioBubble
             messageId={message.id}
-            audioUrl={message.audioUrl}
+            audioUrl={audioSource}
             isSelf={isSelf}
             shouldPlay={Boolean(shouldPlay)}
             nextInSequenceId={nextInSequenceId}
@@ -89,21 +94,22 @@ export function ChatBubble({
         )}
         <View style={[styles.meta, isSelf ? styles.metaSelf : styles.metaOther]}>
           <Text style={styles.timestamp}>{formatTime(message.timestamp)}</Text>
-          {isSelf && readReceipt ? (
-            <MaterialIcons
-              name={
-                readReceipt === "loading"
-                  ? "schedule"
-                  : readReceipt === "read"
-                    ? "done-all"
-                    : "done"
-              }
-              size={14}
-              color={
-                readReceipt === "read" ? colors.primary : colors.timestamp
-              }
-              style={styles.receiptIcon}
-            />
+          {selfReadReceipt ? (
+            <View style={styles.receiptIconSlot}>
+              <MaterialIcons
+                name={
+                  selfReadReceipt === "loading"
+                    ? "schedule"
+                    : selfReadReceipt === "read"
+                      ? "done-all"
+                      : "done"
+                }
+                size={14}
+                color={
+                  selfReadReceipt === "read" ? colors.primary : colors.timestamp
+                }
+              />
+            </View>
           ) : null}
         </View>
       </View>
@@ -169,7 +175,9 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: colors.timestamp,
   },
-  receiptIcon: {
+  receiptIconSlot: {
+    width: 16,
+    alignItems: "center",
     marginLeft: 2,
   },
   senderName: {

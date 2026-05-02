@@ -1,5 +1,6 @@
 import { getDatabase } from "@/lib/db";
 import type { Chat } from "@/types/chat";
+import { Timestamp } from "firebase/firestore";
 
 type ChatRow = {
   id: string;
@@ -11,6 +12,7 @@ type ChatRow = {
   last_message_text: string | null;
   last_message_type: string | null;
   last_message_at: string | null;
+  read_up_to: string | null;
 };
 
 type Listener = () => void;
@@ -30,6 +32,38 @@ function parseParticipants(value: string): string[] {
   }
 }
 
+function parseReadUpTo(value: string | null): Chat["readUpTo"] {
+  if (!value) return undefined;
+
+  try {
+    const parsed = JSON.parse(value);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return undefined;
+    }
+
+    const readUpTo: NonNullable<Chat["readUpTo"]> = {};
+    for (const [userId, millis] of Object.entries(parsed)) {
+      if (typeof userId !== "string" || typeof millis !== "number") continue;
+      readUpTo[userId] = Timestamp.fromMillis(millis);
+    }
+
+    return Object.keys(readUpTo).length > 0 ? readUpTo : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function serializeReadUpTo(readUpTo: Chat["readUpTo"]): string | null {
+  if (!readUpTo) return null;
+
+  const serialized: Record<string, number> = {};
+  for (const [userId, timestamp] of Object.entries(readUpTo)) {
+    serialized[userId] = timestamp.toMillis();
+  }
+
+  return JSON.stringify(serialized);
+}
+
 function rowToChat(row: ChatRow): Chat {
   const chat: Chat = {
     id: row.id,
@@ -38,6 +72,7 @@ function rowToChat(row: ChatRow): Chat {
     isGroup: row.is_group === 1,
     name: row.name,
     unreadCount: row.unread_count,
+    readUpTo: parseReadUpTo(row.read_up_to),
   };
 
   if (row.last_message_at) {
@@ -75,6 +110,18 @@ export const ChatRepository = {
     return rows.map(rowToChat);
   },
 
+  async getLocalChat(chatId: string): Promise<Chat | null> {
+    const db = await getDatabase();
+    const row = await db.getFirstAsync<ChatRow>(
+      `SELECT *
+       FROM chats
+       WHERE id = ?`,
+      [chatId]
+    );
+
+    return row ? rowToChat(row) : null;
+  },
+
   async upsertChat(chat: Chat, options: { notify?: boolean } = {}) {
     const db = await getDatabase();
     await db.runAsync(
@@ -88,8 +135,9 @@ export const ChatRepository = {
         last_message_text,
         last_message_type,
         last_message_at,
+        read_up_to,
         updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         chat.id,
         chat.tenantId,
@@ -100,6 +148,7 @@ export const ChatRepository = {
         chat.lastMessage?.text ?? null,
         chat.lastMessage?.type ?? null,
         chat.lastMessage?.timestamp?.toISOString() ?? null,
+        serializeReadUpTo(chat.readUpTo),
         new Date().toISOString(),
       ]
     );

@@ -200,6 +200,25 @@ export const MessageRepository = {
     }
   },
 
+  async clearLocalAudioUri(id: string) {
+    const db = await getDatabase();
+    const existing = await db.getFirstAsync<Pick<MessageRow, "conversation_id">>(
+      "SELECT conversation_id FROM messages WHERE id = ?",
+      [id]
+    );
+
+    await db.runAsync(
+      `UPDATE messages
+       SET local_audio_uri = NULL, audio_downloaded_at = NULL
+       WHERE id = ?`,
+      [id]
+    );
+
+    if (existing?.conversation_id) {
+      emit(existing.conversation_id);
+    }
+  },
+
   async upsertFirestoreMessage(
     conversationId: string,
     id: string,

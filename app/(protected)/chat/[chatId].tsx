@@ -48,6 +48,7 @@ function readReceiptStatus(
 ): "loading" | "sent" | "read" | undefined {
   if (!currentUserId || message.senderId !== currentUserId) return undefined;
   if (message.status === "loading") return "loading";
+  if (participants.length === 0) return "sent";
   const others = participants.filter((p) => p !== message.senderId);
   if (others.length === 0) return "read";
   const ts = message.createdAtMs;
@@ -117,6 +118,7 @@ export default function ChatScreen() {
   const { chatId } = useLocalSearchParams<{ chatId: string }>();
   const router = useRouter();
   const { currentUser } = useAuth();
+  const currentUserId = currentUser?.id;
   const { isOnline } = useConnectivity();
   const { chats } = useChats();
   const { messages, loading } = useMessages(chatId ?? "");
@@ -125,13 +127,19 @@ export default function ChatScreen() {
     () => (loading ? [] : messages),
     [loading, messages]
   );
-  const { readUpTo } = useChatReadReceipts(chatId ?? "", visibleMessages);
-  const keyboardOverlap = useAndroidKeyboardOverlap();
-  const inputRef = useRef<ChatInputHandle>(null);
-  const badgeOpacity = useRef(new Animated.Value(1)).current;
-
   const chat = chats.find((c) => c.id === chatId);
   const participants = chat?.participants ?? [];
+  const { readUpTo } = useChatReadReceipts(
+    chatId ?? "",
+    visibleMessages,
+    chat?.readUpTo
+  );
+  const keyboardOverlap = useAndroidKeyboardOverlap();
+  const inputRef = useRef<ChatInputHandle>(null);
+  const badgeOpacity = useRef(new Animated.Value(0)).current;
+  const hasScrolledRef = useRef(false);
+  const visibleDayLabelRef = useRef("");
+  const hideBadgeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [activeDayLabel, setActiveDayLabel] = useState<string>("");
   const [activeAudioMessageId, setActiveAudioMessageId] = useState<string | null>(null);
@@ -167,17 +175,6 @@ export default function ChatScreen() {
 
     ordered.forEach((message, index) => {
       const currentDayKey = getDayKey(message.timestamp);
-      const previousDayKey =
-        index > 0 ? getDayKey(ordered[index - 1].timestamp) : null;
-
-      if (currentDayKey !== previousDayKey) {
-        list.push({
-          id: `separator-${currentDayKey}`,
-          type: "separator",
-          dayKey: currentDayKey,
-          date: message.timestamp,
-        });
-      }
 
       list.push({
         id: message.id,
@@ -185,17 +182,41 @@ export default function ChatScreen() {
         message,
         dayKey: currentDayKey,
       });
+
+      const nextDayKey =
+        index < ordered.length - 1 ? getDayKey(ordered[index + 1].timestamp) : null;
+
+      if (currentDayKey !== nextDayKey) {
+        list.push({
+          id: `separator-${currentDayKey}`,
+          type: "separator",
+          dayKey: currentDayKey,
+          date: message.timestamp,
+        });
+      }
     });
 
     return list;
   }, [visibleMessages]);
 
   useEffect(() => {
-    const first = chatListData.find((i) => i.type === "separator") as
-      | DaySeparatorItem
-      | undefined;
-    setActiveDayLabel(first ? formatDayLabel(first.date) : "");
-  }, [chatListData]);
+    setActiveDayLabel("");
+    visibleDayLabelRef.current = "";
+    badgeOpacity.setValue(0);
+    hasScrolledRef.current = false;
+    if (hideBadgeTimeoutRef.current) {
+      clearTimeout(hideBadgeTimeoutRef.current);
+      hideBadgeTimeoutRef.current = null;
+    }
+  }, [badgeOpacity, chatId]);
+
+  useEffect(() => {
+    return () => {
+      if (hideBadgeTimeoutRef.current) {
+        clearTimeout(hideBadgeTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const keepComposerFocused = useCallback(() => {
     if (keyboardOverlap <= 0) return;
@@ -207,9 +228,53 @@ export default function ChatScreen() {
     }, 50);
   }, [keyboardOverlap]);
 
+  const showBadge = useCallback(() => {
+    if (!hasScrolledRef.current) return;
+    Animated.timing(badgeOpacity, {
+      toValue: 1,
+      duration: 160,
+      useNativeDriver: true,
+    }).start();
+  }, [badgeOpacity]);
+
+  const scheduleBadgeHide = useCallback(() => {
+    if (hideBadgeTimeoutRef.current) {
+      clearTimeout(hideBadgeTimeoutRef.current);
+    }
+
+    hideBadgeTimeoutRef.current = setTimeout(() => {
+      Animated.timing(badgeOpacity, {
+        toValue: 0,
+        duration: 180,
+        useNativeDriver: true,
+      }).start();
+      hideBadgeTimeoutRef.current = null;
+    }, 2000);
+  }, [badgeOpacity]);
+
+  const handleScrollActivity = useCallback(() => {
+    if (!hasScrolledRef.current) return;
+    showBadge();
+    scheduleBadgeHide();
+  }, [scheduleBadgeHide, showBadge]);
+
+  const handleUserScrollStart = useCallback(() => {
+    hasScrolledRef.current = true;
+    if (visibleDayLabelRef.current) {
+      setActiveDayLabel(visibleDayLabelRef.current);
+    }
+    showBadge();
+    scheduleBadgeHide();
+  }, [scheduleBadgeHide, showBadge]);
+
   const animateBadgeChange = useCallback((nextLabel: string) => {
+    if (!hasScrolledRef.current) return;
     setActiveDayLabel((current) => {
-      if (!nextLabel || nextLabel === current) return current;
+      if (!nextLabel) return current;
+      if (nextLabel === current) {
+        showBadge();
+        return current;
+      }
       Animated.sequence([
         Animated.timing(badgeOpacity, {
           toValue: 0,
@@ -224,9 +289,9 @@ export default function ChatScreen() {
       ]).start();
       return nextLabel;
     });
-  }, [badgeOpacity]);
+  }, [badgeOpacity, showBadge]);
 
-  if (!chatId) {
+  if (!chatId || !currentUserId) {
     return null;
   }
 
@@ -251,6 +316,10 @@ export default function ChatScreen() {
           keyboardDismissMode="none"
           keyboardShouldPersistTaps="always"
           onTouchStart={keepComposerFocused}
+          onScrollBeginDrag={handleUserScrollStart}
+          onMomentumScrollBegin={handleUserScrollStart}
+          onScroll={handleScrollActivity}
+          scrollEventThrottle={120}
           onViewableItemsChanged={({ viewableItems }) => {
             const firstVisible = viewableItems.find(
               (entry) => entry.item.type === "message" || entry.item.type === "separator"
@@ -264,7 +333,9 @@ export default function ChatScreen() {
             ) as DaySeparatorItem | undefined;
 
             if (separator) {
-              animateBadgeChange(formatDayLabel(separator.date));
+              const nextLabel = formatDayLabel(separator.date);
+              visibleDayLabelRef.current = nextLabel;
+              animateBadgeChange(nextLabel);
             }
           }}
           viewabilityConfig={{ itemVisiblePercentThreshold: 35 }}
@@ -282,7 +353,7 @@ export default function ChatScreen() {
             return (
               <ChatBubble
                 message={item.message}
-                isSelf={item.message.senderId === currentUser?.id}
+                isSelf={item.message.senderId === currentUserId}
                 isOnline={isOnline}
                 shouldPlay={activeAudioMessageId === item.message.id}
                 nextInSequenceId={audioSequenceMap.get(item.message.id)}
@@ -293,13 +364,13 @@ export default function ChatScreen() {
                 }}
                 onPlaybackRateChange={setAudioPlaybackRate}
                 senderName={
-                  chat?.isGroup && item.message.senderId !== currentUser?.id
+                  chat?.isGroup && item.message.senderId !== currentUserId
                     ? memberNames[item.message.senderId] ?? "Participante"
                     : undefined
                 }
                 readReceipt={readReceiptStatus(
                   item.message,
-                  currentUser?.id,
+                  currentUserId,
                   participants,
                   readUpTo
                 )}

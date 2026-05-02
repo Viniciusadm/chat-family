@@ -5,8 +5,8 @@ import {
   useAudioPlayer,
   useAudioPlayerStatus,
 } from "expo-audio";
-import { useCallback, useEffect } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
 interface AudioBubbleProps {
   messageId: string;
@@ -41,6 +41,28 @@ export function AudioBubble({
 }: AudioBubbleProps) {
   const player = useAudioPlayer({ uri: audioUrl }, { updateInterval: 200 });
   const status = useAudioPlayerStatus(player);
+  const [waitingForPlayback, setWaitingForPlayback] = useState(false);
+  const playbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoPlayAttemptedRef = useRef(false);
+
+  const stopWaitingForPlayback = useCallback(() => {
+    if (playbackTimeoutRef.current) {
+      clearTimeout(playbackTimeoutRef.current);
+      playbackTimeoutRef.current = null;
+    }
+    setWaitingForPlayback(false);
+  }, []);
+
+  const startWaitingForPlayback = useCallback(() => {
+    if (playbackTimeoutRef.current) {
+      clearTimeout(playbackTimeoutRef.current);
+    }
+    setWaitingForPlayback(true);
+    playbackTimeoutRef.current = setTimeout(() => {
+      playbackTimeoutRef.current = null;
+      setWaitingForPlayback(false);
+    }, 8000);
+  }, []);
 
   useEffect(() => {
     setAudioModeAsync({
@@ -49,15 +71,46 @@ export function AudioBubble({
     }).catch(() => {});
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (playbackTimeoutRef.current) {
+        clearTimeout(playbackTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     player.setPlaybackRate(playbackRate);
   }, [playbackRate, player]);
 
   useEffect(() => {
-    if (!shouldPlay || !status.isLoaded || status.playing) return;
-    player.play();
-  }, [player, shouldPlay, status.isLoaded, status.playing]);
+    if (!shouldPlay) {
+      autoPlayAttemptedRef.current = false;
+      return;
+    }
+    if (status.playing || waitingForPlayback || autoPlayAttemptedRef.current) return;
+
+    autoPlayAttemptedRef.current = true;
+    startWaitingForPlayback();
+    try {
+      player.play();
+    } catch {
+      stopWaitingForPlayback();
+    }
+  }, [
+    player,
+    shouldPlay,
+    startWaitingForPlayback,
+    status.playing,
+    stopWaitingForPlayback,
+    waitingForPlayback,
+  ]);
+
+  useEffect(() => {
+    if (status.playing || status.didJustFinish || !shouldPlay) {
+      stopWaitingForPlayback();
+    }
+  }, [shouldPlay, status.didJustFinish, status.playing, stopWaitingForPlayback]);
 
   useEffect(() => {
     if (!status.didJustFinish) return;
@@ -67,15 +120,31 @@ export function AudioBubble({
 
   const togglePlay = useCallback(async () => {
     if (status.playing) {
+      stopWaitingForPlayback();
       player.pause();
     } else {
       if (status.didJustFinish || status.currentTime >= status.duration) {
         await player.seekTo(0);
       }
       onRequestPlay(messageId);
-      await player.play();
+      startWaitingForPlayback();
+      try {
+        await player.play();
+      } catch {
+        stopWaitingForPlayback();
+      }
     }
-  }, [messageId, onRequestPlay, player, status.currentTime, status.didJustFinish, status.duration, status.playing]);
+  }, [
+    messageId,
+    onRequestPlay,
+    player,
+    startWaitingForPlayback,
+    status.currentTime,
+    status.didJustFinish,
+    status.duration,
+    status.playing,
+    stopWaitingForPlayback,
+  ]);
 
   const cyclePlaybackRate = useCallback(() => {
     const index = PLAYBACK_RATES.indexOf(playbackRate);
@@ -87,22 +156,29 @@ export function AudioBubble({
   const progress = duration > 0 ? Math.min(status.currentTime / duration, 1) : 0;
   const currentTime = duration ? progress * duration : 0;
   const isPlaying = status.playing;
+  const isLoading = waitingForPlayback && !isPlaying;
 
   return (
     <View style={styles.row}>
       <Pressable
         onPress={() => void togglePlay()}
+        disabled={isLoading}
         style={[
           styles.playBtn,
           isSelf ? styles.playSelf : styles.playOther,
+          isLoading ? styles.playDisabled : undefined,
         ]}
       >
-        <Ionicons
-          name={isPlaying ? "pause" : "play"}
-          size={18}
-          color={colors.primary}
-          style={isPlaying ? undefined : { marginLeft: 2 }}
-        />
+        {isLoading ? (
+          <ActivityIndicator size="small" color={colors.primary} />
+        ) : (
+          <Ionicons
+            name={isPlaying ? "pause" : "play"}
+            size={18}
+            color={colors.primary}
+            style={isPlaying ? undefined : { marginLeft: 2 }}
+          />
+        )}
       </Pressable>
       <Pressable onPress={cyclePlaybackRate} style={styles.rateBtn}>
         <Text style={styles.rateText}>{playbackRate.toFixed(1)}x</Text>
@@ -112,11 +188,7 @@ export function AudioBubble({
           <View style={[styles.fill, { width: `${progress * 100}%` }]} />
         </View>
         <Text style={styles.time}>
-          {!status.isLoaded
-            ? "Carregando..."
-            : isPlaying
-              ? formatTime(currentTime)
-              : formatTime(duration ?? 0)}
+          {isPlaying ? formatTime(currentTime) : formatTime(duration ?? 0)}
         </Text>
       </View>
     </View>
@@ -142,6 +214,9 @@ const styles = StyleSheet.create({
   },
   playOther: {
     backgroundColor: colors.muted,
+  },
+  playDisabled: {
+    opacity: 0.7,
   },
   trackCol: {
     flex: 1,

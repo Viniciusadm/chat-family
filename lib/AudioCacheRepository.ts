@@ -21,7 +21,61 @@ async function ensureAudioCacheDir(chatId: string): Promise<string | null> {
   return chatDir;
 }
 
+async function getUsableFileUri(uri: string | null | undefined): Promise<string | null> {
+  if (!uri) return null;
+  const info = await FileSystem.getInfoAsync(uri).catch(() => null);
+  return info?.exists && info.size > 0 ? uri : null;
+}
+
+async function expectedAudioFileUri({
+  chatId,
+  messageId,
+  remoteUrl,
+}: {
+  chatId: string;
+  messageId: string;
+  remoteUrl: string;
+}): Promise<string | null> {
+  const chatDir = await ensureAudioCacheDir(chatId);
+  if (!chatDir) return null;
+  return `${chatDir}/${encodeURIComponent(messageId)}.${extensionFromUrl(remoteUrl)}`;
+}
+
 export const AudioCacheRepository = {
+  async ensureMessageAudioCache({
+    chatId,
+    messageId,
+    remoteUrl,
+    localUri,
+    download,
+  }: {
+    chatId: string;
+    messageId: string;
+    remoteUrl: string;
+    localUri?: string | null;
+    download: boolean;
+  }): Promise<string | null> {
+    if (!remoteUrl || !FileSystem.documentDirectory) return null;
+
+    const usableLocalUri = await getUsableFileUri(localUri);
+    if (usableLocalUri) return usableLocalUri;
+
+    if (localUri) {
+      await MessageRepository.clearLocalAudioUri(messageId);
+    }
+
+    const fileUri = await expectedAudioFileUri({ chatId, messageId, remoteUrl });
+    const usableExpectedUri = await getUsableFileUri(fileUri);
+    if (usableExpectedUri) {
+      await MessageRepository.updateLocalAudioUri(messageId, usableExpectedUri);
+      return usableExpectedUri;
+    }
+
+    if (!download) return null;
+
+    return this.downloadMessageAudio({ chatId, messageId, remoteUrl });
+  },
+
   async downloadMessageAudio({
     chatId,
     messageId,
@@ -38,14 +92,13 @@ export const AudioCacheRepository = {
     inFlightDownloads.add(downloadKey);
 
     try {
-      const chatDir = await ensureAudioCacheDir(chatId);
-      if (!chatDir) return null;
+      const fileUri = await expectedAudioFileUri({ chatId, messageId, remoteUrl });
+      if (!fileUri) return null;
 
-      const fileUri = `${chatDir}/${encodeURIComponent(messageId)}.${extensionFromUrl(remoteUrl)}`;
-      const existing = await FileSystem.getInfoAsync(fileUri);
-      if (existing.exists && existing.size > 0) {
-        await MessageRepository.updateLocalAudioUri(messageId, fileUri);
-        return fileUri;
+      const existingUri = await getUsableFileUri(fileUri);
+      if (existingUri) {
+        await MessageRepository.updateLocalAudioUri(messageId, existingUri);
+        return existingUri;
       }
 
       const result = await FileSystem.downloadAsync(remoteUrl, fileUri);

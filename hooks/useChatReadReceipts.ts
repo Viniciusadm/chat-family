@@ -1,5 +1,6 @@
 import { useAuth } from "@/context/AuthContext";
 import { useConnectivity } from "@/hooks/useConnectivity";
+import { ChatRepository } from "@/lib/ChatRepository";
 import { db } from "@/lib/firebase";
 import type { ChatDoc, Message } from "@/types/chat";
 import { useIsFocused } from "@react-navigation/native";
@@ -14,14 +15,36 @@ import { useEffect, useState } from "react";
 
 export function useChatReadReceipts(
   chatId: string,
-  messages: Message[]
+  messages: Message[],
+  localReadUpTo?: Record<string, Timestamp>
 ): { readUpTo: Record<string, Timestamp> | null } {
   const { currentUser } = useAuth();
   const { isOnline } = useConnectivity();
   const isFocused = useIsFocused();
   const [readUpTo, setReadUpTo] = useState<Record<string, Timestamp> | null>(
-    null
+    localReadUpTo ?? null
   );
+
+  useEffect(() => {
+    setReadUpTo(localReadUpTo ?? null);
+  }, [chatId, localReadUpTo]);
+
+  useEffect(() => {
+    if (!chatId || localReadUpTo) return;
+
+    let active = true;
+    void ChatRepository.getLocalChat(chatId)
+      .then((chat) => {
+        if (active && chat?.readUpTo) {
+          setReadUpTo(chat.readUpTo);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      active = false;
+    };
+  }, [chatId, localReadUpTo]);
 
   useEffect(() => {
     if (!chatId || !isOnline) return;

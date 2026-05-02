@@ -32,6 +32,35 @@ export function useMessages(chatId: string): { messages: Message[]; loading: boo
     []
   );
 
+  const refreshLocalAudioCache = useCallback(
+    async (activeChatId: string, active: () => boolean, download: boolean) => {
+      const messages = await MessageRepository.getLocalMessages(activeChatId);
+      let changed = false;
+
+      for (const message of messages) {
+        if (message.type !== "audio" || !message.audioRemoteUrl) continue;
+
+        const cachedUri = await AudioCacheRepository.ensureMessageAudioCache({
+          chatId: activeChatId,
+          messageId: message.id,
+          remoteUrl: message.audioRemoteUrl,
+          localUri: message.audioLocalUri,
+          download,
+        });
+
+        if (!active()) return;
+        if (cachedUri !== (message.audioLocalUri ?? null)) {
+          changed = true;
+        }
+      }
+
+      if (changed) {
+        await loadLocalMessages(activeChatId, active);
+      }
+    },
+    [loadLocalMessages]
+  );
+
   useEffect(() => {
     if (!chatId) {
       setState({ chatId: "", messages: [], loading: false });
@@ -52,6 +81,8 @@ export function useMessages(chatId: string): { messages: Message[]; loading: boo
       unsubLocal = MessageRepository.subscribe(chatId, () => {
         void loadLocalMessages(chatId, isActive);
       });
+
+      void refreshLocalAudioCache(chatId, isActive, isOnline);
 
       if (currentUser && tenantId) {
         void syncPendingTextMessages(currentUser, tenantId, isOnline);
@@ -99,7 +130,7 @@ export function useMessages(chatId: string): { messages: Message[]; loading: boo
       unsubLocal?.();
       unsubFirestore?.();
     };
-  }, [chatId, currentUser, isOnline, loadLocalMessages, tenantId]);
+  }, [chatId, currentUser, isOnline, loadLocalMessages, refreshLocalAudioCache, tenantId]);
 
   if (state.chatId !== chatId) {
     return { messages: [], loading: true };

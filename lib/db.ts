@@ -69,6 +69,7 @@ async function migrate(db: SQLite.SQLiteDatabase) {
 
   await ensureColumn(db, "messages", "local_audio_uri", "TEXT");
   await ensureColumn(db, "messages", "audio_downloaded_at", "TEXT");
+  await ensureColumn(db, "chats", "read_up_to", "TEXT");
 }
 
 export async function getDatabase() {
