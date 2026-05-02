@@ -27,9 +27,14 @@ export function useExpoPushToken() {
   const [token, setToken] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    const t = await fetchExpoPushToken();
-    setToken(t);
-    return t;
+    try {
+      const t = await fetchExpoPushToken();
+      setToken(t);
+      return t;
+    } catch {
+      setToken(null);
+      return null;
+    }
   }, []);
 
   useEffect(() => {

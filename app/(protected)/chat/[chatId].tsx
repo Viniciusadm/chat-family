@@ -4,6 +4,7 @@ import { ChatInput, type ChatInputHandle } from "@/components/ChatInput";
 import { useAuth } from "@/context/AuthContext";
 import { useChatReadReceipts } from "@/hooks/useChatReadReceipts";
 import { useChats } from "@/hooks/useChats";
+import { useConnectivity } from "@/hooks/useConnectivity";
 import { useMemberNames } from "@/hooks/useMemberNames";
 import { useMessages } from "@/hooks/useMessages";
 import { colors } from "@/theme/colors";
@@ -44,8 +45,9 @@ function readReceiptStatus(
   currentUserId: string | undefined,
   participants: string[],
   readUpTo: Record<string, Timestamp> | null
-): "sent" | "read" | undefined {
+): "loading" | "sent" | "read" | undefined {
   if (!currentUserId || message.senderId !== currentUserId) return undefined;
+  if (message.status === "loading") return "loading";
   const others = participants.filter((p) => p !== message.senderId);
   if (others.length === 0) return "read";
   const ts = message.createdAtMs;
@@ -115,6 +117,7 @@ export default function ChatScreen() {
   const { chatId } = useLocalSearchParams<{ chatId: string }>();
   const router = useRouter();
   const { currentUser } = useAuth();
+  const { isOnline } = useConnectivity();
   const { chats } = useChats();
   const { messages, loading } = useMessages(chatId ?? "");
   const memberNames = useMemberNames();
@@ -280,6 +283,7 @@ export default function ChatScreen() {
               <ChatBubble
                 message={item.message}
                 isSelf={item.message.senderId === currentUser?.id}
+                isOnline={isOnline}
                 shouldPlay={activeAudioMessageId === item.message.id}
                 nextInSequenceId={audioSequenceMap.get(item.message.id)}
                 playbackRate={audioPlaybackRate}

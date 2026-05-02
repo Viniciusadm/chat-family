@@ -1,4 +1,5 @@
 import { useAuth } from "@/context/AuthContext";
+import { useConnectivity } from "@/hooks/useConnectivity";
 import { db } from "@/lib/firebase";
 import type { ChatDoc, Message } from "@/types/chat";
 import { useIsFocused } from "@react-navigation/native";
@@ -16,22 +17,27 @@ export function useChatReadReceipts(
   messages: Message[]
 ): { readUpTo: Record<string, Timestamp> | null } {
   const { currentUser } = useAuth();
+  const { isOnline } = useConnectivity();
   const isFocused = useIsFocused();
   const [readUpTo, setReadUpTo] = useState<Record<string, Timestamp> | null>(
     null
   );
 
   useEffect(() => {
-    if (!chatId) return;
-    const unsub = onSnapshot(doc(db, "chats", chatId), (snap) => {
-      const data = snap.data() as ChatDoc | undefined;
-      setReadUpTo(data?.readUpTo ?? null);
-    });
+    if (!chatId || !isOnline) return;
+    const unsub = onSnapshot(
+      doc(db, "chats", chatId),
+      (snap) => {
+        const data = snap.data() as ChatDoc | undefined;
+        setReadUpTo(data?.readUpTo ?? null);
+      },
+      () => {}
+    );
     return unsub;
-  }, [chatId]);
+  }, [chatId, isOnline]);
 
   useEffect(() => {
-    if (!isFocused || !chatId || !currentUser?.id || messages.length === 0) {
+    if (!isOnline || !isFocused || !chatId || !currentUser?.id || messages.length === 0) {
       return;
     }
     const uid = currentUser.id;
@@ -48,10 +54,10 @@ export function useChatReadReceipts(
           [`readUpTo.${uid}`]: Timestamp.fromMillis(targetMs),
           [`unreadBy.${uid}`]: 0,
         });
-      })();
+      })().catch(() => {});
     }, 400);
     return () => clearTimeout(id);
-  }, [isFocused, chatId, currentUser?.id, messages]);
+  }, [isOnline, isFocused, chatId, currentUser?.id, messages]);
 
   return { readUpTo };
 }

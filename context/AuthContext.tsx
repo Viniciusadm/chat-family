@@ -18,9 +18,11 @@ import {
   type User as FirebaseUser,
 } from "firebase/auth";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { useConnectivity } from "@/hooks/useConnectivity";
 import { auth, db } from "@/lib/firebase";
 import { fetchExpoPushToken, isValidExpoPushTokenString } from "@/lib/expoPushToken";
 import { randomUuid } from "@/lib/randomUuid";
+import { SessionRepository } from "@/lib/SessionRepository";
 import type { AppUser, LoginCodeDoc, UserDoc } from "@/types/chat";
 
 const DEVICE_ID_KEY = "deviceId";
@@ -89,6 +91,7 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const { isOnline } = useConnectivity();
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
   const [tenantId, setTenantId] = useState<string | null>(null);
@@ -112,7 +115,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const attachDeviceSnapshot = useCallback(
-    (deviceRef: ReturnType<typeof doc>) => {
+    (deviceRef: ReturnType<typeof doc>, uid: string) => {
       if (deviceUnsub.current) deviceUnsub.current();
       deviceUnsub.current = onSnapshot(deviceRef, (snap) => {
         if (signingOutRef.current) return;
@@ -133,7 +136,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           signOut(auth).catch(() => {});
           return;
         }
-        setDeviceApproved(data.approved === true);
+        const approved = data.approved === true;
+        setDeviceApproved(approved);
+        void SessionRepository.updateDeviceApproved(uid, approved);
         setLoading(false);
         setSessionReady(true);
         setNeedsPushToken(false);
@@ -148,13 +153,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       uid: string,
       userData: UserDoc,
       did: string,
-      isStale: () => boolean
+      isStale: () => boolean,
+      allowOfflineSession = false
     ): Promise<boolean> => {
+      if (!isOnline) {
+        if (allowOfflineSession) {
+          setDeviceApproved(true);
+          setSessionReady(true);
+          setNeedsPushToken(false);
+        }
+        setLoading(false);
+        return false;
+      }
+
       let pushToken: string | null;
       try {
         pushToken = await fetchExpoPushToken();
       } catch (e) {
         if (isStale()) return false;
+        if (allowOfflineSession) {
+          setDeviceApproved(true);
+          setSessionReady(true);
+          setNeedsPushToken(false);
+          setLoading(false);
+          return false;
+        }
         setDeviceApproved(null);
         setSessionReady(true);
         setNeedsPushToken(true);
@@ -165,6 +188,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (isStale()) return false;
 
       if (!pushToken || !isValidExpoPushTokenString(pushToken)) {
+        if (allowOfflineSession) {
+          setDeviceApproved(true);
+          setSessionReady(true);
+          setNeedsPushToken(false);
+          setPushTokenError(null);
+          setLoading(false);
+          return false;
+        }
         setDeviceApproved(null);
         setSessionReady(true);
         setNeedsPushToken(true);
@@ -203,15 +234,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (isStale()) return false;
 
-      attachDeviceSnapshot(deviceRef);
+      attachDeviceSnapshot(deviceRef, uid);
       return true;
     },
-    [attachDeviceSnapshot]
+    [attachDeviceSnapshot, isOnline]
   );
 
   const retryDeviceRegistration = useCallback(async () => {
     const user = auth.currentUser;
-    if (!user || !deviceId) return;
+    if (!user || !deviceId || !isOnline) return;
     setLoading(true);
     setNeedsPushToken(false);
     setPushTokenError(null);
@@ -224,7 +255,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     const userData = userSnap.data() as UserDoc;
     await syncDeviceWithToken(user, uid, userData, deviceId, stale);
-  }, [deviceId, syncDeviceWithToken]);
+  }, [deviceId, isOnline, syncDeviceWithToken]);
 
   useEffect(() => {
     if (!deviceId) return;
@@ -258,9 +289,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         cancelled || auth.currentUser?.uid !== uid;
 
       try {
+        const cachedSession = await SessionRepository.getSession(uid);
+        if (!stale() && cachedSession) {
+          setCurrentUser(cachedSession.currentUser);
+          setTenantId(cachedSession.currentUser.tenantId);
+          setDeviceApproved(cachedSession.deviceApproved);
+          if (cachedSession.deviceApproved === true) {
+            setLoading(false);
+            setSessionReady(true);
+          }
+        }
+
+        if (!isOnline) {
+          if (cachedSession?.deviceApproved === true) {
+            setLoading(false);
+            setSessionReady(true);
+            return;
+          }
+          setLoading(false);
+          setSessionReady(true);
+          return;
+        }
+
         const userSnap = await waitForUserDoc(uid, stale);
         if (stale()) return;
         if (!userSnap?.exists()) {
+          if (cachedSession?.deviceApproved === true) {
+            setLoading(false);
+            setSessionReady(true);
+            return;
+          }
           setLoading(false);
           setSessionReady(true);
           return;
@@ -297,8 +355,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         };
         setCurrentUser(appUser);
         setTenantId(userData.tenantId);
+        await SessionRepository.saveSession({
+          firebaseUid: uid,
+          currentUser: appUser,
+          deviceApproved: cachedSession?.deviceApproved ?? null,
+        });
 
-        await syncDeviceWithToken(user, uid, userData, deviceId, stale);
+        await syncDeviceWithToken(
+          user,
+          uid,
+          userData,
+          deviceId,
+          stale,
+          cachedSession?.deviceApproved === true
+        );
       } catch (err) {
         console.error("Auth initialization error:", err);
         setLoading(false);
@@ -311,7 +381,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       unsub();
       if (deviceUnsub.current) deviceUnsub.current();
     };
-  }, [deviceId, syncDeviceWithToken]);
+  }, [deviceId, isOnline, syncDeviceWithToken]);
 
   const loginWithEmail = async (email: string, password: string) => {
     await signInWithEmailAndPassword(auth, email, password);

@@ -1,67 +1,63 @@
 import { useAuth } from "@/context/AuthContext";
-import { db, storage } from "@/lib/firebase";
-import type { ChatDoc } from "@/types/chat";
+import { useConnectivity } from "@/hooks/useConnectivity";
+import { AudioCacheRepository } from "@/lib/AudioCacheRepository";
+import { ChatRepository } from "@/lib/ChatRepository";
 import {
-  addDoc,
-  collection,
-  doc,
-  getDoc,
-  increment,
-  serverTimestamp,
-  setDoc,
-  updateDoc,
-} from "firebase/firestore";
+  ensureAudioMessageInFirestore,
+  ensureTextMessageInFirestore,
+  updateChatAfterOutgoingMessage,
+} from "@/lib/firestoreMessages";
+import { storage } from "@/lib/firebase";
+import { MessageRepository } from "@/lib/MessageRepository";
+import { randomUuid } from "@/lib/randomUuid";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { useState } from "react";
 
 export type SendableAudio = Blob | Uint8Array | ArrayBuffer;
 
-async function updateChatAfterOutgoingMessage(
-  chatId: string,
-  senderId: string,
-  lastMessageText: string | null,
-  lastMessageType: "text" | "audio"
-) {
-  const chatRef = doc(db, "chats", chatId);
-  const chatSnap = await getDoc(chatRef);
-  const participants =
-    (chatSnap.data() as ChatDoc | undefined)?.participants ?? [];
-  const updates: Record<string, unknown> = {
-    lastMessageText,
-    lastMessageType,
-    lastMessageAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  };
-  for (const p of participants) {
-    if (p !== senderId) {
-      updates[`unreadBy.${p}`] = increment(1);
-    }
-  }
-  await updateDoc(chatRef, updates);
-}
-
 export function useSendMessage(chatId: string) {
   const { currentUser, tenantId } = useAuth();
+  const { isOnline } = useConnectivity();
   const [isSending, setIsSending] = useState(false);
 
   const sendText = async (text: string) => {
-    if (!currentUser || !tenantId || !text.trim()) return;
+    const trimmed = text.trim();
+    if (!currentUser || !tenantId || !trimmed) return;
     setIsSending(true);
+    const messageId = randomUuid();
+    const createdAt = new Date();
     try {
-      await addDoc(collection(db, "chats", chatId, "messages"), {
+      await MessageRepository.insertLocalMessage({
+        id: messageId,
+        conversationId: chatId,
+        senderId: currentUser.id,
+        body: trimmed,
+        type: "text",
+        status: "loading",
+        createdAt,
+      });
+      await ChatRepository.updateLastMessage(chatId, {
+        text: trimmed,
+        type: "text",
+        timestamp: createdAt,
+      });
+      if (!isOnline) return;
+      await ensureTextMessageInFirestore({
+        chatId,
+        messageId,
         tenantId,
         senderId: currentUser.id,
-        text: text.trim(),
-        audioUrl: null,
-        audioDuration: null,
-        createdAt: serverTimestamp(),
+        text: trimmed,
       });
+      await MessageRepository.updateStatus(messageId, "sent");
       await updateChatAfterOutgoingMessage(
         chatId,
         currentUser.id,
-        text.trim(),
+        trimmed,
         "text"
       );
+    } catch {
+      // Keep the local message pending. The offline sync will retry it.
     } finally {
       setIsSending(false);
     }
@@ -72,13 +68,14 @@ export function useSendMessage(chatId: string) {
     options?: { extension?: string; contentType?: string }
   ) => {
     if (!currentUser || !tenantId) return;
+    if (!isOnline) return;
     setIsSending(true);
+    const messageId = randomUuid();
     try {
-      const msgRef = doc(collection(db, "chats", chatId, "messages"));
       const ext = options?.extension ?? "webm";
       const storageRef = ref(
         storage,
-        `audios/${tenantId}/${chatId}/${msgRef.id}.${ext}`
+        `audios/${tenantId}/${chatId}/${messageId}.${ext}`
       );
 
       await uploadBytes(
@@ -90,13 +87,33 @@ export function useSendMessage(chatId: string) {
       );
       const audioUrl = await getDownloadURL(storageRef);
 
-      await setDoc(msgRef, {
+      await ensureAudioMessageInFirestore({
+        chatId,
+        messageId,
         tenantId,
         senderId: currentUser.id,
-        text: null,
         audioUrl,
-        audioDuration: null,
-        createdAt: serverTimestamp(),
+      });
+      const sentAt = new Date();
+      await MessageRepository.insertLocalMessage({
+        id: messageId,
+        conversationId: chatId,
+        senderId: currentUser.id,
+        body: audioUrl,
+        type: "audio",
+        status: "sent",
+        createdAt: sentAt,
+        syncedAt: sentAt,
+      });
+      void AudioCacheRepository.downloadMessageAudio({
+        chatId,
+        messageId,
+        remoteUrl: audioUrl,
+      });
+      await ChatRepository.updateLastMessage(chatId, {
+        text: null,
+        type: "audio",
+        timestamp: sentAt,
       });
       await updateChatAfterOutgoingMessage(
         chatId,

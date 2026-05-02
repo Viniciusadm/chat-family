@@ -65,6 +65,8 @@ export interface MessageDoc {
 }
 
 export type UserRole = "adult" | "child";
+export type MessageType = "text" | "audio";
+export type MessageStatus = "loading" | "sent";
 
 export interface AppUser {
   id: string;
@@ -106,10 +108,13 @@ export interface Message {
   id: string;
   chatId: string;
   senderId: string;
-  type: "text" | "audio";
+  type: MessageType;
   content: string;
   audioUrl?: string;
+  audioRemoteUrl?: string;
+  audioLocalUri?: string;
   audioDuration?: number;
   timestamp: Date;
   createdAtMs: number;
+  status?: MessageStatus;
 }

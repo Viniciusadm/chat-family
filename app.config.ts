@@ -47,7 +47,7 @@ export default (): ExpoConfig => {
   const firebase = firebaseOptionsFromGoogleServices(ANDROID_PACKAGE);
   return {
     name: "Chat Family",
-    slug: "ChatFamily",
+    slug: "chat",
     version: "1.0.0",
     orientation: "portrait",
     icon: "./assets/images/icon.png",
@@ -97,6 +97,7 @@ export default (): ExpoConfig => {
             "Permitir acesso ao microfone para enviar mensagens de voz.",
         },
       ],
+      "expo-sqlite",
     ],
     experiments: {
       typedRoutes: true,

@@ -26,7 +26,7 @@ function formatTime(seconds: number) {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-const PLAYBACK_RATES: Array<1 | 1.5 | 2> = [1, 1.5, 2];
+const PLAYBACK_RATES: (1 | 1.5 | 2)[] = [1, 1.5, 2];
 
 export function AudioBubble({
   messageId,
@@ -51,7 +51,7 @@ export function AudioBubble({
 
 
   useEffect(() => {
-    player.setPlaybackRate(playbackRate).catch(() => {});
+    player.setPlaybackRate(playbackRate);
   }, [playbackRate, player]);
 
   useEffect(() => {

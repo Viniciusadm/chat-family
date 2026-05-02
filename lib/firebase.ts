@@ -7,7 +7,7 @@ import {
   type Auth,
   type Persistence,
 } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { getFirestore, setLogLevel } from "firebase/firestore";
 import { getFunctions } from "firebase/functions";
 import { getStorage } from "firebase/storage";
 
@@ -33,6 +33,7 @@ try {
 }
 
 export { app, auth };
+setLogLevel("error");
 export const db = getFirestore(app);
 export const storage = getStorage(app);
 export const functions = getFunctions(app, "southamerica-east1");

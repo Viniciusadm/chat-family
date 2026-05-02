@@ -7,13 +7,14 @@ import { AudioBubble } from "./AudioBubble";
 interface ChatBubbleProps {
   message: Message;
   isSelf: boolean;
+  isOnline: boolean;
   shouldPlay?: boolean;
   nextInSequenceId?: string;
   playbackRate: 1 | 1.5 | 2;
   onRequestPlay: (messageId: string) => void;
   onAudioFinished: (nextMessageId?: string) => void;
   onPlaybackRateChange: (rate: 1 | 1.5 | 2) => void;
-  readReceipt?: "sent" | "read";
+  readReceipt?: "loading" | "sent" | "read";
   senderName?: string;
 }
 
@@ -27,6 +28,7 @@ function formatTime(date: Date) {
 export function ChatBubble({
   message,
   isSelf,
+  isOnline,
   shouldPlay,
   nextInSequenceId,
   playbackRate,
@@ -36,6 +38,9 @@ export function ChatBubble({
   readReceipt,
   senderName,
 }: ChatBubbleProps) {
+  const audioUnavailableOffline =
+    message.type === "audio" && !message.audioLocalUri && !isOnline;
+
   return (
     <View
       style={[styles.wrap, isSelf ? styles.wrapSelf : styles.wrapOther]}
@@ -47,7 +52,18 @@ export function ChatBubble({
         ]}
       >
         {senderName ? <Text style={styles.senderName}>{senderName}</Text> : null}
-        {message.type === "audio" && message.audioUrl ? (
+        {message.type === "audio" && audioUnavailableOffline ? (
+          <Text
+            style={[
+              styles.text,
+              isSelf
+                ? styles.textSelf
+                : styles.textOther,
+            ]}
+          >
+            Áudio indisponível offline
+          </Text>
+        ) : message.type === "audio" && message.audioUrl ? (
           <AudioBubble
             messageId={message.id}
             audioUrl={message.audioUrl}
@@ -75,7 +91,13 @@ export function ChatBubble({
           <Text style={styles.timestamp}>{formatTime(message.timestamp)}</Text>
           {isSelf && readReceipt ? (
             <MaterialIcons
-              name={readReceipt === "read" ? "done-all" : "done"}
+              name={
+                readReceipt === "loading"
+                  ? "schedule"
+                  : readReceipt === "read"
+                    ? "done-all"
+                    : "done"
+              }
               size={14}
               color={
                 readReceipt === "read" ? colors.primary : colors.timestamp
