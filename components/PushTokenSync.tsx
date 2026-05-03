@@ -16,9 +16,9 @@ export function PushTokenSync() {
   const appState = useRef(AppState.currentState);
 
   useEffect(() => {
-    if (!isOnline) return;
+    if (!isOnline || loading || !sessionReady || needsPushToken) return;
     refresh();
-  }, [isOnline, refresh]);
+  }, [isOnline, loading, sessionReady, needsPushToken, refresh]);
 
   useEffect(() => {
     if (!isOnline || loading || !sessionReady || needsPushToken) return;

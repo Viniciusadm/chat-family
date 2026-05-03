@@ -37,9 +37,5 @@ export function useExpoPushToken() {
     }
   }, []);
 
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
-
   return { token, refresh };
 }

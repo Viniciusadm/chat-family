@@ -1,4 +1,5 @@
 import { useAuth } from "@/context/AuthContext";
+import { useConnectivity } from "@/hooks/useConnectivity";
 import { db, functions, storage } from "@/lib/firebase";
 import { httpsCallable } from "firebase/functions";
 import { randomUuid } from "@/lib/randomUuid";
@@ -63,6 +64,7 @@ export function useAdminData() {
   }, [firebaseUser?.uid]);
 
   const effectiveTenantId = tenantId ?? currentUser?.tenantId ?? resolvedTenantId ?? null;
+  const { isOnline } = useConnectivity();
   const [members, setMembers] = useState<AppMember[]>([]);
   const [sessionUserNames, setSessionUserNames] = useState<Record<string, string>>({});
   const [pendingDevices, setPendingDevices] = useState<Device[]>([]);
@@ -71,6 +73,15 @@ export function useAdminData() {
 
   useEffect(() => {
     if (!effectiveTenantId) {
+      setMembers([]);
+      setSessionUserNames({});
+      setPendingDevices([]);
+      setChats([]);
+      setLoading(false);
+      return;
+    }
+
+    if (!isOnline) {
       setMembers([]);
       setSessionUserNames({});
       setPendingDevices([]);
@@ -169,7 +180,7 @@ export function useAdminData() {
       unsubDevices();
       unsubChats();
     };
-  }, [effectiveTenantId]);
+  }, [effectiveTenantId, isOnline]);
 
   const addUser = async (name: string, role: UserRole) => {
     const uid = firebaseUser?.uid;

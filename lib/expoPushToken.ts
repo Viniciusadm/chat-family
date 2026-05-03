@@ -11,7 +11,7 @@ export function isValidExpoPushTokenString(value: string): boolean {
 export async function fetchExpoPushToken(): Promise<string | null> {
   if (!Device.isDevice) return null;
   const network = await NetInfo.fetch().catch(() => null);
-  if (network?.isConnected !== true || network.isInternetReachable === false) {
+  if (network?.isConnected !== true || network.isInternetReachable !== true) {
     return null;
   }
   if (Platform.OS === "android") {

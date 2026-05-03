@@ -130,7 +130,7 @@ export function useReactions(chatId: string) {
         void loadLocalReactions(chatId, isActive);
       });
 
-      if (!firebaseUser) return;
+      if (!firebaseUser || !isOnline) return;
 
       const q = query(
         collection(db, "chats", chatId, "reactions"),
@@ -169,7 +169,7 @@ export function useReactions(chatId: string) {
       unsubLocal?.();
       unsubFirestore?.();
     };
-  }, [chatId, firebaseUser, loadLocalReactions]);
+  }, [chatId, firebaseUser, isOnline, loadLocalReactions]);
 
   return { reactions, reactToMessage };
 }

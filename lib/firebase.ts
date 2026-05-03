@@ -7,7 +7,11 @@ import {
   type Auth,
   type Persistence,
 } from "firebase/auth";
-import { getFirestore, setLogLevel } from "firebase/firestore";
+import {
+  enableMultiTabIndexedDbPersistence,
+  getFirestore,
+  setLogLevel,
+} from "firebase/firestore";
 import { getFunctions } from "firebase/functions";
 import { getStorage } from "firebase/storage";
 
@@ -35,5 +39,6 @@ try {
 export { app, auth };
 setLogLevel("error");
 export const db = getFirestore(app);
+enableMultiTabIndexedDbPersistence(db).catch(() => {});
 export const storage = getStorage(app);
 export const functions = getFunctions(app, "southamerica-east1");

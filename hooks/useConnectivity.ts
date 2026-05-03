@@ -5,14 +5,13 @@ export function useConnectivity(): { isOnline: boolean } {
   const [isOnline, setIsOnline] = useState(false);
 
   useEffect(() => {
-    const unsub = NetInfo.addEventListener((state) => {
-      setIsOnline(state.isConnected === true && state.isInternetReachable !== false);
-    });
+    const update = (state: { isConnected: boolean | null; isInternetReachable: boolean | null }) => {
+      setIsOnline(state.isConnected === true && state.isInternetReachable === true);
+    };
+    const unsub = NetInfo.addEventListener(update);
 
     NetInfo.fetch()
-      .then((state) => {
-        setIsOnline(state.isConnected === true && state.isInternetReachable !== false);
-      })
+      .then(update)
       .catch(() => {
         setIsOnline(false);
       });
