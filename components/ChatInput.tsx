@@ -35,6 +35,7 @@ interface ChatInputProps {
   chatId: string;
   replyTo?: MessageReplySnapshot | null;
   onCancelReply?: () => void;
+  onSend?: () => void;
 }
 
 export interface ChatInputHandle {
@@ -46,6 +47,7 @@ function ChatInput({
   chatId,
   replyTo = null,
   onCancelReply,
+  onSend,
 }, ref) {
   const { sendText, sendAudio, isSending } = useSendMessage(chatId);
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
@@ -94,15 +96,14 @@ function ChatInput({
     const trimmed = text.trim();
     if (!trimmed || isSending) return;
     setText("");
+    onSend?.();
+    onCancelReply?.();
     requestAnimationFrame(() => {
       inputRef.current?.focus();
     });
     const selectedReply = replyTo;
     await sendText(trimmed, { replyTo: selectedReply });
-    if (selectedReply) {
-      onCancelReply?.();
-    }
-  }, [text, isSending, onCancelReply, replyTo, sendText]);
+  }, [text, isSending, onCancelReply, onSend, replyTo, sendText]);
 
   const resetRecordingState = useCallback(() => {
     recordingActiveRef.current = false;
@@ -160,6 +161,9 @@ function ChatInput({
   const stopRecordingAndSend = async () => {
     recordSessionRef.current += 1;
     const wasRecording = recordingActiveRef.current;
+    const selectedReply = replyTo;
+    onSend?.();
+    onCancelReply?.();
     resetRecordingState();
     if (!wasRecording) return;
     try {
@@ -173,11 +177,8 @@ function ChatInput({
         extension: "m4a",
         contentType: "audio/mp4",
         duration: durationMillis > 0 ? durationMillis / 1000 : undefined,
-        replyTo,
+        replyTo: selectedReply,
       });
-      if (replyTo) {
-        onCancelReply?.();
-      }
     } catch {
       //
     }

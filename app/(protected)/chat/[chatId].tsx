@@ -613,6 +613,7 @@ export default function ChatScreen() {
         chatId={chatId}
         replyTo={replyTo}
         onCancelReply={clearReply}
+        onSend={jumpToLatestMessages}
       />
     </KeyboardAvoidingView>
   );

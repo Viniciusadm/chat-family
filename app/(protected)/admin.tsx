@@ -1,12 +1,12 @@
 import { AppHeader } from "@/components/AppHeader";
-import { ScreenContainer } from "@/components/ScreenContainer";
 import { LoadingDots } from "@/components/LoadingDots";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
+import { ScreenContainer } from "@/components/ScreenContainer";
 import { useAuth } from "@/context/AuthContext";
 import { useAdminData } from "@/hooks/useAdminData";
 import { getChatDisplayName } from "@/lib/chatDisplayName";
-import type { AppMember, Chat, UserRole } from "@/types/chat";
 import { colors } from "@/theme/colors";
+import type { AppMember, Chat, UserRole } from "@/types/chat";
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { Redirect, useRouter } from "expo-router";
@@ -92,7 +92,6 @@ export default function AdminScreen() {
 
   const copyLoginCode = async (code: string) => {
     await Clipboard.setStringAsync(code);
-    Alert.alert("", "Código copiado");
   };
 
   const handleAddUser = async () => {
