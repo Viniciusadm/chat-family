@@ -5,8 +5,16 @@ import {
   useAudioPlayer,
   useAudioPlayerStatus,
 } from "expo-audio";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  LayoutChangeEvent,
+  PanResponder,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
 interface AudioBubbleProps {
   messageId: string;
@@ -44,8 +52,11 @@ export function AudioBubble({
   const player = useAudioPlayer({ uri: audioUrl }, { updateInterval: 200 });
   const status = useAudioPlayerStatus(player);
   const [waitingForPlayback, setWaitingForPlayback] = useState(false);
+  const [trackWidth, setTrackWidth] = useState(0);
   const playbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoPlayAttemptedRef = useRef(false);
+  const trackRef = useRef<View>(null);
+  const trackMetricsRef = useRef({ x: 0, width: 0 });
 
   const stopWaitingForPlayback = useCallback(() => {
     if (playbackTimeoutRef.current) {
@@ -164,6 +175,56 @@ export function AudioBubble({
   const currentTime = duration ? progress * duration : 0;
   const isPlaying = status.playing;
   const isLoading = waitingForPlayback && !isPlaying;
+  const canSeek = duration > 0 && trackWidth > 0;
+
+  const measureTrack = useCallback(() => {
+    trackRef.current?.measureInWindow((x, _y, width) => {
+      trackMetricsRef.current = { x, width };
+      setTrackWidth(width);
+    });
+  }, []);
+
+  const handleTrackLayout = useCallback((event: LayoutChangeEvent) => {
+    const width = event.nativeEvent.layout.width;
+    trackMetricsRef.current = { ...trackMetricsRef.current, width };
+    setTrackWidth(width);
+    measureTrack();
+  }, [measureTrack]);
+
+  const seekToPagePosition = useCallback((pageX: number) => {
+    const { x, width } = trackMetricsRef.current;
+    if (!canSeek || width <= 0) return;
+
+    const nextProgress = Math.min(Math.max((pageX - x) / width, 0), 1);
+    stopWaitingForPlayback();
+    void player.seekTo(nextProgress * duration).catch(() => {});
+  }, [canSeek, duration, player, stopWaitingForPlayback]);
+
+  const syncTrackPositionFromTouch = useCallback((pageX: number, locationX: number) => {
+    const width = trackMetricsRef.current.width || trackWidth;
+    trackMetricsRef.current = { x: pageX - locationX, width };
+  }, [trackWidth]);
+
+  const trackPanResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => canSeek,
+        onMoveShouldSetPanResponder: () => canSeek,
+        onPanResponderGrant: (event) => {
+          measureTrack();
+          syncTrackPositionFromTouch(
+            event.nativeEvent.pageX,
+            event.nativeEvent.locationX,
+          );
+          seekToPagePosition(event.nativeEvent.pageX);
+        },
+        onPanResponderMove: (_event, gestureState) => {
+          seekToPagePosition(gestureState.moveX);
+        },
+        onPanResponderTerminationRequest: () => true,
+      }),
+    [canSeek, measureTrack, seekToPagePosition, syncTrackPositionFromTouch],
+  );
 
   return (
     <View style={styles.row}>
@@ -181,7 +242,7 @@ export function AudioBubble({
         ) : (
           <Ionicons
             name={isPlaying ? "pause" : "play"}
-            size={18}
+            size={20}
             color={colors.primary}
             style={isPlaying ? undefined : { marginLeft: 2 }}
           />
@@ -191,8 +252,22 @@ export function AudioBubble({
         <Text style={styles.rateText}>{playbackRate.toFixed(1)}x</Text>
       </Pressable>
       <View style={styles.trackCol}>
-        <View style={styles.track}>
-          <View style={[styles.fill, { width: `${progress * 100}%` }]} />
+        <View
+          ref={trackRef}
+          style={styles.trackHitArea}
+          onLayout={handleTrackLayout}
+          {...trackPanResponder.panHandlers}
+        >
+          <View style={styles.track}>
+            <View style={[styles.fill, { width: `${progress * 100}%` }]} />
+          </View>
+          <View
+            pointerEvents="none"
+            style={[
+              styles.knob,
+              { left: `${progress * 100}%` },
+            ]}
+          />
         </View>
         <Text style={styles.time}>
           {isPlaying ? formatTime(currentTime) : formatTime(duration ?? 0)}
@@ -207,12 +282,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    minWidth: 180,
+    minWidth: 240,
   },
   playBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -227,12 +302,13 @@ const styles = StyleSheet.create({
   },
   trackCol: {
     flex: 1,
-    gap: 4,
+    gap: 2,
   },
   rateBtn: {
-    paddingHorizontal: 6,
-    paddingVertical: 4,
-    borderRadius: 10,
+    minWidth: 34,
+    paddingHorizontal: 7,
+    paddingVertical: 5,
+    borderRadius: 11,
     backgroundColor: "rgba(0,0,0,0.08)",
   },
   rateText: {
@@ -240,16 +316,36 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: colors.timestamp,
   },
+  trackHitArea: {
+    height: 28,
+    justifyContent: "center",
+  },
   track: {
-    height: 4,
-    borderRadius: 2,
+    height: 6,
+    borderRadius: 3,
     backgroundColor: colors.border,
     overflow: "hidden",
   },
   fill: {
     height: "100%",
-    borderRadius: 2,
+    borderRadius: 3,
     backgroundColor: colors.audioProgress,
+  },
+  knob: {
+    position: "absolute",
+    top: 7,
+    width: 14,
+    height: 14,
+    marginLeft: -7,
+    borderRadius: 7,
+    backgroundColor: colors.audioProgress,
+    borderWidth: 2,
+    borderColor: "#fff",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.18,
+    shadowRadius: 2,
+    elevation: 2,
   },
   time: {
     fontSize: 11,

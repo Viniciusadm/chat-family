@@ -10,12 +10,16 @@ import { useMessages } from "@/hooks/useMessages";
 import { getChatDisplayName } from "@/lib/chatDisplayName";
 import { colors } from "@/theme/colors";
 import type { Message } from "@/types/chat";
+import { Ionicons } from "@expo/vector-icons";
 import type { Timestamp } from "firebase/firestore";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   FlatList,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  Pressable,
   StyleSheet,
   Text,
   View,
@@ -40,6 +44,8 @@ interface MessageItem {
 }
 
 type ChatListItem = DaySeparatorItem | MessageItem;
+
+const JUMP_TO_LATEST_OFFSET = 80;
 
 function readReceiptStatus(
   message: Message,
@@ -107,6 +113,7 @@ export default function ChatScreen() {
   );
   const isKeyboardVisible = useKeyboardState((state) => state.isVisible);
   const inputRef = useRef<ChatInputHandle>(null);
+  const listRef = useRef<FlatList<ChatListItem>>(null);
   const badgeOpacity = useRef(new Animated.Value(0)).current;
   const hasScrolledRef = useRef(false);
   const visibleDayLabelRef = useRef("");
@@ -115,6 +122,7 @@ export default function ChatScreen() {
   const [activeDayLabel, setActiveDayLabel] = useState<string>("");
   const [activeAudioMessageId, setActiveAudioMessageId] = useState<string | null>(null);
   const [audioPlaybackRate, setAudioPlaybackRate] = useState<1 | 1.5 | 2>(1);
+  const [showJumpToLatest, setShowJumpToLatest] = useState(false);
 
   const audioSequenceMap = useMemo(() => {
     const sequence = new Map<string, string | undefined>();
@@ -175,6 +183,7 @@ export default function ChatScreen() {
     visibleDayLabelRef.current = "";
     badgeOpacity.setValue(0);
     hasScrolledRef.current = false;
+    setShowJumpToLatest(false);
     if (hideBadgeTimeoutRef.current) {
       clearTimeout(hideBadgeTimeoutRef.current);
       hideBadgeTimeoutRef.current = null;
@@ -223,11 +232,21 @@ export default function ChatScreen() {
     }, 2000);
   }, [badgeOpacity]);
 
-  const handleScrollActivity = useCallback(() => {
-    if (!hasScrolledRef.current) return;
-    showBadge();
-    scheduleBadgeHide();
-  }, [scheduleBadgeHide, showBadge]);
+  const handleScrollActivity = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const isViewingOlderMessages =
+        event.nativeEvent.contentOffset.y > JUMP_TO_LATEST_OFFSET;
+
+      setShowJumpToLatest((current) =>
+        current === isViewingOlderMessages ? current : isViewingOlderMessages
+      );
+
+      if (!hasScrolledRef.current) return;
+      showBadge();
+      scheduleBadgeHide();
+    },
+    [scheduleBadgeHide, showBadge]
+  );
 
   const handleUserScrollStart = useCallback(() => {
     hasScrolledRef.current = true;
@@ -262,6 +281,11 @@ export default function ChatScreen() {
     });
   }, [badgeOpacity, showBadge]);
 
+  const jumpToLatestMessages = useCallback(() => {
+    listRef.current?.scrollToOffset({ offset: 0, animated: true });
+    setShowJumpToLatest(false);
+  }, []);
+
   if (!chatId || !currentUserId) {
     return null;
   }
@@ -276,6 +300,7 @@ export default function ChatScreen() {
           </Animated.View>
         ) : null}
         <FlatList
+          ref={listRef}
           key={chatId}
           inverted
           data={chatListData}
@@ -351,6 +376,23 @@ export default function ChatScreen() {
             );
           }}
         />
+        {showJumpToLatest ? (
+          <Pressable
+            accessibilityLabel="Voltar para mensagens atuais"
+            accessibilityRole="button"
+            onPress={jumpToLatestMessages}
+            style={({ pressed }) => [
+              styles.jumpToLatestButton,
+              pressed ? styles.jumpToLatestButtonPressed : null,
+            ]}
+          >
+            <Ionicons
+              name="chevron-down"
+              size={24}
+              color={colors.primaryForeground}
+            />
+          </Pressable>
+        ) : null}
       </View>
       <ChatInput ref={inputRef} chatId={chatId} keyboardVisible={isKeyboardVisible} />
     </KeyboardAvoidingView>
@@ -401,5 +443,25 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     textTransform: "capitalize",
+  },
+  jumpToLatestButton: {
+    position: "absolute",
+    right: 18,
+    bottom: 18,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.primary,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 4,
+    elevation: 4,
+    zIndex: 3,
+  },
+  jumpToLatestButtonPressed: {
+    opacity: 0.85,
   },
 });
