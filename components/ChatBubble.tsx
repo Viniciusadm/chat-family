@@ -24,6 +24,7 @@ interface ChatBubbleProps {
   currentUserId?: string;
   onReactionPress?: (messageId: string, pageX: number, pageY: number, width: number, height: number) => void;
   onReactionChipPress?: () => void;
+  onSenderPress?: () => void;
 }
 
 function formatTime(date: Date) {
@@ -50,6 +51,7 @@ export function ChatBubble({
   currentUserId,
   onReactionPress,
   onReactionChipPress,
+  onSenderPress,
 }: ChatBubbleProps) {
   const selfReadReceipt = isSelf ? readReceipt ?? "sent" : undefined;
   const audioSource =
@@ -70,7 +72,14 @@ export function ChatBubble({
   return (
     <View style={[styles.wrap, isSelf ? styles.wrapSelf : styles.wrapOther]}>
       {!isSelf && senderName ? (
-        <ProfileAvatar name={senderName} photoUrl={senderPhotoUrl} size={28} />
+        <Pressable
+          onPress={onSenderPress}
+          disabled={!onSenderPress}
+          hitSlop={8}
+          style={({ pressed }) => pressed && styles.senderPressed}
+        >
+          <ProfileAvatar name={senderName} photoUrl={senderPhotoUrl} size={28} />
+        </Pressable>
       ) : null}
       <View style={[styles.column, isSelf ? styles.columnSelf : styles.columnOther]}>
         <Pressable
@@ -83,7 +92,15 @@ export function ChatBubble({
             pressed ? styles.bubblePressed : null,
           ]}
         >
-          {senderName ? <Text style={styles.senderName}>{senderName}</Text> : null}
+          {senderName ? (
+            <Text
+              style={styles.senderName}
+              onPress={onSenderPress}
+              suppressHighlighting
+            >
+              {senderName}
+            </Text>
+          ) : null}
           {message.type === "audio" && audioUnavailableOffline ? (
             <Text
               style={[
@@ -246,5 +263,8 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginBottom: 4,
     color: colors.timestamp,
+  },
+  senderPressed: {
+    opacity: 0.72,
   },
 });

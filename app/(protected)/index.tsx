@@ -34,8 +34,7 @@ export default function ChatListScreen() {
   const memberProfiles = useMemberProfiles();
   const canAccessAdmin =
     currentUser?.role === "adult" &&
-    firebaseUser != null &&
-    !firebaseUser.isAnonymous;
+    (firebaseUser == null || !firebaseUser.isAnonymous);
 
   return (
     <ScreenContainer style={styles.screen} edges={["bottom"]}>
@@ -110,7 +109,7 @@ export default function ChatListScreen() {
                 ]}
               >
                 <ProfileAvatar
-                  name={otherProfile?.name ?? chat.name}
+                  name={otherProfile?.name ?? displayName}
                   photoUrl={otherProfile?.photoUrl}
                   icon="chatbubble-ellipses-outline"
                   size={48}

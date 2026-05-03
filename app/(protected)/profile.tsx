@@ -3,18 +3,22 @@ import { LoadingDots } from "@/components/LoadingDots";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { useAuth } from "@/context/AuthContext";
+import { useConnectivity } from "@/hooks/useConnectivity";
+import { useMemberProfiles } from "@/hooks/useMemberProfiles";
 import { db, storage } from "@/lib/firebase";
 import { randomUuid } from "@/lib/randomUuid";
 import { colors } from "@/theme/colors";
 import { Ionicons } from "@expo/vector-icons";
+import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { deleteObject, getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { doc, updateDoc } from "firebase/firestore";
 import { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -32,10 +36,14 @@ async function blobFromUri(uri: string) {
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const { memberId } = useLocalSearchParams<{ memberId?: string }>();
   const { currentUser, firebaseUser, setCurrentUserPhoto } = useAuth();
+  const { isOnline } = useConnectivity();
+  const memberProfiles = useMemberProfiles();
   const [saving, setSaving] = useState(false);
+  const [photoModalVisible, setPhotoModalVisible] = useState(false);
 
-  if (!currentUser || !firebaseUser) {
+  if (!currentUser) {
     return (
       <ScreenContainer style={styles.screen} edges={["bottom"]}>
         <View style={styles.center}>
@@ -45,7 +53,24 @@ export default function ProfileScreen() {
     );
   }
 
+  const isOwnProfile = !memberId || memberId === currentUser.id;
+  const viewedProfile = isOwnProfile ? currentUser : memberProfiles[memberId];
+  const canMutatePhoto =
+    isOwnProfile && isOnline && firebaseUser != null && !firebaseUser.isAnonymous;
+
+  if (!viewedProfile) {
+    return (
+      <ScreenContainer style={styles.screen} edges={["bottom"]}>
+        <AppHeader title="Perfil" onBack={() => router.back()} />
+        <View style={styles.center}>
+          <LoadingDots />
+        </View>
+      </ScreenContainer>
+    );
+  }
+
   const updatePhotoDocs = async (photoUrl: string | null, photoPath: string | null) => {
+    if (!firebaseUser) throw new Error("Esta ação precisa de conexão.");
     await Promise.all([
       updateDoc(doc(db, "members", currentUser.id), {
         photoUrl,
@@ -67,7 +92,7 @@ export default function ProfileScreen() {
   };
 
   const choosePhoto = async () => {
-    if (saving) return;
+    if (saving || !canMutatePhoto) return;
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
       Alert.alert("", "Permita acesso às fotos para escolher uma imagem.");
@@ -116,7 +141,7 @@ export default function ProfileScreen() {
   };
 
   const removePhoto = async () => {
-    if (saving || !currentUser.photoUrl) return;
+    if (saving || !canMutatePhoto || !currentUser.photoUrl) return;
     setSaving(true);
     const previousPath = currentUser.photoPath ?? null;
     try {
@@ -136,52 +161,100 @@ export default function ProfileScreen() {
     <ScreenContainer style={styles.screen} edges={["bottom"]}>
       <AppHeader title="Perfil" onBack={() => router.back()} />
       <View style={styles.content}>
-        <View style={styles.avatarWrap}>
+        <Pressable
+          onPress={() => {
+            if (viewedProfile.photoUrl) setPhotoModalVisible(true);
+          }}
+          disabled={!viewedProfile.photoUrl}
+          style={({ pressed }) => [
+            styles.avatarWrap,
+            pressed && styles.pressed,
+          ]}
+        >
           <ProfileAvatar
-            name={currentUser.name}
-            photoUrl={currentUser.photoUrl}
+            name={viewedProfile.name}
+            photoUrl={viewedProfile.photoUrl}
             size={132}
           />
-          {saving ? (
+          {saving && isOwnProfile ? (
             <View style={styles.savingOverlay}>
               <ActivityIndicator color={colors.primaryForeground} />
             </View>
           ) : null}
-        </View>
+        </Pressable>
 
-        <Text style={styles.name}>{currentUser.name}</Text>
-        <Text style={styles.meta}>{roleLabel(currentUser.role)}</Text>
+        <Text style={styles.name}>{viewedProfile.name}</Text>
+        <Text style={styles.meta}>{roleLabel(viewedProfile.role)}</Text>
 
-        <View style={styles.actions}>
-          <Pressable
-            onPress={() => void choosePhoto()}
-            disabled={saving}
-            style={({ pressed }) => [
-              styles.primaryBtn,
-              (pressed || saving) && styles.pressed,
-            ]}
-          >
-            <Ionicons name="image-outline" size={18} color={colors.primaryForeground} />
-            <Text style={styles.primaryBtnText}>
-              {currentUser.photoUrl ? "Trocar foto" : "Adicionar foto"}
-            </Text>
-          </Pressable>
-
-          {currentUser.photoUrl ? (
+        {canMutatePhoto ? (
+          <View style={styles.actions}>
             <Pressable
-              onPress={() => void removePhoto()}
+              onPress={() => void choosePhoto()}
               disabled={saving}
               style={({ pressed }) => [
-                styles.dangerBtn,
+                styles.primaryBtn,
                 (pressed || saving) && styles.pressed,
               ]}
             >
-              <Ionicons name="trash-outline" size={18} color={colors.destructive} />
-              <Text style={styles.dangerBtnText}>Remover foto</Text>
+              <Ionicons
+                name="image-outline"
+                size={18}
+                color={colors.primaryForeground}
+              />
+              <Text style={styles.primaryBtnText}>
+                {currentUser.photoUrl ? "Trocar foto" : "Adicionar foto"}
+              </Text>
             </Pressable>
-          ) : null}
-        </View>
+
+            {currentUser.photoUrl ? (
+              <Pressable
+                onPress={() => void removePhoto()}
+                disabled={saving}
+                style={({ pressed }) => [
+                  styles.dangerBtn,
+                  (pressed || saving) && styles.pressed,
+                ]}
+              >
+                <Ionicons
+                  name="trash-outline"
+                  size={18}
+                  color={colors.destructive}
+                />
+                <Text style={styles.dangerBtnText}>Remover foto</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
       </View>
+
+      <Modal
+        visible={photoModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPhotoModalVisible(false)}
+      >
+        <Pressable
+          style={styles.photoModalRoot}
+          onPress={() => setPhotoModalVisible(false)}
+        >
+          <View style={styles.photoModalHeader}>
+            <Pressable
+              onPress={() => setPhotoModalVisible(false)}
+              hitSlop={12}
+              style={styles.photoClose}
+            >
+              <Ionicons name="close" size={28} color={colors.primaryForeground} />
+            </Pressable>
+          </View>
+          {viewedProfile.photoUrl ? (
+            <Image
+              source={{ uri: viewedProfile.photoUrl }}
+              style={styles.fullPhoto}
+              contentFit="contain"
+            />
+          ) : null}
+        </Pressable>
+      </Modal>
     </ScreenContainer>
   );
 }
@@ -259,6 +332,31 @@ const styles = StyleSheet.create({
     color: colors.destructive,
     fontSize: 16,
     fontWeight: "700",
+  },
+  photoModalRoot: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.92)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 16,
+  },
+  photoModalHeader: {
+    position: "absolute",
+    top: 48,
+    right: 20,
+    zIndex: 2,
+  },
+  photoClose: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.14)",
+  },
+  fullPhoto: {
+    width: "100%",
+    height: "82%",
   },
   pressed: {
     opacity: 0.72,

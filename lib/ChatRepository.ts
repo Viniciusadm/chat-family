@@ -1,4 +1,4 @@
-import { getDatabase } from "@/lib/db";
+import { getDatabase, withExclusiveWrite } from "@/lib/db";
 import type { Chat } from "@/types/chat";
 import { Timestamp } from "firebase/firestore";
 
@@ -152,6 +152,51 @@ export const ChatRepository = {
         new Date().toISOString(),
       ]
     );
+
+    if (options.notify !== false) {
+      emit();
+    }
+  },
+
+  async replaceTenantChats(
+    tenantId: string,
+    chats: Chat[],
+    options: { notify?: boolean } = {}
+  ) {
+    const updatedAt = new Date().toISOString();
+    await withExclusiveWrite(async (tx) => {
+      await tx.runAsync("DELETE FROM chats WHERE tenant_id = ?", [tenantId]);
+      for (const chat of chats) {
+        await tx.runAsync(
+          `INSERT INTO chats (
+            id,
+            tenant_id,
+            participants,
+            is_group,
+            name,
+            unread_count,
+            last_message_text,
+            last_message_type,
+            last_message_at,
+            read_up_to,
+            updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            chat.id,
+            chat.tenantId,
+            JSON.stringify(chat.participants),
+            chat.isGroup ? 1 : 0,
+            chat.name,
+            chat.unreadCount,
+            chat.lastMessage?.text ?? null,
+            chat.lastMessage?.type ?? null,
+            chat.lastMessage?.timestamp?.toISOString() ?? null,
+            serializeReadUpTo(chat.readUpTo),
+            updatedAt,
+          ]
+        );
+      }
+    });
 
     if (options.notify !== false) {
       emit();

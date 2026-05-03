@@ -10,7 +10,7 @@ import { colors } from "@/theme/colors";
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { Redirect, useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -40,6 +40,7 @@ export default function AdminScreen() {
     pendingDevices,
     chats,
     loading,
+    canMutate,
     addUser,
     approveDevice,
     rejectDevice,
@@ -74,11 +75,18 @@ export default function AdminScreen() {
     members.map((member) => [member.id, { name: member.name }])
   );
 
-  if (
-    currentUser?.role !== "adult" ||
-    !firebaseUser ||
-    firebaseUser.isAnonymous
-  ) {
+  useEffect(() => {
+    if (canMutate) return;
+    setShowAddUser(false);
+    setShowCreateChat(false);
+    setEditingChatId(null);
+    setChatToDelete(null);
+    setChildToDelete(null);
+    setDeleteChildMessages(false);
+    setDeletingChild(false);
+  }, [canMutate]);
+
+  if (currentUser?.role !== "adult" || firebaseUser?.isAnonymous) {
     return <Redirect href="/" />;
   }
 
@@ -249,7 +257,7 @@ export default function AdminScreen() {
                     {member.role === "adult" ? "Adulto" : "Criança"}
                   </Text>
                 </View>
-                {member.role === "child" ? (
+                {canMutate && member.role === "child" ? (
                   <Pressable
                     onPress={() => openDeleteChild(member)}
                     style={styles.iconAct}
@@ -265,16 +273,22 @@ export default function AdminScreen() {
               </View>
             </View>
           ))}
-          <Pressable
-            onPress={() => setShowAddUser(true)}
-            style={({ pressed }) => [
-              styles.outlineBtn,
-              pressed && styles.pressed,
-            ]}
-          >
-            <Ionicons name="person-add-outline" size={18} color={colors.foreground} />
-            <Text style={styles.outlineBtnText}>Adicionar participante</Text>
-          </Pressable>
+          {canMutate ? (
+            <Pressable
+              onPress={() => setShowAddUser(true)}
+              style={({ pressed }) => [
+                styles.outlineBtn,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Ionicons
+                name="person-add-outline"
+                size={18}
+                color={colors.foreground}
+              />
+              <Text style={styles.outlineBtnText}>Adicionar participante</Text>
+            </Pressable>
+          ) : null}
 
           <SectionTitle icon="phone-portrait-outline" label="Dispositivos pendentes" />
           {pendingDevices.length === 0 ? (
@@ -296,26 +310,30 @@ export default function AdminScreen() {
                         {formatTime(device.createdAt)}
                       </Text>
                     </View>
-                    <Pressable
-                      onPress={() => void approveDevice(device.id)}
-                      style={styles.iconAct}
-                    >
-                      <Ionicons
-                        name="checkmark-circle"
-                        size={28}
-                        color={colors.primary}
-                      />
-                    </Pressable>
-                    <Pressable
-                      onPress={() => void rejectDevice(device.id)}
-                      style={styles.iconAct}
-                    >
-                      <Ionicons
-                        name="close-circle"
-                        size={28}
-                        color={colors.destructive}
-                      />
-                    </Pressable>
+                    {canMutate ? (
+                      <>
+                        <Pressable
+                          onPress={() => void approveDevice(device.id)}
+                          style={styles.iconAct}
+                        >
+                          <Ionicons
+                            name="checkmark-circle"
+                            size={28}
+                            color={colors.primary}
+                          />
+                        </Pressable>
+                        <Pressable
+                          onPress={() => void rejectDevice(device.id)}
+                          style={styles.iconAct}
+                        >
+                          <Ionicons
+                            name="close-circle"
+                            size={28}
+                            color={colors.destructive}
+                          />
+                        </Pressable>
+                      </>
+                    ) : null}
                   </View>
                 </View>
               );
@@ -344,44 +362,54 @@ export default function AdminScreen() {
                       {chat.participants.length} membros
                     </Text>
                   </View>
-                  <Pressable
-                    onPress={() => openEditChat(chat)}
-                    style={styles.iconAct}
-                  >
-                    <Ionicons
-                      name="pencil-outline"
-                      size={22}
-                      color={colors.primary}
-                    />
-                  </Pressable>
-                  <Pressable
-                    onPress={() => setChatToDelete(chat)}
-                    style={styles.iconAct}
-                  >
-                    <Ionicons
-                      name="trash-outline"
-                      size={22}
-                      color={colors.destructive}
-                    />
-                  </Pressable>
+                  {canMutate ? (
+                    <>
+                      <Pressable
+                        onPress={() => openEditChat(chat)}
+                        style={styles.iconAct}
+                      >
+                        <Ionicons
+                          name="pencil-outline"
+                          size={22}
+                          color={colors.primary}
+                        />
+                      </Pressable>
+                      <Pressable
+                        onPress={() => setChatToDelete(chat)}
+                        style={styles.iconAct}
+                      >
+                        <Ionicons
+                          name="trash-outline"
+                          size={22}
+                          color={colors.destructive}
+                        />
+                      </Pressable>
+                    </>
+                  ) : null}
                 </View>
               </View>
             );
           })}
-          <Pressable
-            onPress={() => setShowCreateChat(true)}
-            style={({ pressed }) => [
-              styles.outlineBtn,
-              pressed && styles.pressed,
-            ]}
-          >
-            <Ionicons name="add-circle-outline" size={18} color={colors.foreground} />
-            <Text style={styles.outlineBtnText}>Criar conversa</Text>
-          </Pressable>
+          {canMutate ? (
+            <Pressable
+              onPress={() => setShowCreateChat(true)}
+              style={({ pressed }) => [
+                styles.outlineBtn,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Ionicons
+                name="add-circle-outline"
+                size={18}
+                color={colors.foreground}
+              />
+              <Text style={styles.outlineBtnText}>Criar conversa</Text>
+            </Pressable>
+          ) : null}
         </ScrollView>
       )}
 
-      <Modal visible={showAddUser} transparent animationType="fade">
+      <Modal visible={canMutate && showAddUser} transparent animationType="fade">
         <View style={styles.modalRoot}>
           <Pressable
             style={styles.modalOverlay}
@@ -462,7 +490,7 @@ export default function AdminScreen() {
         </View>
       </Modal>
 
-      <Modal visible={showCreateChat} transparent animationType="fade">
+      <Modal visible={canMutate && showCreateChat} transparent animationType="fade">
         <View style={styles.modalRoot}>
           <Pressable
             style={styles.modalOverlay}
@@ -524,7 +552,7 @@ export default function AdminScreen() {
         </View>
       </Modal>
 
-      <Modal visible={editingChatId !== null} transparent animationType="fade">
+      <Modal visible={canMutate && editingChatId !== null} transparent animationType="fade">
         <View style={styles.modalRoot}>
           <Pressable
             style={styles.modalOverlay}
@@ -586,7 +614,7 @@ export default function AdminScreen() {
         </View>
       </Modal>
 
-      <Modal visible={chatToDelete !== null} transparent animationType="fade">
+      <Modal visible={canMutate && chatToDelete !== null} transparent animationType="fade">
         <View style={styles.modalRoot}>
           <Pressable
             style={styles.modalOverlay}
@@ -616,7 +644,7 @@ export default function AdminScreen() {
         </View>
       </Modal>
 
-      <Modal visible={childToDelete !== null} transparent animationType="fade">
+      <Modal visible={canMutate && childToDelete !== null} transparent animationType="fade">
         <View style={styles.modalRoot}>
           <Pressable
             style={styles.modalOverlay}

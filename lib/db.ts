@@ -1,6 +1,7 @@
 import * as SQLite from "expo-sqlite";
 
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
+let writeQueue: Promise<void> = Promise.resolve();
 
 async function ensureColumn(
   db: SQLite.SQLiteDatabase,
@@ -57,6 +58,34 @@ async function migrate(db: SQLite.SQLiteDatabase) {
       newest_message_at TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS admin_members (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      role TEXT NOT NULL,
+      login_code TEXT,
+      photo_url TEXT,
+      photo_path TEXT,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS admin_session_users (
+      user_id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS admin_pending_devices (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      approved INTEGER NOT NULL,
+      push_token TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_messages_conversation_created_at
       ON messages (conversation_id, created_at);
 
@@ -65,6 +94,15 @@ async function migrate(db: SQLite.SQLiteDatabase) {
 
     CREATE INDEX IF NOT EXISTS idx_chats_last_message_at
       ON chats (last_message_at);
+
+    CREATE INDEX IF NOT EXISTS idx_admin_members_tenant
+      ON admin_members (tenant_id);
+
+    CREATE INDEX IF NOT EXISTS idx_admin_session_users_tenant
+      ON admin_session_users (tenant_id);
+
+    CREATE INDEX IF NOT EXISTS idx_admin_pending_devices_tenant
+      ON admin_pending_devices (tenant_id);
   `);
 
   await db.execAsync(`
@@ -96,4 +134,25 @@ export async function getDatabase() {
   }
 
   return databasePromise;
+}
+
+export async function withExclusiveWrite<T>(
+  task: (db: SQLite.SQLiteDatabase) => Promise<T>
+): Promise<T> {
+  let result!: T;
+  const run = async () => {
+    const db = await getDatabase();
+    await db.withExclusiveTransactionAsync(async (tx) => {
+      result = await task(tx);
+    });
+    return result;
+  };
+
+  const next = writeQueue.then(run, run);
+  writeQueue = next.then(
+    () => undefined,
+    () => undefined
+  );
+
+  return next;
 }

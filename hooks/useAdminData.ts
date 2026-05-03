@@ -1,5 +1,7 @@
 import { useAuth } from "@/context/AuthContext";
 import { useConnectivity } from "@/hooks/useConnectivity";
+import { AdminRepository } from "@/lib/AdminRepository";
+import { ChatRepository } from "@/lib/ChatRepository";
 import { db, functions, storage } from "@/lib/firebase";
 import { httpsCallable } from "firebase/functions";
 import { randomUuid } from "@/lib/randomUuid";
@@ -30,7 +32,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { deleteObject, ref } from "firebase/storage";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 function newLoginCode(): string {
   return randomUuid().replace(/-/g, "").slice(0, 10).toUpperCase();
@@ -45,11 +47,12 @@ async function readTenantIdForUid(uid: string): Promise<string | null> {
 
 export function useAdminData() {
   const { tenantId, currentUser, firebaseUser } = useAuth();
+  const { isOnline } = useConnectivity();
   const [resolvedTenantId, setResolvedTenantId] = useState<string | null>(null);
 
   useEffect(() => {
     const uid = firebaseUser?.uid;
-    if (!uid) {
+    if (!uid || !isOnline) {
       setResolvedTenantId(null);
       return;
     }
@@ -61,15 +64,44 @@ export function useAdminData() {
     return () => {
       cancelled = true;
     };
-  }, [firebaseUser?.uid]);
+  }, [firebaseUser?.uid, isOnline]);
 
   const effectiveTenantId = tenantId ?? currentUser?.tenantId ?? resolvedTenantId ?? null;
-  const { isOnline } = useConnectivity();
+  const canMutate = isOnline && firebaseUser != null && !firebaseUser.isAnonymous;
   const [members, setMembers] = useState<AppMember[]>([]);
   const [sessionUserNames, setSessionUserNames] = useState<Record<string, string>>({});
   const [pendingDevices, setPendingDevices] = useState<Device[]>([]);
   const [chats, setChats] = useState<Chat[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const loadLocalData = useCallback(
+    async (active: () => boolean) => {
+      if (!effectiveTenantId) {
+        setMembers([]);
+        setSessionUserNames({});
+        setPendingDevices([]);
+        setChats([]);
+        setLoading(false);
+        return;
+      }
+
+      const [localMembers, localSessionUserNames, localPendingDevices, localChats] =
+        await Promise.all([
+          AdminRepository.getMembers(effectiveTenantId),
+          AdminRepository.getSessionUserNames(effectiveTenantId),
+          AdminRepository.getPendingDevices(effectiveTenantId),
+          ChatRepository.getLocalChats(effectiveTenantId),
+        ]);
+
+      if (!active()) return;
+      setMembers(localMembers);
+      setSessionUserNames(localSessionUserNames);
+      setPendingDevices(localPendingDevices);
+      setChats(localChats);
+      setLoading(false);
+    },
+    [effectiveTenantId]
+  );
 
   useEffect(() => {
     if (!effectiveTenantId) {
@@ -81,26 +113,28 @@ export function useAdminData() {
       return;
     }
 
-    if (!isOnline) {
-      setMembers([]);
-      setSessionUserNames({});
-      setPendingDevices([]);
-      setChats([]);
-      setLoading(false);
-      return;
-    }
+    let active = true;
+    const unsubs: (() => void)[] = [];
+    setLoading(true);
+    void loadLocalData(() => active);
 
-    let resolved = 0;
-    const checkDone = () => {
-      resolved++;
-      if (resolved === 4) setLoading(false);
+    const emitLocal = () => {
+      void loadLocalData(() => active);
     };
+    unsubs.push(AdminRepository.subscribe(emitLocal));
+    unsubs.push(ChatRepository.subscribe(emitLocal));
+
+    if (!isOnline || !firebaseUser) {
+      return () => {
+        active = false;
+        unsubs.forEach((unsub) => unsub());
+      };
+    }
 
     const unsubMembers = onSnapshot(
       query(collection(db, "members"), where("tenantId", "==", effectiveTenantId)),
       (snap) => {
-        setMembers(
-          snap.docs.map((d) => {
+        const nextMembers = snap.docs.map((d) => {
             const data = d.data() as MemberDoc;
             return {
               id: d.id,
@@ -111,10 +145,10 @@ export function useAdminData() {
               photoUrl: data.photoUrl ?? null,
               photoPath: data.photoPath ?? null,
             };
-          })
-        );
-        checkDone();
-      }
+          });
+        void AdminRepository.replaceMembers(effectiveTenantId, nextMembers);
+      },
+      () => setLoading(false)
     );
 
     const unsubSessionUsers = onSnapshot(
@@ -125,9 +159,9 @@ export function useAdminData() {
           const data = d.data() as UserDoc;
           map[d.id] = data.name;
         });
-        setSessionUserNames(map);
-        checkDone();
-      }
+        void AdminRepository.replaceSessionUserNames(effectiveTenantId, map);
+      },
+      () => setLoading(false)
     );
 
     const unsubDevices = onSnapshot(
@@ -137,8 +171,7 @@ export function useAdminData() {
         where("approved", "==", false)
       ),
       (snap) => {
-        setPendingDevices(
-          snap.docs.map((d) => {
+        const nextDevices = snap.docs.map((d) => {
             const data = d.data() as DeviceDoc;
             return {
               id: d.id,
@@ -148,19 +181,18 @@ export function useAdminData() {
               pushToken: data.pushToken,
               createdAt: data.createdAt ? data.createdAt.toDate() : new Date(),
             };
-          })
-        );
-        checkDone();
-      }
+          });
+        void AdminRepository.replacePendingDevices(effectiveTenantId, nextDevices);
+      },
+      () => setLoading(false)
     );
 
     const unsubChats = onSnapshot(
       query(collection(db, "chats"), where("tenantId", "==", effectiveTenantId)),
       (snap) => {
-        setChats(
-          snap.docs.map((d) => {
+        const nextChats = snap.docs.map((d) => {
             const data = d.data() as ChatDoc;
-            return {
+            const chat: Chat = {
               id: d.id,
               tenantId: data.tenantId,
               participants: data.participants,
@@ -168,21 +200,29 @@ export function useAdminData() {
               name: data.name,
               unreadCount: 0,
             };
-          })
-        );
-        checkDone();
-      }
+            if (data.lastMessageAt) {
+              chat.lastMessage = {
+                text: data.lastMessageText,
+                type: data.lastMessageType,
+                timestamp: data.lastMessageAt.toDate(),
+              };
+            }
+            return chat;
+          });
+        void ChatRepository.replaceTenantChats(effectiveTenantId, nextChats);
+      },
+      () => setLoading(false)
     );
+    unsubs.push(unsubMembers, unsubSessionUsers, unsubDevices, unsubChats);
 
     return () => {
-      unsubMembers();
-      unsubSessionUsers();
-      unsubDevices();
-      unsubChats();
+      active = false;
+      unsubs.forEach((unsub) => unsub());
     };
-  }, [effectiveTenantId, isOnline]);
+  }, [effectiveTenantId, firebaseUser, isOnline, loadLocalData]);
 
   const addUser = async (name: string, role: UserRole) => {
+    if (!canMutate) throw new Error("Esta ação precisa de conexão.");
     const uid = firebaseUser?.uid;
     let tid = effectiveTenantId;
     if (!tid && uid) {
@@ -210,15 +250,18 @@ export function useAdminData() {
   };
 
   const approveDevice = async (deviceIdParam: string) => {
+    if (!canMutate) throw new Error("Esta ação precisa de conexão.");
     const fn = httpsCallable(functions, "approveDevice");
     await fn({ deviceId: deviceIdParam });
   };
 
   const rejectDevice = async (deviceIdParam: string) => {
+    if (!canMutate) throw new Error("Esta ação precisa de conexão.");
     await deleteDoc(doc(db, "devices", deviceIdParam));
   };
 
   const createChat = async (name: string, participantIds: string[]) => {
+    if (!canMutate) throw new Error("Esta ação precisa de conexão.");
     if (!effectiveTenantId || participantIds.length < 2) return;
     await addDoc(collection(db, "chats"), {
       tenantId: effectiveTenantId,
@@ -234,6 +277,7 @@ export function useAdminData() {
   };
 
   const updateChat = async (chatId: string, name: string, participantIds: string[]) => {
+    if (!canMutate) throw new Error("Esta ação precisa de conexão.");
     if (participantIds.length < 2) return;
     await updateDoc(doc(db, "chats", chatId), {
       name,
@@ -244,6 +288,7 @@ export function useAdminData() {
   };
 
   const deleteChat = async (chatId: string) => {
+    if (!canMutate) throw new Error("Esta ação precisa de conexão.");
     const msgsRef = collection(db, "chats", chatId, "messages");
     const snap = await getDocs(msgsRef);
     for (const d of snap.docs) {
@@ -264,6 +309,7 @@ export function useAdminData() {
   };
 
   const deleteChildMember = async (memberId: string, deleteMessages: boolean) => {
+    if (!canMutate) throw new Error("Esta ação precisa de conexão.");
     const fn = httpsCallable(functions, "deleteChildMember");
     await fn({ memberId, deleteMessages });
   };
@@ -274,6 +320,8 @@ export function useAdminData() {
     pendingDevices,
     chats,
     loading,
+    isOnline,
+    canMutate,
     addUser,
     approveDevice,
     rejectDevice,

@@ -462,6 +462,16 @@ export default function ChatScreen() {
                 currentUserId={currentUserId}
                 onReactionPress={handleReactionPress}
                 onReactionChipPress={handleReactionChipPress(item.message.id)}
+                onSenderPress={
+                  chat?.isGroup && item.message.senderId !== currentUserId
+                    ? () => {
+                        router.push({
+                          pathname: "/profile",
+                          params: { memberId: item.message.senderId },
+                        });
+                      }
+                    : undefined
+                }
               />
             );
           }}
