@@ -8,8 +8,9 @@ import {
   type Persistence,
 } from "firebase/auth";
 import {
-  enableMultiTabIndexedDbPersistence,
-  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentSingleTabManager,
   setLogLevel,
 } from "firebase/firestore";
 import { getFunctions } from "firebase/functions";
@@ -38,7 +39,10 @@ try {
 
 export { app, auth };
 setLogLevel("error");
-export const db = getFirestore(app);
-enableMultiTabIndexedDbPersistence(db).catch(() => {});
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({
+    tabManager: persistentSingleTabManager({ forceOwnership: true }),
+  }),
+});
 export const storage = getStorage(app);
 export const functions = getFunctions(app, "southamerica-east1");

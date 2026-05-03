@@ -5,9 +5,13 @@ import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { View } from "react-native";
+import { LogBox, View } from "react-native";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+
+LogBox.ignoreLogs([
+  /\[expo-notifications\] Error thrown while updating the device push token/,
+]);
 
 function RootLayoutNav() {
   return (

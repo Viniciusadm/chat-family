@@ -160,39 +160,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const attachDeviceSnapshot = useCallback(
     (deviceRef: ReturnType<typeof doc>, uid: string) => {
       if (deviceUnsub.current) deviceUnsub.current();
-      deviceUnsub.current = onSnapshot(deviceRef, (snap) => {
-        if (signingOutRef.current) return;
-        if (!snap.exists()) {
-          setDeviceApproved(null);
+      deviceUnsub.current = onSnapshot(
+        deviceRef,
+        (snap) => {
+          if (signingOutRef.current) return;
+          if (!snap.exists()) {
+            setDeviceApproved(null);
+            setLoading(false);
+            setSessionReady(true);
+            setNeedsPushToken(false);
+            return;
+          }
+          const data = snap.data();
+          if (data.active === false) {
+            const reason = typeof data.deactivationReason === "string"
+              ? data.deactivationReason
+              : null;
+            if (reason === "account-deleted") {
+              void signOutDeletedAccount(uid);
+              return;
+            }
+            signingOutRef.current = true;
+            if (deviceUnsub.current) {
+              deviceUnsub.current();
+              deviceUnsub.current = null;
+            }
+            signOut(auth).catch(() => {});
+            return;
+          }
+          const approved = data.approved === true;
+          setDeviceApproved(approved);
+          void SessionRepository.updateDeviceApproved(uid, approved);
           setLoading(false);
           setSessionReady(true);
           setNeedsPushToken(false);
-          return;
+        },
+        () => {
+          // Offline ou permission denied: mantém o estado restaurado do
+          // SessionRepository; o listener é recriado em uma próxima sessão online.
         }
-        const data = snap.data();
-        if (data.active === false) {
-          const reason = typeof data.deactivationReason === "string"
-            ? data.deactivationReason
-            : null;
-          if (reason === "account-deleted") {
-            void signOutDeletedAccount(uid);
-            return;
-          }
-          signingOutRef.current = true;
-          if (deviceUnsub.current) {
-            deviceUnsub.current();
-            deviceUnsub.current = null;
-          }
-          signOut(auth).catch(() => {});
-          return;
-        }
-        const approved = data.approved === true;
-        setDeviceApproved(approved);
-        void SessionRepository.updateDeviceApproved(uid, approved);
-        setLoading(false);
-        setSessionReady(true);
-        setNeedsPushToken(false);
-      });
+      );
     },
     [signOutDeletedAccount]
   );
