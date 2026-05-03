@@ -1,7 +1,9 @@
-import type { Message } from "@/types/chat";
+import { ReactionBubble } from "@/components/ReactionBubble";
+import type { Message, Reaction } from "@/types/chat";
 import { colors } from "@/theme/colors";
 import { MaterialIcons } from "@expo/vector-icons";
-import { StyleSheet, Text, View } from "react-native";
+import React, { useRef } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { AudioBubble } from "./AudioBubble";
 import { ProfileAvatar } from "./ProfileAvatar";
 
@@ -18,6 +20,10 @@ interface ChatBubbleProps {
   readReceipt?: "loading" | "sent" | "read";
   senderName?: string;
   senderPhotoUrl?: string | null;
+  reactions?: Reaction[];
+  currentUserId?: string;
+  onReactionPress?: (messageId: string, pageX: number, pageY: number, width: number, height: number) => void;
+  onReactionChipPress?: () => void;
 }
 
 function formatTime(date: Date) {
@@ -40,6 +46,10 @@ export function ChatBubble({
   readReceipt,
   senderName,
   senderPhotoUrl,
+  reactions,
+  currentUserId,
+  onReactionPress,
+  onReactionChipPress,
 }: ChatBubbleProps) {
   const selfReadReceipt = isSelf ? readReceipt ?? "sent" : undefined;
   const audioSource =
@@ -48,77 +58,98 @@ export function ChatBubble({
       : undefined;
   const audioUnavailableOffline =
     message.type === "audio" && !message.audioLocalUri && !isOnline;
+  const bubbleRef = useRef<View>(null);
+
+  const handleLongPress = () => {
+    if (!onReactionPress) return;
+    bubbleRef.current?.measureInWindow((x, y, width, height) => {
+      onReactionPress(message.id, x, y, width, height);
+    });
+  };
 
   return (
-    <View
-      style={[styles.wrap, isSelf ? styles.wrapSelf : styles.wrapOther]}
-    >
+    <View style={[styles.wrap, isSelf ? styles.wrapSelf : styles.wrapOther]}>
       {!isSelf && senderName ? (
         <ProfileAvatar name={senderName} photoUrl={senderPhotoUrl} size={28} />
       ) : null}
-      <View
-        style={[
-          styles.bubble,
-          isSelf ? styles.bubbleSelf : styles.bubbleOther,
-        ]}
-      >
-        {senderName ? <Text style={styles.senderName}>{senderName}</Text> : null}
-        {message.type === "audio" && audioUnavailableOffline ? (
-          <Text
-            style={[
-              styles.text,
-              isSelf
-                ? styles.textSelf
-                : styles.textOther,
-            ]}
-          >
-            Áudio indisponível offline
-          </Text>
-        ) : message.type === "audio" && audioSource ? (
-          <AudioBubble
-            messageId={message.id}
-            audioUrl={audioSource}
-            audioDuration={message.audioDuration}
-            isSelf={isSelf}
-            shouldPlay={Boolean(shouldPlay)}
-            nextInSequenceId={nextInSequenceId}
-            playbackRate={playbackRate}
-            onRequestPlay={onRequestPlay}
-            onAudioFinished={onAudioFinished}
-            onPlaybackRateChange={onPlaybackRateChange}
-          />
-        ) : (
-          <Text
-            style={[
-              styles.text,
-              isSelf
-                ? styles.textSelf
-                : styles.textOther,
-            ]}
-          >
-            {message.content}
-          </Text>
-        )}
-        <View style={[styles.meta, isSelf ? styles.metaSelf : styles.metaOther]}>
-          <Text style={styles.timestamp}>{formatTime(message.timestamp)}</Text>
-          {selfReadReceipt ? (
-            <View style={styles.receiptIconSlot}>
-              <MaterialIcons
-                name={
-                  selfReadReceipt === "loading"
-                    ? "schedule"
-                    : selfReadReceipt === "read"
-                      ? "done-all"
-                      : "done"
-                }
-                size={14}
-                color={
-                  selfReadReceipt === "read" ? colors.primary : colors.timestamp
-                }
-              />
-            </View>
-          ) : null}
-        </View>
+      <View style={[styles.column, isSelf ? styles.columnSelf : styles.columnOther]}>
+        <Pressable
+          ref={bubbleRef}
+          onLongPress={handleLongPress}
+          delayLongPress={400}
+          style={({ pressed }) => [
+            styles.bubble,
+            isSelf ? styles.bubbleSelf : styles.bubbleOther,
+            pressed ? styles.bubblePressed : null,
+          ]}
+        >
+          {senderName ? <Text style={styles.senderName}>{senderName}</Text> : null}
+          {message.type === "audio" && audioUnavailableOffline ? (
+            <Text
+              style={[
+                styles.text,
+                isSelf
+                  ? styles.textSelf
+                  : styles.textOther,
+              ]}
+            >
+              Áudio indisponível offline
+            </Text>
+          ) : message.type === "audio" && audioSource ? (
+            <AudioBubble
+              messageId={message.id}
+              audioUrl={audioSource}
+              audioDuration={message.audioDuration}
+              isSelf={isSelf}
+              shouldPlay={Boolean(shouldPlay)}
+              nextInSequenceId={nextInSequenceId}
+              playbackRate={playbackRate}
+              onRequestPlay={onRequestPlay}
+              onAudioFinished={onAudioFinished}
+              onPlaybackRateChange={onPlaybackRateChange}
+            />
+          ) : (
+            <Text
+              style={[
+                styles.text,
+                isSelf
+                  ? styles.textSelf
+                  : styles.textOther,
+              ]}
+            >
+              {message.content}
+            </Text>
+          )}
+          <View style={[styles.meta, isSelf ? styles.metaSelf : styles.metaOther]}>
+            <Text style={styles.timestamp}>{formatTime(message.timestamp)}</Text>
+            {selfReadReceipt ? (
+              <View style={styles.receiptIconSlot}>
+                <MaterialIcons
+                  name={
+                    selfReadReceipt === "loading"
+                      ? "schedule"
+                      : selfReadReceipt === "read"
+                        ? "done-all"
+                        : "done"
+                  }
+                  size={14}
+                  color={
+                    selfReadReceipt === "read" ? colors.primary : colors.timestamp
+                  }
+                />
+              </View>
+            ) : null}
+          </View>
+        </Pressable>
+        {reactions && currentUserId && onReactionChipPress ? (
+          <View style={[styles.reactionRow, isSelf ? styles.reactionRowSelf : styles.reactionRowOther]}>
+            <ReactionBubble
+              reactions={reactions}
+              currentUserId={currentUserId}
+              onPress={onReactionChipPress}
+            />
+          </View>
+        ) : null}
       </View>
     </View>
   );
@@ -139,7 +170,6 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
   },
   bubble: {
-    maxWidth: "80%",
     borderRadius: 16,
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -149,6 +179,25 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 1,
   },
+  column: {
+    maxWidth: "80%",
+  },
+  columnSelf: {
+    alignItems: "flex-end",
+  },
+  columnOther: {
+    alignItems: "flex-start",
+  },
+  reactionRow: {
+    marginTop: -8,
+    zIndex: 1,
+  },
+  reactionRowSelf: {
+    alignItems: "flex-end",
+  },
+  reactionRowOther: {
+    alignItems: "flex-start",
+  },
   bubbleSelf: {
     backgroundColor: colors.bubbleSelf,
     borderBottomRightRadius: 6,
@@ -156,6 +205,9 @@ const styles = StyleSheet.create({
   bubbleOther: {
     backgroundColor: colors.bubbleOther,
     borderBottomLeftRadius: 6,
+  },
+  bubblePressed: {
+    opacity: 0.85,
   },
   text: {
     fontSize: 15,

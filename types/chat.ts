@@ -68,6 +68,18 @@ export interface MessageDoc {
   createdAt: Timestamp;
 }
 
+export interface Reaction {
+  userId: string;
+  emoji: string;
+}
+
+export interface ReactionDoc {
+  messageId: string;
+  userId: string;
+  emoji: string;
+  updatedAt: Timestamp;
+}
+
 export type UserRole = "adult" | "child";
 export type MessageType = "text" | "audio";
 export type MessageStatus = "loading" | "sent";
@@ -123,4 +135,5 @@ export interface Message {
   timestamp: Date;
   createdAtMs: number;
   status?: MessageStatus;
+  reactions?: Reaction[];
 }

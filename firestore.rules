@@ -143,5 +143,22 @@ service cloud.firestore {
         chatDoc(chatId).data.tenantId == userTenant() &&
         memberId() in chatDoc(chatId).data.participants;
     }
+
+    match /chats/{chatId}/reactions/{reactionId} {
+      allow read: if request.auth != null &&
+        chatDoc(chatId).data.tenantId == userTenant() &&
+        memberId() in chatDoc(chatId).data.participants;
+      allow create: if request.auth != null &&
+        memberId() in chatDoc(chatId).data.participants &&
+        request.resource.data.userId == memberId() &&
+        request.resource.data.keys().hasAll(['messageId', 'userId', 'emoji', 'updatedAt']);
+      allow update: if request.auth != null &&
+        memberId() in chatDoc(chatId).data.participants &&
+        resource.data.userId == memberId() &&
+        request.resource.data.keys().hasOnly(['emoji', 'updatedAt']);
+      allow delete: if request.auth != null &&
+        memberId() in chatDoc(chatId).data.participants &&
+        resource.data.userId == memberId();
+    }
   }
 }

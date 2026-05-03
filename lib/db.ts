@@ -67,6 +67,18 @@ async function migrate(db: SQLite.SQLiteDatabase) {
       ON chats (last_message_at);
   `);
 
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS message_reactions (
+      message_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      emoji TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'sent',
+      PRIMARY KEY (message_id, user_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_reactions_message_id
+      ON message_reactions (message_id);
+  `);
+
   await ensureColumn(db, "messages", "local_audio_uri", "TEXT");
   await ensureColumn(db, "messages", "audio_downloaded_at", "TEXT");
   await ensureColumn(db, "messages", "audio_duration", "REAL");

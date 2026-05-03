@@ -2,9 +2,11 @@ import {
   ensureTextMessageInFirestore,
   updateChatAfterOutgoingMessage,
 } from "@/lib/firestoreMessages";
+import { ensureReactionInFirestore } from "@/lib/firestoreReactions";
 import { AudioCacheRepository } from "@/lib/AudioCacheRepository";
 import { db } from "@/lib/firebase";
 import { MessageRepository } from "@/lib/MessageRepository";
+import { ReactionRepository } from "@/lib/ReactionRepository";
 import type { AppUser, MessageDoc } from "@/types/chat";
 import {
   collection,
@@ -127,5 +129,29 @@ export async function syncPendingTextMessages(
     }
   } finally {
     pendingSyncInFlight = false;
+  }
+}
+
+export async function syncPendingReactions(
+  currentUser: AppUser,
+  isOnline = true
+) {
+  if (!isOnline) return;
+
+  const pending = await ReactionRepository.getPendingReactions();
+  for (const reaction of pending) {
+    if (reaction.userId !== currentUser.id) continue;
+
+    try {
+      await ensureReactionInFirestore({
+        chatId: reaction.chatId,
+        messageId: reaction.messageId,
+        userId: reaction.userId,
+        emoji: reaction.emoji,
+      });
+      await ReactionRepository.updateStatus(reaction.messageId, reaction.userId, "sent");
+    } catch {
+      // Leave pending for retry.
+    }
   }
 }

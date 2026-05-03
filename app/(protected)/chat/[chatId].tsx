@@ -1,12 +1,15 @@
 import { AppHeader } from "@/components/AppHeader";
 import { ChatBubble } from "@/components/ChatBubble";
 import { ChatInput, type ChatInputHandle } from "@/components/ChatInput";
+import { ReactionMenu } from "@/components/ReactionMenu";
+import { ReactionsDialog } from "@/components/ReactionsDialog";
 import { useAuth } from "@/context/AuthContext";
 import { useChatReadReceipts } from "@/hooks/useChatReadReceipts";
 import { useChats } from "@/hooks/useChats";
 import { useConnectivity } from "@/hooks/useConnectivity";
 import { useMemberProfiles } from "@/hooks/useMemberProfiles";
 import { useMessages } from "@/hooks/useMessages";
+import { useReactions } from "@/hooks/useReactions";
 import { getChatDisplayName } from "@/lib/chatDisplayName";
 import { colors } from "@/theme/colors";
 import type { Message } from "@/types/chat";
@@ -99,6 +102,7 @@ export default function ChatScreen() {
   const { isOnline } = useConnectivity();
   const { chats } = useChats();
   const { messages, loading } = useMessages(chatId ?? "");
+  const { reactions, reactToMessage } = useReactions(chatId ?? "");
   const memberProfiles = useMemberProfiles();
   const visibleMessages = useMemo(
     () => (loading ? [] : messages),
@@ -125,6 +129,22 @@ export default function ChatScreen() {
   const [audioPlaybackRate, setAudioPlaybackRate] = useState<1 | 1.5 | 2>(1);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
 
+  const [reactionTarget, setReactionTarget] = useState<{
+    messageId: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(null);
+  const [reactionsDialogMessageId, setReactionsDialogMessageId] = useState<string | null>(null);
+
+  const messagesWithReactions = useMemo<Message[]>(() => {
+    return visibleMessages.map((msg) => ({
+      ...msg,
+      reactions: reactions[msg.id] ?? [],
+    }));
+  }, [visibleMessages, reactions]);
+
   const audioSequenceMap = useMemo(() => {
     const sequence = new Map<string, string | undefined>();
     for (let i = 0; i < visibleMessages.length; i += 1) {
@@ -150,7 +170,7 @@ export default function ChatScreen() {
   }, [chatId]);
 
   const chatListData = useMemo<ChatListItem[]>(() => {
-    const ordered = [...visibleMessages].reverse();
+    const ordered = [...messagesWithReactions].reverse();
     const list: ChatListItem[] = [];
 
     ordered.forEach((message, index) => {
@@ -177,7 +197,7 @@ export default function ChatScreen() {
     });
 
     return list;
-  }, [visibleMessages]);
+  }, [messagesWithReactions]);
 
   useEffect(() => {
     setActiveDayLabel("");
@@ -298,6 +318,58 @@ export default function ChatScreen() {
     listRef.current?.scrollToOffset({ offset: 0, animated: true });
   }, []);
 
+  const handleReactionPress = useCallback(
+    (messageId: string, x: number, y: number, width: number, height: number) => {
+      setReactionTarget({ messageId, x, y, width, height });
+    },
+    []
+  );
+
+  const handleQuickEmojiSelect = useCallback(
+    (emoji: string) => {
+      if (!reactionTarget) return;
+      void reactToMessage(reactionTarget.messageId, emoji);
+      setReactionTarget(null);
+    },
+    [reactionTarget, reactToMessage]
+  );
+
+  const handleReactionChipPress = useCallback(
+    (messageId: string) => () => {
+      setReactionsDialogMessageId(messageId);
+    },
+    []
+  );
+
+  const closeReactionMenu = useCallback(() => {
+    setReactionTarget(null);
+  }, []);
+
+  const closeReactionsDialog = useCallback(() => {
+    setReactionsDialogMessageId(null);
+  }, []);
+
+  const handleRemoveOwnReaction = useCallback(() => {
+    if (!reactionsDialogMessageId || !currentUserId) return;
+    const msgReactions = reactions[reactionsDialogMessageId] ?? [];
+    const own = msgReactions.find((r) => r.userId === currentUserId);
+    if (own) {
+      void reactToMessage(reactionsDialogMessageId, own.emoji);
+    }
+  }, [reactionsDialogMessageId, currentUserId, reactions, reactToMessage]);
+
+  const memberNames = useMemo(() => {
+    const names: Record<string, string> = {};
+    for (const [id, profile] of Object.entries(memberProfiles)) {
+      names[id] = profile.name;
+    }
+    return names;
+  }, [memberProfiles]);
+
+  const dialogReactions = reactionsDialogMessageId
+    ? (reactions[reactionsDialogMessageId] ?? [])
+    : [];
+
   if (!chatId || !currentUserId) {
     return null;
   }
@@ -386,9 +458,32 @@ export default function ChatScreen() {
                   participants,
                   readUpTo
                 )}
+                reactions={item.message.reactions}
+                currentUserId={currentUserId}
+                onReactionPress={handleReactionPress}
+                onReactionChipPress={handleReactionChipPress(item.message.id)}
               />
             );
           }}
+        />
+        {reactionTarget ? (
+          <ReactionMenu
+            visible
+            targetX={reactionTarget.x}
+            targetY={reactionTarget.y}
+            targetWidth={reactionTarget.width}
+            targetHeight={reactionTarget.height}
+            onEmojiSelect={handleQuickEmojiSelect}
+            onClose={closeReactionMenu}
+          />
+        ) : null}
+        <ReactionsDialog
+          visible={reactionsDialogMessageId !== null}
+          reactions={dialogReactions}
+          currentUserId={currentUserId}
+          memberNames={memberNames}
+          onRemoveReaction={handleRemoveOwnReaction}
+          onClose={closeReactionsDialog}
         />
         {showJumpToLatest ? (
           <Pressable
@@ -426,7 +521,6 @@ const styles = StyleSheet.create({
   },
   separatorWrap: {
     flexDirection: "row",
-    alignItems: "center",
     marginVertical: 12,
     paddingHorizontal: 14,
   },
