@@ -6,6 +6,7 @@ import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { View } from "react-native";
+import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 function RootLayoutNav() {
@@ -35,11 +36,13 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <AuthProvider>
-        <PushTokenSync />
-        <StatusBar style="auto" />
-        <RootLayoutNav />
-      </AuthProvider>
+      <KeyboardProvider>
+        <AuthProvider>
+          <PushTokenSync />
+          <StatusBar style="auto" />
+          <RootLayoutNav />
+        </AuthProvider>
+      </KeyboardProvider>
     </SafeAreaProvider>
   );
 }

@@ -15,15 +15,15 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
-  Dimensions,
   FlatList,
-  Keyboard,
-  KeyboardAvoidingView,
-  Platform,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import {
+  KeyboardAvoidingView,
+  useKeyboardState,
+} from "react-native-keyboard-controller";
 
 interface DaySeparatorItem {
   id: string;
@@ -58,37 +58,6 @@ function readReceiptStatus(
     return r != null && r.toMillis() >= ts;
   });
   return allRead ? "read" : "sent";
-}
-
-function getKeyboardOverlap(screenY: number): number {
-  const windowHeight = Dimensions.get("window").height;
-  return Math.max(0, windowHeight - screenY);
-}
-
-function useAndroidKeyboardOverlap() {
-  const [overlap, setOverlap] = useState(0);
-
-  useEffect(() => {
-    if (Platform.OS !== "android") return;
-
-    const show = Keyboard.addListener("keyboardDidShow", (event) => {
-      setOverlap(getKeyboardOverlap(event.endCoordinates.screenY));
-    });
-    const change = Keyboard.addListener("keyboardDidChangeFrame", (event) => {
-      setOverlap(getKeyboardOverlap(event.endCoordinates.screenY));
-    });
-    const hide = Keyboard.addListener("keyboardDidHide", () => {
-      setOverlap(0);
-    });
-
-    return () => {
-      show.remove();
-      change.remove();
-      hide.remove();
-    };
-  }, []);
-
-  return overlap;
 }
 
 function getDayKey(date: Date): string {
@@ -136,7 +105,7 @@ export default function ChatScreen() {
     visibleMessages,
     chat?.readUpTo
   );
-  const keyboardOverlap = useAndroidKeyboardOverlap();
+  const isKeyboardVisible = useKeyboardState((state) => state.isVisible);
   const inputRef = useRef<ChatInputHandle>(null);
   const badgeOpacity = useRef(new Animated.Value(0)).current;
   const hasScrolledRef = useRef(false);
@@ -221,14 +190,14 @@ export default function ChatScreen() {
   }, []);
 
   const keepComposerFocused = useCallback(() => {
-    if (keyboardOverlap <= 0) return;
+    if (!isKeyboardVisible) return;
     requestAnimationFrame(() => {
       inputRef.current?.focus();
     });
     setTimeout(() => {
       inputRef.current?.focus();
     }, 50);
-  }, [keyboardOverlap]);
+  }, [isKeyboardVisible]);
 
   const showBadge = useCallback(() => {
     if (!hasScrolledRef.current) return;
@@ -298,10 +267,7 @@ export default function ChatScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      style={[styles.screen, { paddingBottom: keyboardOverlap }]}
-    >
+    <KeyboardAvoidingView behavior="padding" style={styles.screen}>
       <AppHeader title={chatTitle} onBack={() => router.back()} />
       <View style={styles.messagesWrap}>
         {activeDayLabel ? (
@@ -386,7 +352,7 @@ export default function ChatScreen() {
           }}
         />
       </View>
-      <ChatInput ref={inputRef} chatId={chatId} keyboardVisible={keyboardOverlap > 0} />
+      <ChatInput ref={inputRef} chatId={chatId} keyboardVisible={isKeyboardVisible} />
     </KeyboardAvoidingView>
   );
 }
