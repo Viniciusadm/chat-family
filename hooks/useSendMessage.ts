@@ -10,6 +10,7 @@ import {
 import { storage } from "@/lib/firebase";
 import { MessageRepository } from "@/lib/MessageRepository";
 import { randomUuid } from "@/lib/randomUuid";
+import type { MessageReplySnapshot } from "@/types/chat";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { useState } from "react";
 
@@ -20,7 +21,10 @@ export function useSendMessage(chatId: string) {
   const { isOnline } = useConnectivity();
   const [isSending, setIsSending] = useState(false);
 
-  const sendText = async (text: string) => {
+  const sendText = async (
+    text: string,
+    options?: { replyTo?: MessageReplySnapshot | null }
+  ) => {
     const trimmed = text.trim();
     if (!currentUser || !tenantId || !trimmed) return;
     setIsSending(true);
@@ -35,6 +39,7 @@ export function useSendMessage(chatId: string) {
         type: "text",
         status: "loading",
         createdAt,
+        replyTo: options?.replyTo ?? null,
       });
       await ChatRepository.updateLastMessage(chatId, {
         text: trimmed,
@@ -48,6 +53,7 @@ export function useSendMessage(chatId: string) {
         tenantId,
         senderId: currentUser.id,
         text: trimmed,
+        replyTo: options?.replyTo ?? null,
       });
       await MessageRepository.updateStatus(messageId, "sent");
       await updateChatAfterOutgoingMessage(
@@ -65,7 +71,12 @@ export function useSendMessage(chatId: string) {
 
   const sendAudio = async (
     audio: SendableAudio,
-    options?: { extension?: string; contentType?: string; duration?: number }
+    options?: {
+      extension?: string;
+      contentType?: string;
+      duration?: number;
+      replyTo?: MessageReplySnapshot | null;
+    }
   ) => {
     if (!currentUser || !tenantId) return;
     if (!isOnline || !firebaseUser) return;
@@ -94,6 +105,7 @@ export function useSendMessage(chatId: string) {
         senderId: currentUser.id,
         audioUrl,
         audioDuration: options?.duration ?? null,
+        replyTo: options?.replyTo ?? null,
       });
       const sentAt = new Date();
       await MessageRepository.insertLocalMessage({
@@ -106,6 +118,7 @@ export function useSendMessage(chatId: string) {
         createdAt: sentAt,
         syncedAt: sentAt,
         audioDuration: options?.duration ?? null,
+        replyTo: options?.replyTo ?? null,
       });
       void AudioCacheRepository.downloadMessageAudio({
         chatId,

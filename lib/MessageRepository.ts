@@ -1,5 +1,12 @@
 import { getDatabase } from "@/lib/db";
-import type { Message, MessageDoc, MessageStatus, MessageType } from "@/types/chat";
+import type {
+  Message,
+  MessageDoc,
+  MessageReplySnapshot,
+  MessageReplyType,
+  MessageStatus,
+  MessageType,
+} from "@/types/chat";
 
 type MessageRow = {
   id: string;
@@ -13,6 +20,11 @@ type MessageRow = {
   local_audio_uri: string | null;
   audio_downloaded_at: string | null;
   audio_duration: number | null;
+  reply_to_message_id: string | null;
+  reply_to_sender_id: string | null;
+  reply_to_sender_name: string | null;
+  reply_to_type: string | null;
+  reply_to_preview: string | null;
 };
 
 type MessageSyncRow = {
@@ -32,6 +44,7 @@ export type LocalMessageInput = {
   localAudioUri?: string | null;
   audioDownloadedAt?: Date | null;
   audioDuration?: number | null;
+  replyTo?: MessageReplySnapshot | null;
 };
 
 type Listener = () => void;
@@ -40,6 +53,23 @@ const listeners = new Map<string, Set<Listener>>();
 
 function emit(conversationId: string) {
   listeners.get(conversationId)?.forEach((listener) => listener());
+}
+
+function normalizeReplyType(type: string | null | undefined): MessageReplyType {
+  if (type === "audio" || type === "image") return type;
+  return "text";
+}
+
+function rowReplyTo(row: MessageRow): MessageReplySnapshot | undefined {
+  if (!row.reply_to_message_id) return undefined;
+
+  return {
+    id: row.reply_to_message_id,
+    senderId: row.reply_to_sender_id ?? "",
+    senderName: row.reply_to_sender_name ?? "Participante",
+    type: normalizeReplyType(row.reply_to_type),
+    preview: row.reply_to_preview ?? "",
+  };
 }
 
 function rowToMessage(row: MessageRow): Message {
@@ -61,6 +91,7 @@ function rowToMessage(row: MessageRow): Message {
     timestamp,
     createdAtMs: timestamp.getTime(),
     status: row.status === "loading" ? "loading" : "sent",
+    replyTo: rowReplyTo(row),
   };
 }
 
@@ -79,6 +110,11 @@ function inputParams(message: LocalMessageInput) {
       ? message.audioDownloadedAt.toISOString()
       : null,
     $audioDuration: message.audioDuration ?? null,
+    $replyToMessageId: message.replyTo?.id ?? null,
+    $replyToSenderId: message.replyTo?.senderId ?? null,
+    $replyToSenderName: message.replyTo?.senderName ?? null,
+    $replyToType: message.replyTo?.type ?? null,
+    $replyToPreview: message.replyTo?.preview ?? null,
   };
 }
 
@@ -130,7 +166,12 @@ export const MessageRepository = {
         synced_at,
         local_audio_uri,
         audio_downloaded_at,
-        audio_duration
+        audio_duration,
+        reply_to_message_id,
+        reply_to_sender_id,
+        reply_to_sender_name,
+        reply_to_type,
+        reply_to_preview
       ) VALUES (
         $id,
         $conversationId,
@@ -142,7 +183,12 @@ export const MessageRepository = {
         $syncedAt,
         $localAudioUri,
         $audioDownloadedAt,
-        $audioDuration
+        $audioDuration,
+        $replyToMessageId,
+        $replyToSenderId,
+        $replyToSenderName,
+        $replyToType,
+        $replyToPreview
       )
       ON CONFLICT(id) DO UPDATE SET
         conversation_id = excluded.conversation_id,
@@ -163,7 +209,24 @@ export const MessageRepository = {
           excluded.audio_downloaded_at,
           messages.audio_downloaded_at
         ),
-        audio_duration = COALESCE(excluded.audio_duration, messages.audio_duration)`,
+        audio_duration = COALESCE(excluded.audio_duration, messages.audio_duration),
+        reply_to_message_id = COALESCE(
+          excluded.reply_to_message_id,
+          messages.reply_to_message_id
+        ),
+        reply_to_sender_id = COALESCE(
+          excluded.reply_to_sender_id,
+          messages.reply_to_sender_id
+        ),
+        reply_to_sender_name = COALESCE(
+          excluded.reply_to_sender_name,
+          messages.reply_to_sender_name
+        ),
+        reply_to_type = COALESCE(excluded.reply_to_type, messages.reply_to_type),
+        reply_to_preview = COALESCE(
+          excluded.reply_to_preview,
+          messages.reply_to_preview
+        )`,
       inputParams(message)
     );
     if (options.notify !== false) {
@@ -247,6 +310,7 @@ export const MessageRepository = {
       createdAt,
       syncedAt: new Date(),
       audioDuration: isAudio ? data.audioDuration ?? null : null,
+      replyTo: data.replyTo ?? null,
     }, options);
   },
 

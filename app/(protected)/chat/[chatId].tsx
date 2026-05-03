@@ -11,8 +11,9 @@ import { useMemberProfiles } from "@/hooks/useMemberProfiles";
 import { useMessages } from "@/hooks/useMessages";
 import { useReactions } from "@/hooks/useReactions";
 import { getChatDisplayName } from "@/lib/chatDisplayName";
+import { createReplySnapshot } from "@/lib/messageReply";
 import { colors } from "@/theme/colors";
-import type { Message } from "@/types/chat";
+import type { Message, MessageReplySnapshot } from "@/types/chat";
 import { Ionicons } from "@expo/vector-icons";
 import type { Timestamp } from "firebase/firestore";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -123,11 +124,15 @@ export default function ChatScreen() {
   const hasScrolledRef = useRef(false);
   const visibleDayLabelRef = useRef("");
   const hideBadgeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingScrollIndexRef = useRef<number | null>(null);
 
   const [activeDayLabel, setActiveDayLabel] = useState<string>("");
   const [activeAudioMessageId, setActiveAudioMessageId] = useState<string | null>(null);
   const [audioPlaybackRate, setAudioPlaybackRate] = useState<1 | 1.5 | 2>(1);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
+  const [replyTo, setReplyTo] = useState<MessageReplySnapshot | null>(null);
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
 
   const [reactionTarget, setReactionTarget] = useState<{
     messageId: string;
@@ -164,9 +169,15 @@ export default function ChatScreen() {
     return sequence;
   }, [visibleMessages]);
 
+  const messagesById = useMemo(() => {
+    return new Map(visibleMessages.map((message) => [message.id, message]));
+  }, [visibleMessages]);
+
 
   useEffect(() => {
     setActiveAudioMessageId(null);
+    setReplyTo(null);
+    setHighlightedMessageId(null);
   }, [chatId]);
 
   const chatListData = useMemo<ChatListItem[]>(() => {
@@ -215,6 +226,9 @@ export default function ChatScreen() {
     return () => {
       if (hideBadgeTimeoutRef.current) {
         clearTimeout(hideBadgeTimeoutRef.current);
+      }
+      if (highlightTimeoutRef.current) {
+        clearTimeout(highlightTimeoutRef.current);
       }
     };
   }, []);
@@ -318,6 +332,62 @@ export default function ChatScreen() {
     listRef.current?.scrollToOffset({ offset: 0, animated: true });
   }, []);
 
+  const getSenderName = useCallback(
+    (message: Message) => {
+      if (message.senderId === currentUserId) {
+        return currentUser?.name ?? "Você";
+      }
+
+      return memberProfiles[message.senderId]?.name ?? "Participante";
+    },
+    [currentUser?.name, currentUserId, memberProfiles]
+  );
+
+  const handleReplySelect = useCallback(
+    (message: Message) => {
+      setReplyTo(createReplySnapshot(message, getSenderName(message)));
+      requestAnimationFrame(() => {
+        inputRef.current?.focus();
+      });
+    },
+    [getSenderName]
+  );
+
+  const clearReply = useCallback(() => {
+    setReplyTo(null);
+  }, []);
+
+  const highlightMessage = useCallback((messageId: string) => {
+    setHighlightedMessageId(messageId);
+    if (highlightTimeoutRef.current) {
+      clearTimeout(highlightTimeoutRef.current);
+    }
+    highlightTimeoutRef.current = setTimeout(() => {
+      setHighlightedMessageId((current) =>
+        current === messageId ? null : current
+      );
+      highlightTimeoutRef.current = null;
+    }, 1600);
+  }, []);
+
+  const jumpToMessage = useCallback(
+    (messageId: string) => {
+      const index = chatListData.findIndex(
+        (entry) => entry.type === "message" && entry.message.id === messageId
+      );
+      if (index < 0) return;
+
+      pendingScrollIndexRef.current = index;
+      listRef.current?.scrollToIndex({
+        index,
+        animated: true,
+        viewPosition: 0.5,
+      });
+      highlightMessage(messageId);
+    },
+    [chatListData, highlightMessage]
+  );
+
   const handleReactionPress = useCallback(
     (messageId: string, x: number, y: number, width: number, height: number) => {
       setReactionTarget({ messageId, x, y, width, height });
@@ -398,6 +468,21 @@ export default function ChatScreen() {
           onScroll={handleScrollActivity}
           onScrollEndDrag={handleScrollPositionSettled}
           onMomentumScrollEnd={handleScrollPositionSettled}
+          onScrollToIndexFailed={(info) => {
+            listRef.current?.scrollToOffset({
+              offset: info.averageItemLength * info.index,
+              animated: true,
+            });
+            const retryIndex = pendingScrollIndexRef.current;
+            if (retryIndex == null) return;
+            setTimeout(() => {
+              listRef.current?.scrollToIndex({
+                index: retryIndex,
+                animated: true,
+                viewPosition: 0.5,
+              });
+            }, 80);
+          }}
           scrollEventThrottle={16}
           onViewableItemsChanged={({ viewableItems }) => {
             const firstVisible = viewableItems.find(
@@ -462,6 +547,16 @@ export default function ChatScreen() {
                 currentUserId={currentUserId}
                 onReactionPress={handleReactionPress}
                 onReactionChipPress={handleReactionChipPress(item.message.id)}
+                onReply={handleReplySelect}
+                highlighted={highlightedMessageId === item.message.id}
+                replyAvailable={
+                  !item.message.replyTo || messagesById.has(item.message.replyTo.id)
+                }
+                onQuotedReplyPress={
+                  item.message.replyTo && messagesById.has(item.message.replyTo.id)
+                    ? () => jumpToMessage(item.message.replyTo!.id)
+                    : undefined
+                }
                 onSenderPress={
                   chat?.isGroup && item.message.senderId !== currentUserId
                     ? () => {
@@ -513,7 +608,13 @@ export default function ChatScreen() {
           </Pressable>
         ) : null}
       </View>
-      <ChatInput ref={inputRef} chatId={chatId} keyboardVisible={isKeyboardVisible} />
+      <ChatInput
+        ref={inputRef}
+        chatId={chatId}
+        keyboardVisible={isKeyboardVisible}
+        replyTo={replyTo}
+        onCancelReply={clearReply}
+      />
     </KeyboardAvoidingView>
   );
 }

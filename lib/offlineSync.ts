@@ -115,6 +115,7 @@ export async function syncPendingTextMessages(
           tenantId,
           senderId: currentUser.id,
           text: message.content,
+          replyTo: message.replyTo ?? null,
         });
         await updateChatAfterOutgoingMessage(
           message.chatId,

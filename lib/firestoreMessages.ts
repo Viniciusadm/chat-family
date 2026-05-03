@@ -1,5 +1,5 @@
 import { db } from "@/lib/firebase";
-import type { ChatDoc } from "@/types/chat";
+import type { ChatDoc, MessageReplySnapshot } from "@/types/chat";
 import {
   doc,
   getDoc,
@@ -41,12 +41,14 @@ export async function ensureTextMessageInFirestore({
   tenantId,
   senderId,
   text,
+  replyTo,
 }: {
   chatId: string;
   messageId: string;
   tenantId: string;
   senderId: string;
   text: string;
+  replyTo?: MessageReplySnapshot | null;
 }) {
   const messageRef = doc(db, "chats", chatId, "messages", messageId);
   const existing = await getDoc(messageRef);
@@ -58,6 +60,7 @@ export async function ensureTextMessageInFirestore({
     text,
     audioUrl: null,
     audioDuration: null,
+    replyTo: replyTo ?? null,
     createdAt: serverTimestamp(),
   });
 }
@@ -69,6 +72,7 @@ export async function ensureAudioMessageInFirestore({
   senderId,
   audioUrl,
   audioDuration,
+  replyTo,
 }: {
   chatId: string;
   messageId: string;
@@ -76,6 +80,7 @@ export async function ensureAudioMessageInFirestore({
   senderId: string;
   audioUrl: string;
   audioDuration: number | null;
+  replyTo?: MessageReplySnapshot | null;
 }) {
   const messageRef = doc(db, "chats", chatId, "messages", messageId);
   const existing = await getDoc(messageRef);
@@ -87,6 +92,7 @@ export async function ensureAudioMessageInFirestore({
     text: null,
     audioUrl,
     audioDuration,
+    replyTo: replyTo ?? null,
     createdAt: serverTimestamp(),
   });
 }

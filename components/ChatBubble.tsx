@@ -2,10 +2,18 @@ import { ReactionBubble } from "@/components/ReactionBubble";
 import type { Message, Reaction } from "@/types/chat";
 import { colors } from "@/theme/colors";
 import { MaterialIcons } from "@expo/vector-icons";
-import React, { useRef } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import React, { useMemo, useRef } from "react";
+import {
+  Animated,
+  PanResponder,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { AudioBubble } from "./AudioBubble";
 import { ProfileAvatar } from "./ProfileAvatar";
+import { QuotedReply } from "./QuotedReply";
 
 interface ChatBubbleProps {
   message: Message;
@@ -25,6 +33,10 @@ interface ChatBubbleProps {
   onReactionPress?: (messageId: string, pageX: number, pageY: number, width: number, height: number) => void;
   onReactionChipPress?: () => void;
   onSenderPress?: () => void;
+  onReply?: (message: Message) => void;
+  onQuotedReplyPress?: () => void;
+  replyAvailable?: boolean;
+  highlighted?: boolean;
 }
 
 function formatTime(date: Date) {
@@ -52,6 +64,10 @@ export function ChatBubble({
   onReactionPress,
   onReactionChipPress,
   onSenderPress,
+  onReply,
+  onQuotedReplyPress,
+  replyAvailable = true,
+  highlighted = false,
 }: ChatBubbleProps) {
   const selfReadReceipt = isSelf ? readReceipt ?? "sent" : undefined;
   const audioSource =
@@ -61,6 +77,33 @@ export function ChatBubble({
   const audioUnavailableOffline =
     message.type === "audio" && !message.audioLocalUri && !isOnline;
   const bubbleRef = useRef<View>(null);
+  const swipeX = useRef(new Animated.Value(0)).current;
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, gesture) =>
+          gesture.dx > 12 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.4,
+        onPanResponderMove: (_, gesture) => {
+          swipeX.setValue(Math.min(gesture.dx, 56));
+        },
+        onPanResponderRelease: (_, gesture) => {
+          if (gesture.dx > 48) {
+            onReply?.(message);
+          }
+          Animated.spring(swipeX, {
+            toValue: 0,
+            useNativeDriver: true,
+          }).start();
+        },
+        onPanResponderTerminate: () => {
+          Animated.spring(swipeX, {
+            toValue: 0,
+            useNativeDriver: true,
+          }).start();
+        },
+      }),
+    [message, onReply, swipeX]
+  );
 
   const handleLongPress = () => {
     if (!onReactionPress) return;
@@ -81,7 +124,14 @@ export function ChatBubble({
           <ProfileAvatar name={senderName} photoUrl={senderPhotoUrl} size={28} />
         </Pressable>
       ) : null}
-      <View style={[styles.column, isSelf ? styles.columnSelf : styles.columnOther]}>
+      <Animated.View
+        {...panResponder.panHandlers}
+        style={[
+          styles.column,
+          isSelf ? styles.columnSelf : styles.columnOther,
+          { transform: [{ translateX: swipeX }] },
+        ]}
+      >
         <Pressable
           ref={bubbleRef}
           onLongPress={handleLongPress}
@@ -89,6 +139,7 @@ export function ChatBubble({
           style={({ pressed }) => [
             styles.bubble,
             isSelf ? styles.bubbleSelf : styles.bubbleOther,
+            highlighted ? styles.bubbleHighlighted : null,
             pressed ? styles.bubblePressed : null,
           ]}
         >
@@ -100,6 +151,14 @@ export function ChatBubble({
             >
               {senderName}
             </Text>
+          ) : null}
+          {message.replyTo ? (
+            <QuotedReply
+              reply={message.replyTo}
+              available={replyAvailable}
+              isSelf={isSelf}
+              onPress={onQuotedReplyPress}
+            />
           ) : null}
           {message.type === "audio" && audioUnavailableOffline ? (
             <Text
@@ -167,7 +226,7 @@ export function ChatBubble({
             />
           </View>
         ) : null}
-      </View>
+      </Animated.View>
     </View>
   );
 }
@@ -188,6 +247,8 @@ const styles = StyleSheet.create({
   },
   bubble: {
     borderRadius: 16,
+    borderWidth: 2,
+    borderColor: "transparent",
     paddingHorizontal: 14,
     paddingVertical: 10,
     shadowColor: "#000",
@@ -225,6 +286,9 @@ const styles = StyleSheet.create({
   },
   bubblePressed: {
     opacity: 0.85,
+  },
+  bubbleHighlighted: {
+    borderColor: colors.primary,
   },
   text: {
     fontSize: 15,

@@ -65,6 +65,7 @@ export interface MessageDoc {
   text: string | null;
   audioUrl: string | null;
   audioDuration: number | null;
+  replyTo?: MessageReplySnapshot | null;
   createdAt: Timestamp;
 }
 
@@ -82,7 +83,16 @@ export interface ReactionDoc {
 
 export type UserRole = "adult" | "child";
 export type MessageType = "text" | "audio";
+export type MessageReplyType = MessageType | "image";
 export type MessageStatus = "loading" | "sent";
+
+export interface MessageReplySnapshot {
+  id: string;
+  senderId: string;
+  senderName: string;
+  type: MessageReplyType;
+  preview: string;
+}
 
 export interface AppUser {
   id: string;
@@ -135,5 +145,6 @@ export interface Message {
   timestamp: Date;
   createdAtMs: number;
   status?: MessageStatus;
+  replyTo?: MessageReplySnapshot;
   reactions?: Reaction[];
 }

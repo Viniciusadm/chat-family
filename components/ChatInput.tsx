@@ -1,5 +1,6 @@
 import { useSendMessage } from "@/hooks/useSendMessage";
 import { colors } from "@/theme/colors";
+import type { MessageReplySnapshot } from "@/types/chat";
 import { Ionicons } from "@expo/vector-icons";
 import {
   RecordingPresets,
@@ -23,10 +24,13 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ReplyPreview } from "./ReplyPreview";
 
 interface ChatInputProps {
   chatId: string;
   keyboardVisible?: boolean;
+  replyTo?: MessageReplySnapshot | null;
+  onCancelReply?: () => void;
 }
 
 export interface ChatInputHandle {
@@ -34,7 +38,12 @@ export interface ChatInputHandle {
 }
 
 export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
-function ChatInput({ chatId, keyboardVisible = false }, ref) {
+function ChatInput({
+  chatId,
+  keyboardVisible = false,
+  replyTo = null,
+  onCancelReply,
+}, ref) {
   const { sendText, sendAudio, isSending } = useSendMessage(chatId);
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const insets = useSafeAreaInsets();
@@ -77,8 +86,12 @@ function ChatInput({ chatId, keyboardVisible = false }, ref) {
     requestAnimationFrame(() => {
       inputRef.current?.focus();
     });
-    await sendText(trimmed);
-  }, [text, isSending, sendText]);
+    const selectedReply = replyTo;
+    await sendText(trimmed, { replyTo: selectedReply });
+    if (selectedReply) {
+      onCancelReply?.();
+    }
+  }, [text, isSending, onCancelReply, replyTo, sendText]);
 
   const resetRecordingState = useCallback(() => {
     recordingActiveRef.current = false;
@@ -149,7 +162,11 @@ function ChatInput({ chatId, keyboardVisible = false }, ref) {
         extension: "m4a",
         contentType: "audio/mp4",
         duration: durationMillis > 0 ? durationMillis / 1000 : undefined,
+        replyTo,
       });
+      if (replyTo) {
+        onCancelReply?.();
+      }
     } catch {
       //
     }
@@ -158,6 +175,9 @@ function ChatInput({ chatId, keyboardVisible = false }, ref) {
 
   return (
     <View style={[styles.bar, { paddingBottom: bottomPadding }]}>
+      {replyTo && onCancelReply ? (
+        <ReplyPreview reply={replyTo} onCancel={onCancelReply} />
+      ) : null}
       <View style={styles.row}>
         <View style={styles.inputShell}>
           <TextInput
