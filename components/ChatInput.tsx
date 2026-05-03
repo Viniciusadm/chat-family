@@ -186,15 +186,12 @@ function ChatInput({
             placeholder="Digite uma mensagem"
             placeholderTextColor={colors.mutedForeground}
             style={styles.input}
-            multiline={false}
+            multiline={true}
             editable
             onChangeText={(value) => {
               if (recordingActiveRef.current) return;
               setText(value);
             }}
-            onSubmitEditing={() => void handleSendText()}
-            returnKeyType="send"
-            blurOnSubmit={false}
           />
         </View>
         {text.trim() && !isRecording ? (
