@@ -45,7 +45,8 @@ interface MessageItem {
 
 type ChatListItem = DaySeparatorItem | MessageItem;
 
-const JUMP_TO_LATEST_OFFSET = 80;
+const SHOW_JUMP_TO_LATEST_OFFSET = 120;
+const HIDE_JUMP_TO_LATEST_OFFSET = 48;
 
 function readReceiptStatus(
   message: Message,
@@ -232,20 +233,32 @@ export default function ChatScreen() {
     }, 2000);
   }, [badgeOpacity]);
 
+  const syncJumpToLatestVisibility = useCallback((offsetY: number) => {
+    setShowJumpToLatest((current) => {
+      if (current) {
+        return offsetY >= HIDE_JUMP_TO_LATEST_OFFSET;
+      }
+
+      return offsetY > SHOW_JUMP_TO_LATEST_OFFSET;
+    });
+  }, []);
+
   const handleScrollActivity = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const isViewingOlderMessages =
-        event.nativeEvent.contentOffset.y > JUMP_TO_LATEST_OFFSET;
-
-      setShowJumpToLatest((current) =>
-        current === isViewingOlderMessages ? current : isViewingOlderMessages
-      );
+      syncJumpToLatestVisibility(event.nativeEvent.contentOffset.y);
 
       if (!hasScrolledRef.current) return;
       showBadge();
       scheduleBadgeHide();
     },
-    [scheduleBadgeHide, showBadge]
+    [scheduleBadgeHide, showBadge, syncJumpToLatestVisibility]
+  );
+
+  const handleScrollPositionSettled = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      syncJumpToLatestVisibility(event.nativeEvent.contentOffset.y);
+    },
+    [syncJumpToLatestVisibility]
   );
 
   const handleUserScrollStart = useCallback(() => {
@@ -283,7 +296,6 @@ export default function ChatScreen() {
 
   const jumpToLatestMessages = useCallback(() => {
     listRef.current?.scrollToOffset({ offset: 0, animated: true });
-    setShowJumpToLatest(false);
   }, []);
 
   if (!chatId || !currentUserId) {
@@ -312,7 +324,9 @@ export default function ChatScreen() {
           onScrollBeginDrag={handleUserScrollStart}
           onMomentumScrollBegin={handleUserScrollStart}
           onScroll={handleScrollActivity}
-          scrollEventThrottle={120}
+          onScrollEndDrag={handleScrollPositionSettled}
+          onMomentumScrollEnd={handleScrollPositionSettled}
+          scrollEventThrottle={16}
           onViewableItemsChanged={({ viewableItems }) => {
             const firstVisible = viewableItems.find(
               (entry) => entry.item.type === "message" || entry.item.type === "separator"
