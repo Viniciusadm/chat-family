@@ -1,4 +1,4 @@
-import { getDatabase } from "@/lib/db";
+import { getDatabase, withExclusiveWrite } from "@/lib/db";
 import type { Reaction } from "@/types/chat";
 
 type ReactionRow = {
@@ -67,21 +67,23 @@ export const ReactionRepository = {
     status: "loading" | "sent",
     conversationId: string
   ) {
-    const db = await getDatabase();
-    await db.runAsync(
-      `INSERT OR REPLACE INTO message_reactions (message_id, user_id, emoji, status)
-       VALUES (?, ?, ?, ?)`,
-      [messageId, userId, emoji, status]
-    );
+    await withExclusiveWrite(async (tx) => {
+      await tx.runAsync(
+        `INSERT OR REPLACE INTO message_reactions (message_id, user_id, emoji, status)
+         VALUES (?, ?, ?, ?)`,
+        [messageId, userId, emoji, status]
+      );
+    });
     emit(conversationId);
   },
 
   async removeReaction(messageId: string, userId: string, conversationId: string) {
-    const db = await getDatabase();
-    await db.runAsync(
-      `DELETE FROM message_reactions WHERE message_id = ? AND user_id = ?`,
-      [messageId, userId]
-    );
+    await withExclusiveWrite(async (tx) => {
+      await tx.runAsync(
+        `DELETE FROM message_reactions WHERE message_id = ? AND user_id = ?`,
+        [messageId, userId]
+      );
+    });
     emit(conversationId);
   },
 
@@ -97,11 +99,12 @@ export const ReactionRepository = {
   },
 
   async updateStatus(messageId: string, userId: string, status: "loading" | "sent") {
-    const db = await getDatabase();
-    await db.runAsync(
-      `UPDATE message_reactions SET status = ? WHERE message_id = ? AND user_id = ?`,
-      [status, messageId, userId]
-    );
+    await withExclusiveWrite(async (tx) => {
+      await tx.runAsync(
+        `UPDATE message_reactions SET status = ? WHERE message_id = ? AND user_id = ?`,
+        [status, messageId, userId]
+      );
+    });
   },
 
   async upsertFirestoreReaction(
@@ -110,23 +113,25 @@ export const ReactionRepository = {
     emoji: string,
     conversationId?: string
   ) {
-    const db = await getDatabase();
-    await db.runAsync(
-      `INSERT INTO message_reactions (message_id, user_id, emoji, status)
-       VALUES (?, ?, ?, 'sent')
-       ON CONFLICT(message_id, user_id) DO UPDATE SET
-         emoji = excluded.emoji,
-         status = 'sent'`,
-      [messageId, userId, emoji]
-    );
+    await withExclusiveWrite(async (tx) => {
+      await tx.runAsync(
+        `INSERT INTO message_reactions (message_id, user_id, emoji, status)
+         VALUES (?, ?, ?, 'sent')
+         ON CONFLICT(message_id, user_id) DO UPDATE SET
+           emoji = excluded.emoji,
+           status = 'sent'`,
+        [messageId, userId, emoji]
+      );
+    });
     if (conversationId) emit(conversationId);
   },
 
   async deleteReaction(messageId: string, userId: string) {
-    const db = await getDatabase();
-    await db.runAsync(
-      `DELETE FROM message_reactions WHERE message_id = ? AND user_id = ?`,
-      [messageId, userId]
-    );
+    await withExclusiveWrite(async (tx) => {
+      await tx.runAsync(
+        `DELETE FROM message_reactions WHERE message_id = ? AND user_id = ?`,
+        [messageId, userId]
+      );
+    });
   },
 };

@@ -629,6 +629,7 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingVertical: 16,
+    gap: 8,
   },
   separatorWrap: {
     flexDirection: "row",

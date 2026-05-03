@@ -1,4 +1,4 @@
-import { getDatabase } from "@/lib/db";
+import { getDatabase, withExclusiveWrite } from "@/lib/db";
 import type { AppUser } from "@/types/chat";
 
 type SessionRow = {
@@ -69,48 +69,50 @@ export const SessionRepository = {
     currentUser: AppUser;
     deviceApproved: boolean | null;
   }) {
-    const db = await getDatabase();
-    await db.runAsync(
-      `INSERT OR REPLACE INTO app_sessions (
-        firebase_uid,
-        member_id,
-        tenant_id,
-        name,
-        role,
-        device_approved,
-        photo_url,
-        photo_path,
-        updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        firebaseUid,
-        currentUser.id,
-        currentUser.tenantId,
-        currentUser.name,
-        currentUser.role,
-        deviceApproved == null ? null : deviceApproved ? 1 : 0,
-        currentUser.photoUrl ?? null,
-        currentUser.photoPath ?? null,
-        new Date().toISOString(),
-      ]
-    );
+    await withExclusiveWrite(async (tx) => {
+      await tx.runAsync(
+        `INSERT OR REPLACE INTO app_sessions (
+          firebase_uid,
+          member_id,
+          tenant_id,
+          name,
+          role,
+          device_approved,
+          photo_url,
+          photo_path,
+          updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          firebaseUid,
+          currentUser.id,
+          currentUser.tenantId,
+          currentUser.name,
+          currentUser.role,
+          deviceApproved == null ? null : deviceApproved ? 1 : 0,
+          currentUser.photoUrl ?? null,
+          currentUser.photoPath ?? null,
+          new Date().toISOString(),
+        ]
+      );
+    });
   },
 
   async updateDeviceApproved(
     firebaseUid: string,
     deviceApproved: boolean | null
   ) {
-    const db = await getDatabase();
-    await db.runAsync(
-      `UPDATE app_sessions
-       SET device_approved = ?, updated_at = ?
-       WHERE firebase_uid = ?`,
-      [
-        deviceApproved == null ? null : deviceApproved ? 1 : 0,
-        new Date().toISOString(),
-        firebaseUid,
-      ]
-    );
+    await withExclusiveWrite(async (tx) => {
+      await tx.runAsync(
+        `UPDATE app_sessions
+         SET device_approved = ?, updated_at = ?
+         WHERE firebase_uid = ?`,
+        [
+          deviceApproved == null ? null : deviceApproved ? 1 : 0,
+          new Date().toISOString(),
+          firebaseUid,
+        ]
+      );
+    });
   },
 
   async updateProfilePhoto(
@@ -118,19 +120,21 @@ export const SessionRepository = {
     photoUrl: string | null,
     photoPath: string | null
   ) {
-    const db = await getDatabase();
-    await db.runAsync(
-      `UPDATE app_sessions
-       SET photo_url = ?, photo_path = ?, updated_at = ?
-       WHERE firebase_uid = ?`,
-      [photoUrl, photoPath, new Date().toISOString(), firebaseUid]
-    );
+    await withExclusiveWrite(async (tx) => {
+      await tx.runAsync(
+        `UPDATE app_sessions
+         SET photo_url = ?, photo_path = ?, updated_at = ?
+         WHERE firebase_uid = ?`,
+        [photoUrl, photoPath, new Date().toISOString(), firebaseUid]
+      );
+    });
   },
 
   async deleteSession(firebaseUid: string) {
-    const db = await getDatabase();
-    await db.runAsync("DELETE FROM app_sessions WHERE firebase_uid = ?", [
-      firebaseUid,
-    ]);
+    await withExclusiveWrite(async (tx) => {
+      await tx.runAsync("DELETE FROM app_sessions WHERE firebase_uid = ?", [
+        firebaseUid,
+      ]);
+    });
   },
 };

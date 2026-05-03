@@ -1,4 +1,4 @@
-import { getDatabase } from "@/lib/db";
+import { getDatabase, withExclusiveWrite } from "@/lib/db";
 import type {
   Message,
   MessageDoc,
@@ -153,141 +153,145 @@ export const MessageRepository = {
     message: LocalMessageInput,
     options: { notify?: boolean } = {}
   ) {
-    const db = await getDatabase();
-    await db.runAsync(
-      `INSERT INTO messages (
-        id,
-        conversation_id,
-        sender_id,
-        body,
-        type,
-        status,
-        created_at,
-        synced_at,
-        local_audio_uri,
-        audio_downloaded_at,
-        audio_duration,
-        reply_to_message_id,
-        reply_to_sender_id,
-        reply_to_sender_name,
-        reply_to_type,
-        reply_to_preview
-      ) VALUES (
-        $id,
-        $conversationId,
-        $senderId,
-        $body,
-        $type,
-        $status,
-        $createdAt,
-        $syncedAt,
-        $localAudioUri,
-        $audioDownloadedAt,
-        $audioDuration,
-        $replyToMessageId,
-        $replyToSenderId,
-        $replyToSenderName,
-        $replyToType,
-        $replyToPreview
-      )
-      ON CONFLICT(id) DO UPDATE SET
-        conversation_id = excluded.conversation_id,
-        sender_id = excluded.sender_id,
-        body = excluded.body,
-        type = excluded.type,
-        status = CASE
-          WHEN messages.status = 'loading' AND excluded.status = 'sent'
-            THEN 'sent'
-          WHEN messages.status = 'loading'
-            THEN messages.status
-          ELSE excluded.status
-        END,
-        created_at = excluded.created_at,
-        synced_at = COALESCE(excluded.synced_at, messages.synced_at),
-        local_audio_uri = COALESCE(excluded.local_audio_uri, messages.local_audio_uri),
-        audio_downloaded_at = COALESCE(
-          excluded.audio_downloaded_at,
-          messages.audio_downloaded_at
-        ),
-        audio_duration = COALESCE(excluded.audio_duration, messages.audio_duration),
-        reply_to_message_id = COALESCE(
-          excluded.reply_to_message_id,
-          messages.reply_to_message_id
-        ),
-        reply_to_sender_id = COALESCE(
-          excluded.reply_to_sender_id,
-          messages.reply_to_sender_id
-        ),
-        reply_to_sender_name = COALESCE(
-          excluded.reply_to_sender_name,
-          messages.reply_to_sender_name
-        ),
-        reply_to_type = COALESCE(excluded.reply_to_type, messages.reply_to_type),
-        reply_to_preview = COALESCE(
-          excluded.reply_to_preview,
-          messages.reply_to_preview
-        )`,
-      inputParams(message)
-    );
+    await withExclusiveWrite(async (tx) => {
+      await tx.runAsync(
+        `INSERT INTO messages (
+          id,
+          conversation_id,
+          sender_id,
+          body,
+          type,
+          status,
+          created_at,
+          synced_at,
+          local_audio_uri,
+          audio_downloaded_at,
+          audio_duration,
+          reply_to_message_id,
+          reply_to_sender_id,
+          reply_to_sender_name,
+          reply_to_type,
+          reply_to_preview
+        ) VALUES (
+          $id,
+          $conversationId,
+          $senderId,
+          $body,
+          $type,
+          $status,
+          $createdAt,
+          $syncedAt,
+          $localAudioUri,
+          $audioDownloadedAt,
+          $audioDuration,
+          $replyToMessageId,
+          $replyToSenderId,
+          $replyToSenderName,
+          $replyToType,
+          $replyToPreview
+        )
+        ON CONFLICT(id) DO UPDATE SET
+          conversation_id = excluded.conversation_id,
+          sender_id = excluded.sender_id,
+          body = excluded.body,
+          type = excluded.type,
+          status = CASE
+            WHEN messages.status = 'loading' AND excluded.status = 'sent'
+              THEN 'sent'
+            WHEN messages.status = 'loading'
+              THEN messages.status
+            ELSE excluded.status
+          END,
+          created_at = excluded.created_at,
+          synced_at = COALESCE(excluded.synced_at, messages.synced_at),
+          local_audio_uri = COALESCE(excluded.local_audio_uri, messages.local_audio_uri),
+          audio_downloaded_at = COALESCE(
+            excluded.audio_downloaded_at,
+            messages.audio_downloaded_at
+          ),
+          audio_duration = COALESCE(excluded.audio_duration, messages.audio_duration),
+          reply_to_message_id = COALESCE(
+            excluded.reply_to_message_id,
+            messages.reply_to_message_id
+          ),
+          reply_to_sender_id = COALESCE(
+            excluded.reply_to_sender_id,
+            messages.reply_to_sender_id
+          ),
+          reply_to_sender_name = COALESCE(
+            excluded.reply_to_sender_name,
+            messages.reply_to_sender_name
+          ),
+          reply_to_type = COALESCE(excluded.reply_to_type, messages.reply_to_type),
+          reply_to_preview = COALESCE(
+            excluded.reply_to_preview,
+            messages.reply_to_preview
+          )`,
+        inputParams(message)
+      );
+    });
     if (options.notify !== false) {
       emit(message.conversationId);
     }
   },
 
   async updateStatus(id: string, status: MessageStatus) {
-    const db = await getDatabase();
-    const existing = await db.getFirstAsync<Pick<MessageRow, "conversation_id">>(
-      "SELECT conversation_id FROM messages WHERE id = ?",
-      [id]
-    );
-
-    await db.runAsync(
-      `UPDATE messages
-       SET status = ?, synced_at = ?
-       WHERE id = ?`,
-      [status, status === "sent" ? new Date().toISOString() : null, id]
-    );
-
-    if (existing?.conversation_id) {
-      emit(existing.conversation_id);
+    let conversationId: string | undefined;
+    await withExclusiveWrite(async (tx) => {
+      const existing = await tx.getFirstAsync<Pick<MessageRow, "conversation_id">>(
+        "SELECT conversation_id FROM messages WHERE id = ?",
+        [id]
+      );
+      conversationId = existing?.conversation_id;
+      await tx.runAsync(
+        `UPDATE messages
+         SET status = ?, synced_at = ?
+         WHERE id = ?`,
+        [status, status === "sent" ? new Date().toISOString() : null, id]
+      );
+    });
+    if (conversationId) {
+      emit(conversationId);
     }
   },
 
   async updateLocalAudioUri(id: string, localAudioUri: string) {
-    const db = await getDatabase();
-    const existing = await db.getFirstAsync<Pick<MessageRow, "conversation_id">>(
-      "SELECT conversation_id FROM messages WHERE id = ?",
-      [id]
-    );
-
-    await db.runAsync(
-      `UPDATE messages
-       SET local_audio_uri = ?, audio_downloaded_at = ?
-       WHERE id = ?`,
-      [localAudioUri, new Date().toISOString(), id]
-    );
-
-    if (existing?.conversation_id) {
-      emit(existing.conversation_id);
+    let conversationId: string | undefined;
+    await withExclusiveWrite(async (tx) => {
+      const existing = await tx.getFirstAsync<Pick<MessageRow, "conversation_id">>(
+        "SELECT conversation_id FROM messages WHERE id = ?",
+        [id]
+      );
+      conversationId = existing?.conversation_id;
+      await tx.runAsync(
+        `UPDATE messages
+         SET local_audio_uri = ?, audio_downloaded_at = ?
+         WHERE id = ?`,
+        [localAudioUri, new Date().toISOString(), id]
+      );
+    });
+    if (conversationId) {
+      emit(conversationId);
     }
   },
 
   async clearLocalAudioUri(id: string) {
-    const db = await getDatabase();
-    const existing = await db.getFirstAsync<Pick<MessageRow, "conversation_id">>(
-      "SELECT conversation_id FROM messages WHERE id = ?",
-      [id]
-    );
-
-    await db.runAsync(
-      `UPDATE messages
-       SET local_audio_uri = NULL, audio_downloaded_at = NULL
-       WHERE id = ?`,
-      [id]
-    );
-
-    if (existing?.conversation_id) {
-      emit(existing.conversation_id);
+    let conversationId: string | undefined;
+    await withExclusiveWrite(async (tx) => {
+      const existing = await tx.getFirstAsync<Pick<MessageRow, "conversation_id">>(
+        "SELECT conversation_id FROM messages WHERE id = ?",
+        [id]
+      );
+      conversationId = existing?.conversation_id;
+      await tx.runAsync(
+        `UPDATE messages
+         SET local_audio_uri = NULL, audio_downloaded_at = NULL
+         WHERE id = ?`,
+        [id]
+      );
+    });
+    if (conversationId) {
+      emit(conversationId);
     }
   },
 
@@ -391,24 +395,25 @@ export const MessageRepository = {
     conversationId: string,
     newestMessageAt: Date | null
   ) {
-    const db = await getDatabase();
-    await db.runAsync(
-      `INSERT INTO chat_message_sync (
-        chat_id,
-        history_synced_at,
-        newest_message_at
-      ) VALUES (?, ?, ?)
-      ON CONFLICT(chat_id) DO UPDATE SET
-        history_synced_at = excluded.history_synced_at,
-        newest_message_at = COALESCE(
-          excluded.newest_message_at,
-          chat_message_sync.newest_message_at
-        )`,
-      [
-        conversationId,
-        new Date().toISOString(),
-        newestMessageAt?.toISOString() ?? null,
-      ]
-    );
+    await withExclusiveWrite(async (tx) => {
+      await tx.runAsync(
+        `INSERT INTO chat_message_sync (
+          chat_id,
+          history_synced_at,
+          newest_message_at
+        ) VALUES (?, ?, ?)
+        ON CONFLICT(chat_id) DO UPDATE SET
+          history_synced_at = excluded.history_synced_at,
+          newest_message_at = COALESCE(
+            excluded.newest_message_at,
+            chat_message_sync.newest_message_at
+          )`,
+        [
+          conversationId,
+          new Date().toISOString(),
+          newestMessageAt?.toISOString() ?? null,
+        ]
+      );
+    });
   },
 };

@@ -123,35 +123,36 @@ export const ChatRepository = {
   },
 
   async upsertChat(chat: Chat, options: { notify?: boolean } = {}) {
-    const db = await getDatabase();
-    await db.runAsync(
-      `INSERT OR REPLACE INTO chats (
-        id,
-        tenant_id,
-        participants,
-        is_group,
-        name,
-        unread_count,
-        last_message_text,
-        last_message_type,
-        last_message_at,
-        read_up_to,
-        updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        chat.id,
-        chat.tenantId,
-        JSON.stringify(chat.participants),
-        chat.isGroup ? 1 : 0,
-        chat.name,
-        chat.unreadCount,
-        chat.lastMessage?.text ?? null,
-        chat.lastMessage?.type ?? null,
-        chat.lastMessage?.timestamp?.toISOString() ?? null,
-        serializeReadUpTo(chat.readUpTo),
-        new Date().toISOString(),
-      ]
-    );
+    await withExclusiveWrite(async (tx) => {
+      await tx.runAsync(
+        `INSERT OR REPLACE INTO chats (
+          id,
+          tenant_id,
+          participants,
+          is_group,
+          name,
+          unread_count,
+          last_message_text,
+          last_message_type,
+          last_message_at,
+          read_up_to,
+          updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          chat.id,
+          chat.tenantId,
+          JSON.stringify(chat.participants),
+          chat.isGroup ? 1 : 0,
+          chat.name,
+          chat.unreadCount,
+          chat.lastMessage?.text ?? null,
+          chat.lastMessage?.type ?? null,
+          chat.lastMessage?.timestamp?.toISOString() ?? null,
+          serializeReadUpTo(chat.readUpTo),
+          new Date().toISOString(),
+        ]
+      );
+    });
 
     if (options.notify !== false) {
       emit();
@@ -204,8 +205,9 @@ export const ChatRepository = {
   },
 
   async deleteChat(chatId: string, options: { notify?: boolean } = {}) {
-    const db = await getDatabase();
-    await db.runAsync("DELETE FROM chats WHERE id = ?", [chatId]);
+    await withExclusiveWrite(async (tx) => {
+      await tx.runAsync("DELETE FROM chats WHERE id = ?", [chatId]);
+    });
     if (options.notify !== false) {
       emit();
     }
@@ -216,22 +218,23 @@ export const ChatRepository = {
     lastMessage: { text: string | null; type: "text" | "audio"; timestamp: Date },
     options: { notify?: boolean } = {}
   ) {
-    const db = await getDatabase();
-    await db.runAsync(
-      `UPDATE chats
-       SET last_message_text = ?,
-           last_message_type = ?,
-           last_message_at = ?,
-           updated_at = ?
-       WHERE id = ?`,
-      [
-        lastMessage.text,
-        lastMessage.type,
-        lastMessage.timestamp.toISOString(),
-        new Date().toISOString(),
-        chatId,
-      ]
-    );
+    await withExclusiveWrite(async (tx) => {
+      await tx.runAsync(
+        `UPDATE chats
+         SET last_message_text = ?,
+             last_message_type = ?,
+             last_message_at = ?,
+             updated_at = ?
+         WHERE id = ?`,
+        [
+          lastMessage.text,
+          lastMessage.type,
+          lastMessage.timestamp.toISOString(),
+          new Date().toISOString(),
+          chatId,
+        ]
+      );
+    });
 
     if (options.notify !== false) {
       emit();
