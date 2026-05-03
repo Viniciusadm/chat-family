@@ -24,11 +24,15 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
+import Animated, {
+  interpolate,
+  useAnimatedStyle,
+} from "react-native-reanimated";
 import { ReplyPreview } from "./ReplyPreview";
 
 interface ChatInputProps {
   chatId: string;
-  keyboardVisible?: boolean;
   replyTo?: MessageReplySnapshot | null;
   onCancelReply?: () => void;
 }
@@ -40,14 +44,21 @@ export interface ChatInputHandle {
 export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
 function ChatInput({
   chatId,
-  keyboardVisible = false,
   replyTo = null,
   onCancelReply,
 }, ref) {
   const { sendText, sendAudio, isSending } = useSendMessage(chatId);
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const insets = useSafeAreaInsets();
-  const bottomPadding = 12 + (keyboardVisible ? 0 : insets.bottom);
+  const { progress } = useReanimatedKeyboardAnimation();
+  const animatedBarStyle = useAnimatedStyle(() => ({
+    paddingBottom: interpolate(
+      progress.value,
+      [0, 1],
+      [12 + insets.bottom, 12],
+      "clamp"
+    ),
+  }));
   const [text, setText] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
@@ -174,7 +185,7 @@ function ChatInput({
   };
 
   return (
-    <View style={[styles.bar, { paddingBottom: bottomPadding }]}>
+    <Animated.View style={[styles.bar, animatedBarStyle]}>
       {replyTo && onCancelReply ? (
         <ReplyPreview reply={replyTo} onCancel={onCancelReply} />
       ) : null}
@@ -239,7 +250,7 @@ function ChatInput({
           </View>
         )}
       </View>
-    </View>
+    </Animated.View>
   );
 });
 

@@ -611,7 +611,6 @@ export default function ChatScreen() {
       <ChatInput
         ref={inputRef}
         chatId={chatId}
-        keyboardVisible={isKeyboardVisible}
         replyTo={replyTo}
         onCancelReply={clearReply}
       />
