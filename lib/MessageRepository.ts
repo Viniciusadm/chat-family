@@ -1,3 +1,4 @@
+import { decryptIncomingMessage } from "@/lib/encryptedMessages";
 import { getDatabase, withExclusiveWrite } from "@/lib/db";
 import type {
   Message,
@@ -36,7 +37,7 @@ export type LocalMessageInput = {
   id: string;
   conversationId: string;
   senderId: string;
-  body: string;
+  body: string | null;
   type: MessageType;
   status: MessageStatus;
   createdAt: Date;
@@ -75,6 +76,7 @@ function rowReplyTo(row: MessageRow): MessageReplySnapshot | undefined {
 function rowToMessage(row: MessageRow): Message {
   const type: MessageType = row.type === "audio" ? "audio" : "text";
   const timestamp = new Date(row.created_at);
+  const decryptionFailed = type === "text" && row.status === "sent" && row.body == null;
 
   return {
     id: row.id,
@@ -92,6 +94,7 @@ function rowToMessage(row: MessageRow): Message {
     createdAtMs: timestamp.getTime(),
     status: row.status === "loading" ? "loading" : "sent",
     replyTo: rowReplyTo(row),
+    decryptionFailed: decryptionFailed || undefined,
   };
 }
 
@@ -304,12 +307,21 @@ export const MessageRepository = {
     const isAudio = data.audioUrl != null;
     const createdAt = data.createdAt ? data.createdAt.toDate() : new Date();
 
+    let body: string | null;
+    if (isAudio) {
+      body = data.audioUrl ?? null;
+    } else if (data.ciphertext && data.iv) {
+      body = await decryptIncomingMessage(conversationId, data);
+    } else {
+      body = data.text ?? null;
+    }
+
     await this.insertLocalMessage({
       id,
       conversationId,
       senderId: data.senderId,
       type: isAudio ? "audio" : "text",
-      body: isAudio ? data.audioUrl ?? "" : data.text ?? "",
+      body,
       status: "sent",
       createdAt,
       syncedAt: new Date(),

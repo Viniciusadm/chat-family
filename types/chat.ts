@@ -40,9 +40,18 @@ export interface DeviceDoc {
   approved: boolean;
   active?: boolean;
   pushToken: string;
+  publicKey?: string;
   createdAt: Timestamp;
   lastActiveAt?: Timestamp;
   sessionAt?: Timestamp;
+}
+
+export interface KeyShareDoc {
+  ephemeralPublicKey: string;
+  iv: string;
+  ciphertext: string;
+  wrappedBy: string;
+  createdAt: Timestamp;
 }
 
 export interface ChatDoc {
@@ -65,6 +74,9 @@ export interface MessageDoc {
   text: string | null;
   audioUrl: string | null;
   audioDuration: number | null;
+  ciphertext?: string | null;
+  iv?: string | null;
+  encVersion?: number;
   replyTo?: MessageReplySnapshot | null;
   createdAt: Timestamp;
 }
@@ -147,4 +159,5 @@ export interface Message {
   status?: MessageStatus;
   replyTo?: MessageReplySnapshot;
   reactions?: Reaction[];
+  decryptionFailed?: boolean;
 }

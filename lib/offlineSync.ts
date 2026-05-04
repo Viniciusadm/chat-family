@@ -1,3 +1,4 @@
+import { encryptMessageText } from "@/lib/encryptedMessages";
 import {
   ensureTextMessageInFirestore,
   updateChatAfterOutgoingMessage,
@@ -109,18 +110,21 @@ export async function syncPendingTextMessages(
       }
 
       try {
+        const enc = await encryptMessageText(message.chatId, message.content);
+        if (!enc) continue;
         await ensureTextMessageInFirestore({
           chatId: message.chatId,
           messageId: message.id,
           tenantId,
           senderId: currentUser.id,
-          text: message.content,
+          ciphertext: enc.ciphertext,
+          iv: enc.iv,
           replyTo: message.replyTo ?? null,
         });
         await updateChatAfterOutgoingMessage(
           message.chatId,
           currentUser.id,
-          message.content,
+          null,
           "text"
         );
         await MessageRepository.updateStatus(message.id, "sent");

@@ -23,13 +23,17 @@ service cloud.firestore {
     }
     function deviceCreateKeys() {
       return request.resource.data.keys().hasOnly([
-        'userId', 'tenantId', 'pushToken', 'approved', 'createdAt', 'lastActiveAt', 'sessionAt'
+        'userId', 'tenantId', 'pushToken', 'publicKey',
+        'approved', 'createdAt', 'lastActiveAt', 'sessionAt'
       ]);
     }
     function deviceOwnerUpdateKeys() {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-        'pushToken', 'lastActiveAt', 'sessionAt'
-      ]);
+        'pushToken', 'lastActiveAt', 'sessionAt', 'publicKey'
+      ]) && (
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['publicKey']) ||
+        !resource.data.keys().hasAny(['publicKey'])
+      );
     }
 
     match /loginCodes/{code} {
@@ -108,6 +112,24 @@ service cloud.firestore {
         request.resource.data.approved == resource.data.approved &&
         deviceOwnerUpdateKeys();
       allow delete: if request.auth != null && resource.data.tenantId == userTenant() && isTenantAdult();
+
+      match /keyShares/{chatId} {
+        allow read: if request.auth != null &&
+          get(/databases/$(database)/documents/devices/$(deviceId)).data.tenantId == userTenant() &&
+          (
+            get(/databases/$(database)/documents/devices/$(deviceId)).data.userId == request.auth.uid ||
+            isTenantAdult()
+          );
+        allow create, update: if request.auth != null &&
+          isTenantAdult() &&
+          get(/databases/$(database)/documents/devices/$(deviceId)).data.tenantId == userTenant() &&
+          request.resource.data.keys().hasAll([
+            'ephemeralPublicKey', 'iv', 'ciphertext', 'wrappedBy', 'createdAt'
+          ]);
+        allow delete: if request.auth != null &&
+          get(/databases/$(database)/documents/devices/$(deviceId)).data.tenantId == userTenant() &&
+          isTenantAdult();
+      }
     }
 
     match /chats/{chatId} {

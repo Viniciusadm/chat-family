@@ -2,6 +2,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useConnectivity } from "@/hooks/useConnectivity";
 import { AudioCacheRepository } from "@/lib/AudioCacheRepository";
 import { ChatRepository } from "@/lib/ChatRepository";
+import { encryptMessageText } from "@/lib/encryptedMessages";
 import {
   ensureAudioMessageInFirestore,
   ensureTextMessageInFirestore,
@@ -47,19 +48,26 @@ export function useSendMessage(chatId: string) {
         timestamp: createdAt,
       });
       if (!isOnline || !firebaseUser) return;
+      const enc = await encryptMessageText(chatId, trimmed);
+      if (!enc) {
+        // No conversation key locally; the message stays "loading" and the
+        // pending sync will retry once the key is delivered to this device.
+        return;
+      }
       await ensureTextMessageInFirestore({
         chatId,
         messageId,
         tenantId,
         senderId: currentUser.id,
-        text: trimmed,
+        ciphertext: enc.ciphertext,
+        iv: enc.iv,
         replyTo: options?.replyTo ?? null,
       });
       await MessageRepository.updateStatus(messageId, "sent");
       await updateChatAfterOutgoingMessage(
         chatId,
         currentUser.id,
-        trimmed,
+        null,
         "text"
       );
     } catch {

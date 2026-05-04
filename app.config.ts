@@ -98,6 +98,7 @@ export default (): ExpoConfig => {
         },
       ],
       "expo-sqlite",
+      "expo-secure-store",
     ],
     experiments: {
       typedRoutes: true,

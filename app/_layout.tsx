@@ -1,10 +1,14 @@
+import "react-native-get-random-values";
+
 import { NotificationNavigation } from "@/components/NotificationNavigation";
 import { PushTokenSync } from "@/components/PushTokenSync";
 import { AuthProvider } from "@/context/AuthContext";
+import { registerBackgroundNotificationTask } from "@/lib/backgroundNotifications";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { useEffect } from "react";
 import { LogBox, View } from "react-native";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -33,6 +37,10 @@ export default function RootLayout() {
     ...Ionicons.font,
     ...MaterialIcons.font,
   });
+
+  useEffect(() => {
+    void registerBackgroundNotificationTask();
+  }, []);
 
   if (!fontsLoaded) {
     return null;

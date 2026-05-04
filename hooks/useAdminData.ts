@@ -2,6 +2,13 @@ import { useAuth } from "@/context/AuthContext";
 import { useConnectivity } from "@/hooks/useConnectivity";
 import { AdminRepository } from "@/lib/AdminRepository";
 import { ChatRepository } from "@/lib/ChatRepository";
+import {
+  ensureConversationKey,
+} from "@/lib/conversationKeys";
+import {
+  distributeAllOwnedKeysToDevice,
+  distributeConversationKey,
+} from "@/lib/keyDistribution";
 import { db, functions, storage } from "@/lib/firebase";
 import { httpsCallable } from "firebase/functions";
 import { randomUuid } from "@/lib/randomUuid";
@@ -251,6 +258,36 @@ export function useAdminData() {
 
   const approveDevice = async (deviceIdParam: string) => {
     if (!canMutate) throw new Error("Esta ação precisa de conexão.");
+    if (!effectiveTenantId || !currentUser) {
+      throw new Error("Estado de sessão inválido.");
+    }
+
+    const devSnap = await getDoc(doc(db, "devices", deviceIdParam));
+    if (!devSnap.exists()) throw new Error("Dispositivo não encontrado.");
+    const devData = devSnap.data() as DeviceDoc;
+    const userSnap = await getDoc(doc(db, "users", devData.userId));
+    if (!userSnap.exists()) throw new Error("Usuário do dispositivo não encontrado.");
+    const userData = userSnap.data() as UserDoc;
+    const targetMemberId = userData.memberId ?? devData.userId;
+    const targetPublicKey = devData.publicKey;
+    if (!targetPublicKey) throw new Error("Dispositivo sem chave pública.");
+
+    const chatsSnap = await getDocs(
+      query(
+        collection(db, "chats"),
+        where("tenantId", "==", effectiveTenantId),
+        where("participants", "array-contains", targetMemberId),
+      ),
+    );
+    const chatIds = chatsSnap.docs.map((d) => d.id);
+
+    await distributeAllOwnedKeysToDevice(
+      deviceIdParam,
+      targetPublicKey,
+      chatIds,
+      currentUser.id,
+    );
+
     const fn = httpsCallable(functions, "approveDevice");
     await fn({ deviceId: deviceIdParam });
   };
@@ -263,7 +300,7 @@ export function useAdminData() {
   const createChat = async (name: string, participantIds: string[]) => {
     if (!canMutate) throw new Error("Esta ação precisa de conexão.");
     if (!effectiveTenantId || participantIds.length < 2) return;
-    await addDoc(collection(db, "chats"), {
+    const chatRef = await addDoc(collection(db, "chats"), {
       tenantId: effectiveTenantId,
       participants: participantIds,
       isGroup: participantIds.length > 2,
@@ -274,6 +311,15 @@ export function useAdminData() {
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
+    await ensureConversationKey(chatRef.id);
+    if (currentUser) {
+      await distributeConversationKey(
+        chatRef.id,
+        participantIds,
+        effectiveTenantId,
+        currentUser.id,
+      );
+    }
   };
 
   const updateChat = async (chatId: string, name: string, participantIds: string[]) => {

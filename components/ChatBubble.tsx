@@ -184,6 +184,16 @@ export function ChatBubble({
               onAudioFinished={onAudioFinished}
               onPlaybackRateChange={onPlaybackRateChange}
             />
+          ) : message.decryptionFailed ? (
+            <Text
+              style={[
+                styles.text,
+                styles.encryptedFallback,
+                isSelf ? styles.textSelf : styles.textOther,
+              ]}
+            >
+              Não foi possível decifrar esta mensagem.
+            </Text>
           ) : (
             <Text
               style={[
@@ -299,6 +309,10 @@ const styles = StyleSheet.create({
   },
   textOther: {
     color: colors.bubbleOtherForeground,
+  },
+  encryptedFallback: {
+    fontStyle: "italic",
+    opacity: 0.75,
   },
   meta: {
     marginTop: 4,

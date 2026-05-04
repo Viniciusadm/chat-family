@@ -40,14 +40,16 @@ export async function ensureTextMessageInFirestore({
   messageId,
   tenantId,
   senderId,
-  text,
+  ciphertext,
+  iv,
   replyTo,
 }: {
   chatId: string;
   messageId: string;
   tenantId: string;
   senderId: string;
-  text: string;
+  ciphertext: string;
+  iv: string;
   replyTo?: MessageReplySnapshot | null;
 }) {
   const messageRef = doc(db, "chats", chatId, "messages", messageId);
@@ -57,9 +59,12 @@ export async function ensureTextMessageInFirestore({
   await setDoc(messageRef, {
     tenantId,
     senderId,
-    text,
+    text: null,
     audioUrl: null,
     audioDuration: null,
+    ciphertext,
+    iv,
+    encVersion: 1,
     replyTo: replyTo ?? null,
     createdAt: serverTimestamp(),
   });

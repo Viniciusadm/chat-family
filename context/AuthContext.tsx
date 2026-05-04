@@ -20,7 +20,10 @@ import {
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { useConnectivity } from "@/hooks/useConnectivity";
 import { auth, db } from "@/lib/firebase";
+import { ensureDeviceKeyPair } from "@/lib/deviceIdentity";
 import { fetchExpoPushToken, isValidExpoPushTokenString } from "@/lib/expoPushToken";
+import { consumePendingKeyShares } from "@/lib/keyDistribution";
+import { syncChatHistory } from "@/lib/offlineSync";
 import { randomUuid } from "@/lib/randomUuid";
 import { SessionRepository } from "@/lib/SessionRepository";
 import type { AppUser, LoginCodeDoc, UserDoc } from "@/types/chat";
@@ -157,6 +160,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  const lastImportedKeysFor = useRef<string | null>(null);
+  const importPendingKeyShares = useCallback(async (currentDeviceId: string) => {
+    if (!currentDeviceId) return;
+    if (lastImportedKeysFor.current === currentDeviceId) return;
+    lastImportedKeysFor.current = currentDeviceId;
+    try {
+      const importedChatIds = await consumePendingKeyShares(currentDeviceId);
+      for (const chatId of importedChatIds) {
+        void syncChatHistory(chatId, true);
+      }
+    } catch {
+      // Permission or transient error; will retry on next listener fire.
+      lastImportedKeysFor.current = null;
+    }
+  }, []);
+
   const attachDeviceSnapshot = useCallback(
     (deviceRef: ReturnType<typeof doc>, uid: string) => {
       if (deviceUnsub.current) deviceUnsub.current();
@@ -194,6 +213,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setLoading(false);
           setSessionReady(true);
           setNeedsPushToken(false);
+          if (approved) {
+            void importPendingKeyShares(deviceRef.id);
+          }
         },
         () => {
           // Offline ou permission denied: mantém o estado restaurado do
@@ -201,7 +223,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       );
     },
-    [signOutDeletedAccount]
+    [importPendingKeyShares, signOutDeletedAccount]
   );
 
   const syncDeviceWithToken = useCallback(
@@ -265,6 +287,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const deviceSnap = await getDoc(deviceRef);
       if (isStale()) return false;
 
+      const { publicKeyBase64 } = await ensureDeviceKeyPair();
+      if (isStale()) return false;
+
       const basePayload = {
         tenantId: userData.tenantId,
         userId: uid,
@@ -276,6 +301,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!deviceSnap.exists()) {
         await setDoc(deviceRef, {
           ...basePayload,
+          publicKey: publicKeyBase64,
           approved: !user.isAnonymous,
           createdAt: serverTimestamp(),
         });
@@ -285,6 +311,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         };
         if (!user.isAnonymous) {
           mergePayload.approved = true;
+        }
+        const existing = deviceSnap.data() as { publicKey?: string };
+        if (!existing.publicKey) {
+          mergePayload.publicKey = publicKeyBase64;
         }
         await setDoc(deviceRef, mergePayload, { merge: true });
       }
@@ -497,6 +527,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     deviceIdRef.current = registrationDeviceId;
     setDeviceId(registrationDeviceId);
 
+    const { publicKeyBase64 } = await ensureDeviceKeyPair();
+
     const cred = await createUserWithEmailAndPassword(auth, email, password);
     const uid = cred.user.uid;
 
@@ -533,6 +565,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         userId: uid,
         approved: true,
         pushToken,
+        publicKey: publicKeyBase64,
         createdAt: serverTimestamp(),
         lastActiveAt: serverTimestamp(),
         sessionAt: serverTimestamp(),
@@ -576,6 +609,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     deviceIdRef.current = childDeviceId;
     setDeviceId(childDeviceId);
 
+    const { publicKeyBase64 } = await ensureDeviceKeyPair();
+
     const cred = await signInAnonymously(auth);
     const uid = cred.user.uid;
 
@@ -596,6 +631,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         userId: uid,
         approved: false,
         pushToken,
+        publicKey: publicKeyBase64,
         createdAt: serverTimestamp(),
         lastActiveAt: serverTimestamp(),
         sessionAt: serverTimestamp(),

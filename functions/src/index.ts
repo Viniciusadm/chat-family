@@ -568,105 +568,6 @@ async function clearInvalidPushTokens(tokens: string[]): Promise<void> {
   }
 }
 
-const PUSH_BODY_MAX_CHARS = 3500;
-const PUSH_RECENT_MESSAGE_LIMIT = 8;
-const PUSH_LINE_PREVIEW_MAX = 280;
-
-type UnreadMessage = {
-  senderId: string;
-  text?: string | null;
-  audioUrl?: string | null;
-};
-
-function linePreviewFromMessage(m: { text?: string | null; audioUrl?: string | null }): string {
-  let s: string;
-  if (m.text != null && String(m.text).trim().length > 0) {
-    s = String(m.text).trim();
-  } else if (m.audioUrl) {
-    s = "Áudio";
-  } else {
-    s = "Nova mensagem";
-  }
-  if (s.length > PUSH_LINE_PREVIEW_MAX) {
-    return `${s.slice(0, PUSH_LINE_PREVIEW_MAX - 1)}…`;
-  }
-  return s;
-}
-
-function truncatePushBody(body: string, maxChars: number): string {
-  if (body.length <= maxChars) return body;
-  return `${body.slice(0, maxChars - 1)}…`;
-}
-
-async function fetchUnreadMessagesForUser(
-  chatId: string,
-  tenantId: string,
-  uid: string,
-): Promise<UnreadMessage[]> {
-  const chatSnap = await db.doc(`chats/${chatId}`).get();
-  const chatData = chatSnap.exists
-    ? (chatSnap.data() as { readUpTo?: Record<string, Timestamp> })
-    : undefined;
-  const readUpTo = chatData?.readUpTo?.[uid];
-  const readUpToMs = readUpTo ? readUpTo.toMillis() : null;
-
-  const messagesSnap = await db
-    .collection("chats")
-    .doc(chatId)
-    .collection("messages")
-    .orderBy("createdAt", "desc")
-    .limit(PUSH_RECENT_MESSAGE_LIMIT)
-    .get();
-
-  if (messagesSnap.empty) return [];
-
-  const docs = [...messagesSnap.docs].reverse();
-  const unread: UnreadMessage[] = [];
-  for (const d of docs) {
-    const row = d.data() as {
-      tenantId?: string;
-      senderId?: string;
-      text?: string | null;
-      audioUrl?: string | null;
-      createdAt?: Timestamp;
-    };
-    if (row.tenantId !== tenantId) continue;
-    if (typeof row.senderId !== "string" || row.senderId.length === 0) continue;
-    if (readUpToMs != null) {
-      const createdMs = row.createdAt ? row.createdAt.toMillis() : null;
-      if (createdMs == null || createdMs <= readUpToMs) continue;
-    }
-    unread.push({
-      senderId: row.senderId,
-      text: row.text ?? null,
-      audioUrl: row.audioUrl ?? null,
-    });
-  }
-  return unread;
-}
-
-function buildBodyFromMessages(
-  messages: UnreadMessage[],
-  nameByMemberId: Map<string, string>,
-  fallback: UnreadMessage | null,
-  fallbackName: string,
-): string {
-  const source: Array<{ name: string; msg: UnreadMessage }> = [];
-  if (messages.length > 0) {
-    for (const m of messages) {
-      const name = nameByMemberId.get(m.senderId) ?? "Alguém";
-      source.push({ name, msg: m });
-    }
-  } else if (fallback) {
-    source.push({ name: fallbackName, msg: fallback });
-  }
-
-  if (source.length === 0) return "Nova mensagem";
-
-  const lines = source.map(({ name, msg }) => `${name}: ${linePreviewFromMessage(msg)}`);
-  return truncatePushBody(lines.join("\n"), PUSH_BODY_MAX_CHARS);
-}
-
 export const onChatMessageCreated = onDocumentCreated(
   {
     document: "chats/{chatId}/messages/{messageId}",
@@ -674,19 +575,25 @@ export const onChatMessageCreated = onDocumentCreated(
   },
   async (event) => {
     const chatId = event.params.chatId;
+    const messageId = event.params.messageId;
     const snap = event.data;
     if (!snap) return;
 
     const msg = snap.data() as {
       tenantId?: string;
       senderId?: string;
-      text?: string | null;
       audioUrl?: string | null;
+      ciphertext?: string | null;
     };
 
     const tenantId = msg.tenantId;
     const senderMemberId = msg.senderId;
-    if (!tenantId || !senderMemberId || typeof tenantId !== "string" || typeof senderMemberId !== "string") {
+    if (
+      !tenantId ||
+      !senderMemberId ||
+      typeof tenantId !== "string" ||
+      typeof senderMemberId !== "string"
+    ) {
       return;
     }
 
@@ -696,8 +603,6 @@ export const onChatMessageCreated = onDocumentCreated(
 
     const chat = chatSnap.data() as {
       participants?: string[];
-      name?: string;
-      isGroup?: boolean;
       tenantId?: string;
     };
 
@@ -707,37 +612,24 @@ export const onChatMessageCreated = onDocumentCreated(
     const recipients = participants.filter((p) => p !== senderMemberId);
     if (recipients.length === 0) return;
 
-    const memberSnap = await db.doc(`members/${senderMemberId}`).get();
-    const senderName =
-      memberSnap.exists && typeof (memberSnap.data() as { name?: string }).name === "string"
-        ? (memberSnap.data() as { name: string }).name
-        : "Alguém";
-
-    const title =
-      chat.isGroup === true && typeof chat.name === "string" && chat.name.length > 0
-        ? chat.name
-        : senderName;
-
-    const currentMessage: UnreadMessage = {
-      senderId: senderMemberId,
-      text: msg.text ?? null,
-      audioUrl: msg.audioUrl ?? null,
-    };
+    const messageType: "text" | "audio" = msg.audioUrl ? "audio" : "text";
 
     type PushRequest = {
       to: string[];
-      title: string;
-      body: string;
-      data: { chatId: string; tenantId: string };
+      data: {
+        chatId: string;
+        tenantId: string;
+        messageId: string;
+        senderId: string;
+        type: "text" | "audio";
+      };
       channelId: string;
-      tag: string;
-      collapseId: string;
       priority: "high";
+      _contentAvailable: true;
     };
 
     const requests: PushRequest[] = [];
     const tokenByFlatIndex: string[] = [];
-    const requestIndexByFlatIndex: number[] = [];
 
     for (const memberId of recipients) {
       const usersSnap = await db.collection("users").where("memberId", "==", memberId).get();
@@ -760,42 +652,20 @@ export const onChatMessageCreated = onDocumentCreated(
         }
         if (tokens.length === 0) continue;
 
-        const unread = await fetchUnreadMessagesForUser(chatId, tenantId, uid);
-        const senderIds = new Set<string>();
-        for (const m of unread) senderIds.add(m.senderId);
-        if (unread.length === 0) senderIds.add(senderMemberId);
-
-        const nameByMemberId = new Map<string, string>();
-        nameByMemberId.set(senderMemberId, senderName);
-        await Promise.all(
-          [...senderIds].map(async (id) => {
-            if (nameByMemberId.has(id)) return;
-            const m = await db.doc(`members/${id}`).get();
-            const n =
-              m.exists && typeof (m.data() as { name?: string }).name === "string"
-                ? (m.data() as { name: string }).name
-                : "Alguém";
-            nameByMemberId.set(id, n);
-          }),
-        );
-
-        const body = buildBodyFromMessages(unread, nameByMemberId, currentMessage, senderName);
-
-        const requestIndex = requests.length;
         requests.push({
           to: tokens,
-          title,
-          body,
-          data: { chatId, tenantId },
+          data: {
+            chatId,
+            tenantId,
+            messageId,
+            senderId: senderMemberId,
+            type: messageType,
+          },
           channelId: "default",
-          tag: chatId,
-          collapseId: chatId,
           priority: "high",
+          _contentAvailable: true,
         });
-        for (const t of tokens) {
-          tokenByFlatIndex.push(t);
-          requestIndexByFlatIndex.push(requestIndex);
-        }
+        for (const t of tokens) tokenByFlatIndex.push(t);
       }
     }
 
