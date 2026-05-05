@@ -60,6 +60,8 @@ export interface ChatDoc {
   isGroup: boolean;
   name: string;
   lastMessageText: string | null;
+  lastMessageCiphertext: string | null;
+  lastMessageIv: string | null;
   lastMessageAt: Timestamp | null;
   lastMessageType: "text" | "audio" | null;
   createdAt: Timestamp;

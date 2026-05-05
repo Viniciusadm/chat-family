@@ -64,12 +64,11 @@ export function useSendMessage(chatId: string) {
         replyTo: options?.replyTo ?? null,
       });
       await MessageRepository.updateStatus(messageId, "sent");
-      await updateChatAfterOutgoingMessage(
-        chatId,
-        currentUser.id,
-        null,
-        "text"
-      );
+      await updateChatAfterOutgoingMessage(chatId, currentUser.id, {
+        type: "text",
+        ciphertext: enc.ciphertext,
+        iv: enc.iv,
+      });
     } catch {
       // Keep the local message pending. The offline sync will retry it.
     } finally {
@@ -138,12 +137,9 @@ export function useSendMessage(chatId: string) {
         type: "audio",
         timestamp: sentAt,
       });
-      await updateChatAfterOutgoingMessage(
-        chatId,
-        currentUser.id,
-        null,
-        "audio"
-      );
+      await updateChatAfterOutgoingMessage(chatId, currentUser.id, {
+        type: "audio",
+      });
     } finally {
       setIsSending(false);
     }

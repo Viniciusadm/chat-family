@@ -1,6 +1,7 @@
 import { useAuth } from "@/context/AuthContext";
 import { useConnectivity } from "@/hooks/useConnectivity";
 import { ChatRepository } from "@/lib/ChatRepository";
+import { decryptIncomingMessage } from "@/lib/encryptedMessages";
 import { db } from "@/lib/firebase";
 import { syncChatHistories, syncPendingTextMessages } from "@/lib/offlineSync";
 import type { Chat, ChatDoc } from "@/types/chat";
@@ -92,32 +93,47 @@ export function useChats(): { chats: Chat[]; loading: boolean } {
           const u = onSnapshot(
             doc(db, "chats", chatId),
             (snap) => {
-              if (!snap.exists()) {
-                byId.delete(chatId);
-                void ChatRepository.deleteChat(chatId, { notify: false });
-                emit();
-                return;
-              }
-              const data = snap.data() as ChatDoc;
-              const chat: Chat = {
-                id: snap.id,
-                tenantId: data.tenantId,
-                participants: data.participants,
-                isGroup: data.isGroup,
-                name: data.name,
-                unreadCount: data.unreadBy?.[memberId] ?? 0,
-                readUpTo: data.readUpTo,
-              };
-              if (data.lastMessageAt) {
-                chat.lastMessage = {
-                  text: data.lastMessageText,
-                  type: data.lastMessageType,
-                  timestamp: data.lastMessageAt.toDate(),
+              void (async () => {
+                if (!snap.exists()) {
+                  byId.delete(chatId);
+                  await ChatRepository.deleteChat(chatId, { notify: false });
+                  if (!active) return;
+                  emit();
+                  return;
+                }
+                const data = snap.data() as ChatDoc;
+                const chat: Chat = {
+                  id: snap.id,
+                  tenantId: data.tenantId,
+                  participants: data.participants,
+                  isGroup: data.isGroup,
+                  name: data.name,
+                  unreadCount: data.unreadBy?.[memberId] ?? 0,
+                  readUpTo: data.readUpTo,
                 };
-              }
-              byId.set(chatId, chat);
-              void ChatRepository.upsertChat(chat, { notify: false });
-              emit();
+                if (data.lastMessageAt) {
+                  let text: string | null;
+                  if (data.lastMessageCiphertext && data.lastMessageIv) {
+                    text = await decryptIncomingMessage(chatId, {
+                      ciphertext: data.lastMessageCiphertext,
+                      iv: data.lastMessageIv,
+                      text: null,
+                    });
+                  } else {
+                    text = data.lastMessageText;
+                  }
+                  chat.lastMessage = {
+                    text,
+                    type: data.lastMessageType,
+                    timestamp: data.lastMessageAt.toDate(),
+                  };
+                }
+                if (!active) return;
+                byId.set(chatId, chat);
+                await ChatRepository.upsertChat(chat, { notify: false });
+                if (!active) return;
+                emit();
+              })();
             },
             () => {
               emit();

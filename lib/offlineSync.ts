@@ -123,12 +123,11 @@ export async function syncPendingTextMessages(
           iv: enc.iv,
           replyTo: message.replyTo ?? null,
         });
-        await updateChatAfterOutgoingMessage(
-          message.chatId,
-          currentUser.id,
-          null,
-          "text"
-        );
+        await updateChatAfterOutgoingMessage(message.chatId, currentUser.id, {
+          type: "text",
+          ciphertext: enc.ciphertext,
+          iv: enc.iv,
+        });
         await MessageRepository.updateStatus(message.id, "sent");
       } catch {
         // Leave the row pending for the next online pass.

@@ -9,19 +9,24 @@ import {
   updateDoc,
 } from "firebase/firestore";
 
+export type LastMessagePreview =
+  | { type: "text"; ciphertext: string; iv: string }
+  | { type: "audio" };
+
 export async function updateChatAfterOutgoingMessage(
   chatId: string,
   senderId: string,
-  lastMessageText: string | null,
-  lastMessageType: "text" | "audio"
+  preview: LastMessagePreview
 ) {
   const chatRef = doc(db, "chats", chatId);
   const chatSnap = await getDoc(chatRef);
   const participants =
     (chatSnap.data() as ChatDoc | undefined)?.participants ?? [];
   const updates: Record<string, unknown> = {
-    lastMessageText,
-    lastMessageType,
+    lastMessageText: null,
+    lastMessageCiphertext: preview.type === "text" ? preview.ciphertext : null,
+    lastMessageIv: preview.type === "text" ? preview.iv : null,
+    lastMessageType: preview.type,
     lastMessageAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
