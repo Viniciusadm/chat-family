@@ -141,7 +141,7 @@ service cloud.firestore {
         (memberId() in request.resource.data.participants || isTenantAdult()) &&
         request.resource.data.keys().hasAll([
           'tenantId', 'participants', 'isGroup', 'name',
-          'lastMessageText', 'lastMessageAt', 'lastMessageType', 'createdAt', 'updatedAt'
+          'createdAt', 'updatedAt'
         ]);
       allow update, delete: if request.auth != null &&
         resource.data.tenantId == userTenant() &&
@@ -158,8 +158,13 @@ service cloud.firestore {
         request.resource.data.tenantId == chatDoc(chatId).data.tenantId &&
         request.resource.data.tenantId == userTenant() &&
         request.resource.data.keys().hasAll([
-          'tenantId', 'senderId', 'text', 'audioUrl', 'audioDuration', 'createdAt'
-        ]);
+          'tenantId', 'senderId', 'createdAt'
+        ]) &&
+        (
+          request.resource.data.keys().hasAll(['ciphertext', 'iv', 'encVersion']) ||
+          request.resource.data.keys().hasAny(['text']) ||
+          request.resource.data.keys().hasAny(['audioUrl'])
+        );
       allow update: if false;
       allow delete: if request.auth != null &&
         chatDoc(chatId).data.tenantId == userTenant() &&

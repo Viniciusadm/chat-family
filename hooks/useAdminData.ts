@@ -313,12 +313,12 @@ export function useAdminData() {
     });
     await ensureConversationKey(chatRef.id);
     if (currentUser) {
-      await distributeConversationKey(
+      void distributeConversationKey(
         chatRef.id,
         participantIds,
         effectiveTenantId,
         currentUser.id,
-      );
+      ).catch(() => {});
     }
   };
 

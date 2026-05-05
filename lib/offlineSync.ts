@@ -1,3 +1,4 @@
+import { ensureConversationKey } from "@/lib/conversationKeys";
 import { encryptMessageText } from "@/lib/encryptedMessages";
 import {
   ensureTextMessageInFirestore,
@@ -110,6 +111,7 @@ export async function syncPendingTextMessages(
       }
 
       try {
+        await ensureConversationKey(message.chatId);
         const enc = await encryptMessageText(message.chatId, message.content);
         if (!enc) continue;
         await ensureTextMessageInFirestore({

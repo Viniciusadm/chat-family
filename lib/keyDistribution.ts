@@ -11,7 +11,11 @@ async function findApprovedDevicesForMember(
   tenantId: string,
 ): Promise<{ deviceId: string; publicKey: string }[]> {
   const userSnap = await getDocs(
-    query(collection(db, "users"), where("memberId", "==", memberId)),
+    query(
+      collection(db, "users"),
+      where("memberId", "==", memberId),
+      where("tenantId", "==", tenantId),
+    ),
   );
   const targets: { deviceId: string; publicKey: string }[] = [];
   for (const u of userSnap.docs) {
@@ -44,7 +48,11 @@ export async function distributeConversationKey(
 
   const targets: { deviceId: string; publicKey: string }[] = [];
   for (const memberId of participantMemberIds) {
-    targets.push(...(await findApprovedDevicesForMember(memberId, tenantId)));
+    try {
+      targets.push(...(await findApprovedDevicesForMember(memberId, tenantId)));
+    } catch {
+      // Sem permissão ou sem user doc; consumePendingKeyShares cobre depois.
+    }
   }
 
   for (const target of targets) {

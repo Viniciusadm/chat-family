@@ -60,6 +60,7 @@ export default function AdminScreen() {
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>(
     []
   );
+  const [creatingChat, setCreatingChat] = useState(false);
 
   const [editingChatId, setEditingChatId] = useState<string | null>(null);
   const [editChatName, setEditChatName] = useState("");
@@ -135,12 +136,17 @@ export default function AdminScreen() {
   };
 
   const handleCreateChat = async () => {
-    if (selectedParticipants.length < 2) return;
-    const name = chatName.trim() || defaultChatName(selectedParticipants);
-    await createChat(name, selectedParticipants);
-    setChatName("");
-    setSelectedParticipants([]);
-    setShowCreateChat(false);
+    if (selectedParticipants.length < 2 || creatingChat) return;
+    setCreatingChat(true);
+    try {
+      const name = chatName.trim() || defaultChatName(selectedParticipants);
+      await createChat(name, selectedParticipants);
+      setChatName("");
+      setSelectedParticipants([]);
+      setShowCreateChat(false);
+    } finally {
+      setCreatingChat(false);
+    }
   };
 
   const openEditChat = (chat: Chat) => {
@@ -493,7 +499,10 @@ export default function AdminScreen() {
         <View style={styles.modalRoot}>
           <Pressable
             style={styles.modalOverlay}
-            onPress={() => setShowCreateChat(false)}
+            onPress={() => {
+              if (creatingChat) return;
+              setShowCreateChat(false);
+            }}
           />
           <View style={[styles.modalCard, styles.modalTall]}>
             <Text style={styles.modalTitle}>Criar conversa</Text>
@@ -503,6 +512,7 @@ export default function AdminScreen() {
               placeholderTextColor={colors.mutedForeground}
               value={chatName}
               onChangeText={setChatName}
+              editable={!creatingChat}
             />
             <Text style={styles.fieldLabel}>Participantes</Text>
             <ScrollView style={styles.participantList} nestedScrollEnabled>
@@ -511,6 +521,7 @@ export default function AdminScreen() {
                   key={m.id}
                   onPress={() => toggleParticipant(m.id)}
                   style={styles.checkRow}
+                  disabled={creatingChat}
                 >
                   <Ionicons
                     name={
@@ -533,18 +544,29 @@ export default function AdminScreen() {
               <Pressable
                 onPress={() => setShowCreateChat(false)}
                 style={styles.modalGhost}
+                disabled={creatingChat}
               >
                 <Text style={styles.ghostText}>Cancelar</Text>
               </Pressable>
               <Pressable
                 onPress={() => void handleCreateChat()}
-                disabled={selectedParticipants.length < 2}
+                disabled={selectedParticipants.length < 2 || creatingChat}
                 style={[
                   styles.modalPrimary,
-                  selectedParticipants.length < 2 && styles.btnDisabled,
+                  styles.modalPrimaryRow,
+                  (selectedParticipants.length < 2 || creatingChat) &&
+                    styles.btnDisabled,
                 ]}
               >
-                <Text style={styles.primaryText}>Criar</Text>
+                {creatingChat ? (
+                  <ActivityIndicator
+                    size="small"
+                    color={colors.primaryForeground}
+                  />
+                ) : null}
+                <Text style={styles.primaryText}>
+                  {creatingChat ? "Criando..." : "Criar"}
+                </Text>
               </Pressable>
             </View>
           </View>
@@ -915,6 +937,11 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingVertical: 10,
     paddingHorizontal: 18,
+  },
+  modalPrimaryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   modalDanger: {
     backgroundColor: colors.destructive,

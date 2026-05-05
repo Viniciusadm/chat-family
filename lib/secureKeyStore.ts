@@ -2,7 +2,7 @@ import * as SecureStore from "expo-secure-store";
 import { base64ToBytes, bytesToBase64 } from "./crypto/encoding";
 
 const DEVICE_PRIV_KEY = "device-priv";
-const CONV_KEY_PREFIX = "convkey:";
+const CONV_KEY_PREFIX = "convkey-";
 
 export const SecureKeyStore = {
   async getDevicePrivateKey(): Promise<Uint8Array | null> {
