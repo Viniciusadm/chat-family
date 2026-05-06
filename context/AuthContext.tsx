@@ -588,22 +588,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw new Error("Código inválido");
     }
     const d = codeSnap.data() as LoginCodeDoc;
-    const memberSnap = await getDoc(doc(db, "members", d.memberId));
-    const memberData = memberSnap.exists() ? memberSnap.data() : null;
-    const payload = {
-      memberId: d.memberId,
-      tenantId: d.tenantId,
-      name: d.name,
-      role: d.role,
-      photoUrl:
-        memberData && typeof memberData.photoUrl === "string"
-          ? memberData.photoUrl
-          : null,
-      photoPath:
-        memberData && typeof memberData.photoPath === "string"
-          ? memberData.photoPath
-          : null,
-    };
+
     const childDeviceId = randomUuid();
     await AsyncStorage.setItem(DEVICE_ID_KEY, childDeviceId);
     deviceIdRef.current = childDeviceId;
@@ -615,19 +600,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const uid = cred.user.uid;
 
     await setDoc(doc(db, "users", uid), {
-      memberId: payload.memberId,
-      tenantId: payload.tenantId,
-      name: payload.name,
-      role: payload.role,
-      photoUrl: payload.photoUrl,
-      photoPath: payload.photoPath,
+      memberId: d.memberId,
+      tenantId: d.tenantId,
+      name: d.name,
+      role: d.role,
+      photoUrl: null,
+      photoPath: null,
       createdAt: serverTimestamp(),
     });
+
+    try {
+      const memberSnap = await getDoc(doc(db, "members", d.memberId));
+      if (memberSnap.exists()) {
+        const memberData = memberSnap.data();
+        const photoUrl =
+          typeof memberData.photoUrl === "string" ? memberData.photoUrl : null;
+        const photoPath =
+          typeof memberData.photoPath === "string" ? memberData.photoPath : null;
+        if (photoUrl !== null || photoPath !== null) {
+          await setDoc(
+            doc(db, "users", uid),
+            { photoUrl, photoPath },
+            { merge: true }
+          );
+        }
+      }
+    } catch {}
 
     await setDoc(
       doc(db, "devices", childDeviceId),
       {
-        tenantId: payload.tenantId,
+        tenantId: d.tenantId,
         userId: uid,
         approved: false,
         pushToken,
