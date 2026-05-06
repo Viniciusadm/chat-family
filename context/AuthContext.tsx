@@ -177,6 +177,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setBackupUnlocked(false);
     setHasBackupPassword(false);
     setNeedsPasswordRestore(false);
+    setCryptoInProgress(false);
     setRestoreDismissed(false);
     currentUserRoleRef.current = null;
   }, []);
@@ -608,6 +609,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setCryptoInProgress(true);
     void setupBackupPasswordImpl(uid, password)
       .then(() => {
+        if (auth.currentUser?.uid !== uid) return;
         setHasBackupPassword(true);
         setBackupUnlocked(true);
         setNeedsPasswordRestore(false);
@@ -631,6 +633,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setCryptoInProgress(true);
     void changeBackupPasswordImpl(uid, oldPassword, newPassword)
       .then((result) => {
+        if (auth.currentUser?.uid !== uid) return;
         setCryptoInProgress(false);
         if (result.ok) {
           setHasBackupPassword(true);
