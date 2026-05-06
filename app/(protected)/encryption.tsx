@@ -185,9 +185,10 @@ export default function EncryptionSettingsScreen() {
       return;
     }
     setError(null);
-    setupBackupPassword(password);
+    const pwd = password;
     reset();
     setMode("idle");
+    setupBackupPassword(pwd);
   };
 
   const submitChange = () => {
@@ -201,9 +202,11 @@ export default function EncryptionSettingsScreen() {
       return;
     }
     setError(null);
-    changeBackupPassword(oldPassword, password);
+    const oldPwd = oldPassword;
+    const newPwd = password;
     reset();
     setMode("idle");
+    changeBackupPassword(oldPwd, newPwd);
   };
 
   const submitUnlock = async () => {
