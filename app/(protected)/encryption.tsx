@@ -1,7 +1,8 @@
 import { AppHeader } from "@/components/AppHeader";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { useAuth } from "@/context/AuthContext";
-import { colors } from "@/theme/colors";
+import { useTheme } from "@/theme/ThemeContext";
+import { useThemedStyles } from "@/theme/useThemedStyles";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useState } from "react";
@@ -31,6 +32,115 @@ export default function EncryptionSettingsScreen() {
     unlockBackupPassword,
     lockBackupPassword,
   } = useAuth();
+  const { theme } = useTheme();
+  const styles = useThemedStyles((t) =>
+    StyleSheet.create({
+      screen: {
+        flex: 1,
+        backgroundColor: t.background,
+      },
+      content: {
+        flex: 1,
+        paddingHorizontal: 20,
+        paddingTop: 16,
+      },
+      center: {
+        flex: 1,
+        alignItems: "center",
+        justifyContent: "center",
+      },
+      statusBox: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 10,
+        paddingVertical: 12,
+        paddingHorizontal: 14,
+        borderRadius: 12,
+        backgroundColor: t.muted,
+        marginBottom: 16,
+      },
+      statusText: {
+        color: t.foreground,
+        fontSize: 15,
+        fontWeight: "600",
+      },
+      sub: {
+        color: t.mutedForeground,
+        fontSize: 14,
+        lineHeight: 20,
+        marginBottom: 24,
+      },
+      actions: {
+        gap: 12,
+      },
+      form: {
+        gap: 12,
+      },
+      input: {
+        minHeight: 48,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: t.inputBorder,
+        paddingHorizontal: 14,
+        fontSize: 16,
+        color: t.foreground,
+        backgroundColor: t.background,
+      },
+      primaryBtn: {
+        minHeight: 48,
+        borderRadius: 12,
+        backgroundColor: t.primary,
+        alignItems: "center",
+        justifyContent: "center",
+      },
+      primaryBtnText: {
+        color: t.primaryForeground,
+        fontSize: 16,
+        fontWeight: "700",
+      },
+      secondaryBtn: {
+        minHeight: 48,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: t.border,
+        alignItems: "center",
+        justifyContent: "center",
+      },
+      secondaryBtnText: {
+        color: t.foreground,
+        fontSize: 16,
+        fontWeight: "600",
+      },
+      dangerBtn: {
+        minHeight: 48,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: t.border,
+        alignItems: "center",
+        justifyContent: "center",
+      },
+      dangerBtnText: {
+        color: t.destructive,
+        fontSize: 16,
+        fontWeight: "700",
+      },
+      cancelBtn: {
+        paddingVertical: 10,
+        alignItems: "center",
+      },
+      cancelText: {
+        color: t.mutedForeground,
+        fontSize: 14,
+      },
+      error: {
+        color: t.destructive,
+        fontSize: 13,
+      },
+      pressed: {
+        opacity: 0.72,
+      },
+    })
+  );
   const [mode, setMode] = useState<Mode>("idle");
   const [oldPassword, setOldPassword] = useState("");
   const [password, setPassword] = useState("");
@@ -157,7 +267,7 @@ export default function EncryptionSettingsScreen() {
     if (!hasBackupPassword) {
       return (
         <View style={styles.statusBox}>
-          <Ionicons name="lock-open-outline" size={22} color={colors.mutedForeground} />
+          <Ionicons name="lock-open-outline" size={22} color={theme.mutedForeground} />
           <Text style={styles.statusText}>Sem senha configurada</Text>
         </View>
       );
@@ -167,7 +277,7 @@ export default function EncryptionSettingsScreen() {
         <Ionicons
           name={backupUnlocked ? "shield-checkmark-outline" : "shield-outline"}
           size={22}
-          color={backupUnlocked ? colors.primary : colors.mutedForeground}
+          color={backupUnlocked ? theme.primary : theme.mutedForeground}
         />
         <Text style={styles.statusText}>
           Senha configurada{backupUnlocked ? " (desbloqueada nesta sessão)" : ""}
@@ -245,6 +355,7 @@ export default function EncryptionSettingsScreen() {
                 value={oldPassword}
                 onChangeText={setOldPassword}
                 placeholder="Senha atual"
+                placeholderTextColor={theme.inputPlaceholder}
                 secureTextEntry
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -256,6 +367,7 @@ export default function EncryptionSettingsScreen() {
               value={password}
               onChangeText={setPassword}
               placeholder={mode === "unlock" ? "Senha" : "Nova senha"}
+              placeholderTextColor={theme.inputPlaceholder}
               secureTextEntry
               autoCapitalize="none"
               autoCorrect={false}
@@ -267,6 +379,7 @@ export default function EncryptionSettingsScreen() {
                 value={confirm}
                 onChangeText={setConfirm}
                 placeholder="Confirmar senha"
+                placeholderTextColor={theme.inputPlaceholder}
                 secureTextEntry
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -288,7 +401,7 @@ export default function EncryptionSettingsScreen() {
               ]}
             >
               {busy ? (
-                <ActivityIndicator color={colors.primaryForeground} />
+                <ActivityIndicator color={theme.primaryForeground} />
               ) : (
                 <Text style={styles.primaryBtnText}>
                   {mode === "setup" ? "Salvar" : mode === "change" ? "Alterar" : "Desbloquear"}
@@ -311,110 +424,3 @@ export default function EncryptionSettingsScreen() {
     </ScreenContainer>
   );
 }
-
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 16,
-  },
-  center: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  statusBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    backgroundColor: colors.muted,
-    marginBottom: 16,
-  },
-  statusText: {
-    color: colors.foreground,
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  sub: {
-    color: colors.mutedForeground,
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 24,
-  },
-  actions: {
-    gap: 12,
-  },
-  form: {
-    gap: 12,
-  },
-  input: {
-    minHeight: 48,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: 14,
-    fontSize: 16,
-    color: colors.foreground,
-    backgroundColor: colors.background,
-  },
-  primaryBtn: {
-    minHeight: 48,
-    borderRadius: 12,
-    backgroundColor: colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  primaryBtnText: {
-    color: colors.primaryForeground,
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  secondaryBtn: {
-    minHeight: 48,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  secondaryBtnText: {
-    color: colors.foreground,
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  dangerBtn: {
-    minHeight: 48,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  dangerBtnText: {
-    color: colors.destructive,
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  cancelBtn: {
-    paddingVertical: 10,
-    alignItems: "center",
-  },
-  cancelText: {
-    color: colors.mutedForeground,
-    fontSize: 14,
-  },
-  error: {
-    color: colors.destructive,
-    fontSize: 13,
-  },
-  pressed: {
-    opacity: 0.72,
-  },
-});

@@ -1,4 +1,4 @@
-import { colors } from "@/theme/colors";
+import { useThemedStyles } from "@/theme/useThemedStyles";
 import type { Reaction } from "@/types/chat";
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -29,6 +29,44 @@ export const ReactionBubble = React.memo(function ReactionBubble({
   currentUserId,
   onPress,
 }: ReactionBubbleProps) {
+  const styles = useThemedStyles((t) =>
+    StyleSheet.create({
+      wrap: {
+        flexDirection: "row",
+        flexWrap: "wrap",
+        gap: 4,
+      },
+      chip: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 2,
+        paddingHorizontal: 6,
+        paddingVertical: 3,
+        borderRadius: 12,
+        backgroundColor: t.muted,
+        borderWidth: 1,
+        borderColor: t.border,
+      },
+      chipMine: {
+        backgroundColor: t.bubbleSelf,
+        borderColor: t.primary,
+      },
+      chipPressed: {
+        opacity: 0.7,
+      },
+      emoji: {
+        fontSize: 14,
+      },
+      count: {
+        fontSize: 12,
+        fontWeight: "600",
+        color: t.mutedForeground,
+      },
+      countMine: {
+        color: t.primary,
+      },
+    })
+  );
   if (reactions.length === 0) return null;
 
   const grouped = groupReactions(reactions, currentUserId);
@@ -53,41 +91,4 @@ export const ReactionBubble = React.memo(function ReactionBubble({
       ))}
     </View>
   );
-});
-
-const styles = StyleSheet.create({
-  wrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 4,
-  },
-  chip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 2,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 12,
-    backgroundColor: colors.muted,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  chipMine: {
-    backgroundColor: colors.bubbleSelf,
-    borderColor: colors.primary,
-  },
-  chipPressed: {
-    opacity: 0.7,
-  },
-  emoji: {
-    fontSize: 14,
-  },
-  count: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: colors.mutedForeground,
-  },
-  countMine: {
-    color: colors.primary,
-  },
 });

@@ -1,4 +1,5 @@
-import { colors } from "@/theme/colors";
+import { useTheme } from "@/theme/ThemeContext";
+import { useThemedStyles } from "@/theme/useThemedStyles";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { useEffect, useState } from "react";
@@ -27,6 +28,21 @@ export function ProfileAvatar({
   size = 40,
   icon = "person-outline",
 }: ProfileAvatarProps) {
+  const { theme } = useTheme();
+  const styles = useThemedStyles((t) =>
+    StyleSheet.create({
+      wrap: {
+        overflow: "hidden",
+        backgroundColor: t.primaryTint,
+        alignItems: "center",
+        justifyContent: "center",
+      },
+      initials: {
+        fontWeight: "700",
+        color: t.primary,
+      },
+    })
+  );
   const [imageFailed, setImageFailed] = useState(false);
   const initials = initialsFromName(name);
   const radius = size / 2;
@@ -70,22 +86,9 @@ export function ProfileAvatar({
         <Ionicons
           name={icon}
           size={Math.round(size * 0.5)}
-          color={colors.primary}
+          color={theme.primary}
         />
       )}
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  wrap: {
-    overflow: "hidden",
-    backgroundColor: "rgba(31, 168, 92, 0.12)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  initials: {
-    fontWeight: "700",
-    color: colors.primary,
-  },
-});

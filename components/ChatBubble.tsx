@@ -1,6 +1,7 @@
 import { ReactionBubble } from "@/components/ReactionBubble";
 import type { Message, Reaction } from "@/types/chat";
-import { colors } from "@/theme/colors";
+import { useTheme } from "@/theme/ThemeContext";
+import { useThemedStyles } from "@/theme/useThemedStyles";
 import { MaterialIcons } from "@expo/vector-icons";
 import React, { useMemo, useRef, useState } from "react";
 import {
@@ -73,6 +74,118 @@ function ChatBubbleImpl({
   replyAvailable = true,
   highlighted = false,
 }: ChatBubbleProps) {
+  const { theme } = useTheme();
+  const styles = useThemedStyles((t) =>
+    StyleSheet.create({
+      wrap: {
+        flexDirection: "row",
+        paddingHorizontal: 12,
+        marginBottom: 8,
+        gap: 8,
+      },
+      wrapSelf: {
+        justifyContent: "flex-end",
+      },
+      wrapOther: {
+        justifyContent: "flex-start",
+        alignItems: "flex-end",
+      },
+      bubble: {
+        borderRadius: 16,
+        borderWidth: 2,
+        borderColor: "transparent",
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+        shadowColor: t.shadow,
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: t.shadowOpacity * 0.75,
+        shadowRadius: 2,
+        elevation: 1,
+      },
+      column: {
+        maxWidth: "80%",
+      },
+      columnSelf: {
+        alignItems: "flex-end",
+      },
+      columnOther: {
+        alignItems: "flex-start",
+      },
+      reactionRow: {
+        marginTop: -8,
+        zIndex: 1,
+      },
+      reactionRowSelf: {
+        alignItems: "flex-end",
+      },
+      reactionRowOther: {
+        alignItems: "flex-start",
+      },
+      bubbleSelf: {
+        backgroundColor: t.bubbleSelf,
+        borderBottomRightRadius: 6,
+      },
+      bubbleOther: {
+        backgroundColor: t.bubbleOther,
+        borderBottomLeftRadius: 6,
+      },
+      bubbleImage: {
+        paddingHorizontal: 4,
+        paddingVertical: 4,
+      },
+      bubblePressed: {
+        opacity: 0.85,
+      },
+      bubbleHighlighted: {
+        borderColor: t.primary,
+      },
+      text: {
+        fontSize: 15,
+        lineHeight: 22,
+      },
+      textSelf: {
+        color: t.bubbleSelfForeground,
+      },
+      textOther: {
+        color: t.bubbleOtherForeground,
+      },
+      encryptedFallback: {
+        fontStyle: "italic",
+        opacity: 0.75,
+      },
+      meta: {
+        marginTop: 4,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 4,
+      },
+      metaSelf: {
+        alignItems: "flex-end",
+        justifyContent: "flex-end",
+      },
+      metaOther: {
+        alignItems: "flex-start",
+      },
+      timestamp: {
+        fontSize: 10,
+        color: t.timestamp,
+      },
+      receiptIconSlot: {
+        width: 16,
+        alignItems: "center",
+        marginLeft: 2,
+      },
+      senderName: {
+        fontSize: 12,
+        fontWeight: "600",
+        marginBottom: 4,
+        color: t.timestamp,
+      },
+      senderPressed: {
+        opacity: 0.72,
+      },
+    })
+  );
   const selfReadReceipt = isSelf ? readReceipt ?? "sent" : undefined;
   const audioSource =
     message.type === "audio"
@@ -246,7 +359,7 @@ function ChatBubbleImpl({
                   }
                   size={14}
                   color={
-                    selfReadReceipt === "read" ? colors.primary : colors.timestamp
+                    selfReadReceipt === "read" ? theme.primary : theme.timestamp
                   }
                 />
               </View>
@@ -275,113 +388,3 @@ function ChatBubbleImpl({
 }
 
 export const ChatBubble = React.memo(ChatBubbleImpl);
-
-const styles = StyleSheet.create({
-  wrap: {
-    flexDirection: "row",
-    paddingHorizontal: 12,
-    marginBottom: 8,
-    gap: 8,
-  },
-  wrapSelf: {
-    justifyContent: "flex-end",
-  },
-  wrapOther: {
-    justifyContent: "flex-start",
-    alignItems: "flex-end",
-  },
-  bubble: {
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: "transparent",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  column: {
-    maxWidth: "80%",
-  },
-  columnSelf: {
-    alignItems: "flex-end",
-  },
-  columnOther: {
-    alignItems: "flex-start",
-  },
-  reactionRow: {
-    marginTop: -8,
-    zIndex: 1,
-  },
-  reactionRowSelf: {
-    alignItems: "flex-end",
-  },
-  reactionRowOther: {
-    alignItems: "flex-start",
-  },
-  bubbleSelf: {
-    backgroundColor: colors.bubbleSelf,
-    borderBottomRightRadius: 6,
-  },
-  bubbleOther: {
-    backgroundColor: colors.bubbleOther,
-    borderBottomLeftRadius: 6,
-  },
-  bubbleImage: {
-    paddingHorizontal: 4,
-    paddingVertical: 4,
-  },
-  bubblePressed: {
-    opacity: 0.85,
-  },
-  bubbleHighlighted: {
-    borderColor: colors.primary,
-  },
-  text: {
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  textSelf: {
-    color: colors.bubbleSelfForeground,
-  },
-  textOther: {
-    color: colors.bubbleOtherForeground,
-  },
-  encryptedFallback: {
-    fontStyle: "italic",
-    opacity: 0.75,
-  },
-  meta: {
-    marginTop: 4,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  metaSelf: {
-    alignItems: "flex-end",
-    justifyContent: "flex-end",
-  },
-  metaOther: {
-    alignItems: "flex-start",
-  },
-  timestamp: {
-    fontSize: 10,
-    color: colors.timestamp,
-  },
-  receiptIconSlot: {
-    width: 16,
-    alignItems: "center",
-    marginLeft: 2,
-  },
-  senderName: {
-    fontSize: 12,
-    fontWeight: "600",
-    marginBottom: 4,
-    color: colors.timestamp,
-  },
-  senderPressed: {
-    opacity: 0.72,
-  },
-});

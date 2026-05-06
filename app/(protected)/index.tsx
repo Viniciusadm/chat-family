@@ -5,7 +5,8 @@ import { useAuth } from "@/context/AuthContext";
 import { useChats } from "@/hooks/useChats";
 import { useMemberProfiles } from "@/hooks/useMemberProfiles";
 import { getChatDisplayName } from "@/lib/chatDisplayName";
-import { colors } from "@/theme/colors";
+import { useTheme } from "@/theme/ThemeContext";
+import { useThemedStyles } from "@/theme/useThemedStyles";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import {
@@ -32,6 +33,113 @@ export default function ChatListScreen() {
   const { chats, loading } = useChats();
   const { currentUser, firebaseUser } = useAuth();
   const memberProfiles = useMemberProfiles();
+  const { theme } = useTheme();
+  const styles = useThemedStyles((t) =>
+    StyleSheet.create({
+      screen: {
+        flex: 1,
+        backgroundColor: t.background,
+      },
+      center: {
+        flex: 1,
+        alignItems: "center",
+        justifyContent: "center",
+      },
+      list: {
+        paddingBottom: 24,
+      },
+      row: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+        paddingHorizontal: 20,
+        paddingVertical: 14,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: t.border,
+      },
+      rowPressed: {
+        backgroundColor: t.muted,
+      },
+      rowBody: {
+        flex: 1,
+        minWidth: 0,
+      },
+      rowTop: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 8,
+      },
+      chatName: {
+        flex: 1,
+        fontSize: 16,
+        fontWeight: "600",
+        color: t.foreground,
+      },
+      time: {
+        fontSize: 12,
+        color: t.timestamp,
+      },
+      previewRow: {
+        marginTop: 4,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+        minHeight: 22,
+      },
+      preview: {
+        flex: 1,
+        fontSize: 14,
+        color: t.mutedForeground,
+      },
+      previewSpacer: {
+        flex: 1,
+      },
+      unreadBadge: {
+        minWidth: 22,
+        height: 22,
+        paddingHorizontal: 6,
+        borderRadius: 11,
+        backgroundColor: t.primary,
+        alignItems: "center",
+        justifyContent: "center",
+      },
+      unreadBadgeText: {
+        fontSize: 12,
+        fontWeight: "700",
+        color: t.primaryForeground,
+      },
+      empty: {
+        flex: 1,
+        alignItems: "center",
+        justifyContent: "center",
+        paddingHorizontal: 32,
+      },
+      emptyIconWrap: {
+        width: 96,
+        height: 96,
+        borderRadius: 24,
+        backgroundColor: t.primaryTintStrong,
+        alignItems: "center",
+        justifyContent: "center",
+        marginBottom: 24,
+      },
+      emptyTitle: {
+        fontSize: 20,
+        fontWeight: "600",
+        color: t.foreground,
+        textAlign: "center",
+      },
+      emptySub: {
+        marginTop: 12,
+        fontSize: 14,
+        lineHeight: 20,
+        color: t.mutedForeground,
+        textAlign: "center",
+        maxWidth: 280,
+      },
+    })
+  );
   const canAccessAdmin =
     currentUser?.role === "adult" &&
     (firebaseUser == null || !firebaseUser.isAnonymous);
@@ -73,7 +181,7 @@ export default function ChatListScreen() {
             <Ionicons
               name="chatbubbles-outline"
               size={44}
-              color={colors.primary}
+              color={theme.primary}
             />
           </View>
           <Text style={styles.emptyTitle}>Nenhuma conversa por aqui</Text>
@@ -156,108 +264,3 @@ export default function ChatListScreen() {
     </ScreenContainer>
   );
 }
-
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  center: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  list: {
-    paddingBottom: 24,
-  },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
-  rowPressed: {
-    backgroundColor: colors.muted,
-  },
-  rowBody: {
-    flex: 1,
-    minWidth: 0,
-  },
-  rowTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-  },
-  chatName: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: "600",
-    color: colors.foreground,
-  },
-  time: {
-    fontSize: 12,
-    color: colors.timestamp,
-  },
-  previewRow: {
-    marginTop: 4,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    minHeight: 22,
-  },
-  preview: {
-    flex: 1,
-    fontSize: 14,
-    color: colors.mutedForeground,
-  },
-  previewSpacer: {
-    flex: 1,
-  },
-  unreadBadge: {
-    minWidth: 22,
-    height: 22,
-    paddingHorizontal: 6,
-    borderRadius: 11,
-    backgroundColor: colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  unreadBadgeText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: colors.primaryForeground,
-  },
-  empty: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 32,
-  },
-  emptyIconWrap: {
-    width: 96,
-    height: 96,
-    borderRadius: 24,
-    backgroundColor: "rgba(31, 168, 92, 0.15)",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 24,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: "600",
-    color: colors.foreground,
-    textAlign: "center",
-  },
-  emptySub: {
-    marginTop: 12,
-    fontSize: 14,
-    lineHeight: 20,
-    color: colors.mutedForeground,
-    textAlign: "center",
-    maxWidth: 280,
-  },
-});

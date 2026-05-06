@@ -1,6 +1,7 @@
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { useAuth } from "@/context/AuthContext";
-import { colors } from "@/theme/colors";
+import { useTheme } from "@/theme/ThemeContext";
+import { useThemedStyles } from "@/theme/useThemedStyles";
 import { Ionicons } from "@expo/vector-icons";
 import { Redirect, useRouter } from "expo-router";
 import { useState } from "react";
@@ -23,6 +24,84 @@ export default function EncryptionRestoreScreen() {
     restorePasswordBackups,
     dismissPasswordRestore,
   } = useAuth();
+  const { theme } = useTheme();
+  const styles = useThemedStyles((t) =>
+    StyleSheet.create({
+      screen: {
+        flex: 1,
+        backgroundColor: t.muted,
+        alignItems: "center",
+        justifyContent: "center",
+        paddingHorizontal: 24,
+      },
+      iconWrap: {
+        width: 80,
+        height: 80,
+        borderRadius: 40,
+        backgroundColor: t.primaryTint,
+        alignItems: "center",
+        justifyContent: "center",
+        marginBottom: 20,
+      },
+      title: {
+        fontSize: 22,
+        fontWeight: "600",
+        color: t.foreground,
+        textAlign: "center",
+        marginBottom: 8,
+      },
+      sub: {
+        fontSize: 15,
+        color: t.mutedForeground,
+        textAlign: "center",
+        maxWidth: 320,
+        marginBottom: 24,
+      },
+      input: {
+        width: "100%",
+        maxWidth: 360,
+        minHeight: 48,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: t.inputBorder,
+        paddingHorizontal: 14,
+        fontSize: 16,
+        color: t.foreground,
+        backgroundColor: t.background,
+      },
+      error: {
+        color: t.destructive,
+        marginTop: 10,
+        textAlign: "center",
+      },
+      primaryBtn: {
+        width: "100%",
+        maxWidth: 360,
+        minHeight: 48,
+        marginTop: 16,
+        borderRadius: 12,
+        backgroundColor: t.primary,
+        alignItems: "center",
+        justifyContent: "center",
+      },
+      primaryBtnText: {
+        color: t.primaryForeground,
+        fontSize: 16,
+        fontWeight: "700",
+      },
+      skipBtn: {
+        marginTop: 16,
+        padding: 8,
+      },
+      skipText: {
+        color: t.mutedForeground,
+        fontSize: 14,
+      },
+      pressed: {
+        opacity: 0.72,
+      },
+    })
+  );
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -84,7 +163,7 @@ export default function EncryptionRestoreScreen() {
   return (
     <ScreenContainer style={styles.screen} edges={["top", "bottom"]}>
       <View style={styles.iconWrap}>
-        <Ionicons name="lock-closed-outline" size={36} color={colors.primary} />
+        <Ionicons name="lock-closed-outline" size={36} color={theme.primary} />
       </View>
       <Text style={styles.title}>Restaurar conversas</Text>
       <Text style={styles.sub}>
@@ -97,6 +176,7 @@ export default function EncryptionRestoreScreen() {
           if (error) setError(null);
         }}
         placeholder="Senha"
+        placeholderTextColor={theme.inputPlaceholder}
         secureTextEntry
         autoCapitalize="none"
         autoCorrect={false}
@@ -114,7 +194,7 @@ export default function EncryptionRestoreScreen() {
         ]}
       >
         {busy ? (
-          <ActivityIndicator color={colors.primaryForeground} />
+          <ActivityIndicator color={theme.primaryForeground} />
         ) : (
           <Text style={styles.primaryBtnText}>Restaurar</Text>
         )}
@@ -125,79 +205,3 @@ export default function EncryptionRestoreScreen() {
     </ScreenContainer>
   );
 }
-
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: colors.muted,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 24,
-  },
-  iconWrap: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: "rgba(31, 168, 92, 0.12)",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 20,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: "600",
-    color: colors.foreground,
-    textAlign: "center",
-    marginBottom: 8,
-  },
-  sub: {
-    fontSize: 15,
-    color: colors.mutedForeground,
-    textAlign: "center",
-    maxWidth: 320,
-    marginBottom: 24,
-  },
-  input: {
-    width: "100%",
-    maxWidth: 360,
-    minHeight: 48,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: 14,
-    fontSize: 16,
-    color: colors.foreground,
-    backgroundColor: colors.background,
-  },
-  error: {
-    color: colors.destructive,
-    marginTop: 10,
-    textAlign: "center",
-  },
-  primaryBtn: {
-    width: "100%",
-    maxWidth: 360,
-    minHeight: 48,
-    marginTop: 16,
-    borderRadius: 12,
-    backgroundColor: colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  primaryBtnText: {
-    color: colors.primaryForeground,
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  skipBtn: {
-    marginTop: 16,
-    padding: 8,
-  },
-  skipText: {
-    color: colors.mutedForeground,
-    fontSize: 14,
-  },
-  pressed: {
-    opacity: 0.72,
-  },
-});

@@ -1,4 +1,4 @@
-import { colors } from "@/theme/colors";
+import { useThemedStyles } from "@/theme/useThemedStyles";
 import type { MessageReplySnapshot } from "@/types/chat";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
@@ -15,6 +15,55 @@ export function QuotedReply({
   isSelf,
   onPress,
 }: QuotedReplyProps) {
+  const styles = useThemedStyles((t) =>
+    StyleSheet.create({
+      wrap: {
+        minWidth: 180,
+        maxWidth: 280,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: t.border,
+        flexDirection: "row",
+        overflow: "hidden",
+        marginBottom: 8,
+      },
+      wrapSelf: {
+        backgroundColor: t.overlayLight,
+      },
+      wrapOther: {
+        backgroundColor: t.background,
+      },
+      accent: {
+        width: 3,
+        alignSelf: "stretch",
+        backgroundColor: t.primary,
+      },
+      content: {
+        flex: 1,
+        paddingHorizontal: 10,
+        paddingVertical: 7,
+      },
+      sender: {
+        fontSize: 12,
+        fontWeight: "700",
+        color: t.primary,
+      },
+      preview: {
+        marginTop: 2,
+        fontSize: 13,
+        lineHeight: 18,
+        color: t.mutedForeground,
+      },
+      unavailable: {
+        fontSize: 13,
+        fontStyle: "italic",
+        color: t.mutedForeground,
+      },
+      pressed: {
+        opacity: 0.75,
+      },
+    })
+  );
   return (
     <Pressable
       disabled={!available || !onPress}
@@ -45,51 +94,3 @@ export function QuotedReply({
     </Pressable>
   );
 }
-
-const styles = StyleSheet.create({
-  wrap: {
-    minWidth: 180,
-    maxWidth: 280,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: colors.border,
-    flexDirection: "row",
-    overflow: "hidden",
-    marginBottom: 8,
-  },
-  wrapSelf: {
-    backgroundColor: "rgba(255,255,255,0.16)",
-  },
-  wrapOther: {
-    backgroundColor: colors.background,
-  },
-  accent: {
-    width: 3,
-    alignSelf: "stretch",
-    backgroundColor: colors.primary,
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-  },
-  sender: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: colors.primary,
-  },
-  preview: {
-    marginTop: 2,
-    fontSize: 13,
-    lineHeight: 18,
-    color: colors.mutedForeground,
-  },
-  unavailable: {
-    fontSize: 13,
-    fontStyle: "italic",
-    color: colors.mutedForeground,
-  },
-  pressed: {
-    opacity: 0.75,
-  },
-});

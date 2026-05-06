@@ -2,12 +2,14 @@ import { AppHeader } from "@/components/AppHeader";
 import { LoadingDots } from "@/components/LoadingDots";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { ScreenContainer } from "@/components/ScreenContainer";
+import { ThemePicker } from "@/components/ThemePicker";
 import { useAuth } from "@/context/AuthContext";
 import { useConnectivity } from "@/hooks/useConnectivity";
 import { useMemberProfiles } from "@/hooks/useMemberProfiles";
 import { db, storage } from "@/lib/firebase";
 import { randomUuid } from "@/lib/randomUuid";
-import { colors } from "@/theme/colors";
+import { useTheme } from "@/theme/ThemeContext";
+import { useThemedStyles } from "@/theme/useThemedStyles";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
@@ -42,6 +44,112 @@ export default function ProfileScreen() {
   const memberProfiles = useMemberProfiles();
   const [saving, setSaving] = useState(false);
   const [photoModalVisible, setPhotoModalVisible] = useState(false);
+  const { theme } = useTheme();
+  const styles = useThemedStyles((t) =>
+    StyleSheet.create({
+      screen: {
+        flex: 1,
+        backgroundColor: t.background,
+      },
+      center: {
+        flex: 1,
+        alignItems: "center",
+        justifyContent: "center",
+      },
+      content: {
+        flex: 1,
+        alignItems: "center",
+        paddingHorizontal: 24,
+        paddingTop: 36,
+      },
+      avatarWrap: {
+        width: 132,
+        height: 132,
+        borderRadius: 66,
+        overflow: "hidden",
+      },
+      savingOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: t.modalBackdrop,
+      },
+      name: {
+        marginTop: 18,
+        fontSize: 22,
+        fontWeight: "700",
+        color: t.foreground,
+        textAlign: "center",
+      },
+      meta: {
+        marginTop: 6,
+        fontSize: 14,
+        color: t.mutedForeground,
+      },
+      actions: {
+        alignSelf: "stretch",
+        marginTop: 32,
+        gap: 12,
+      },
+      primaryBtn: {
+        minHeight: 48,
+        borderRadius: 12,
+        backgroundColor: t.primary,
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 8,
+      },
+      primaryBtnText: {
+        color: t.primaryForeground,
+        fontSize: 16,
+        fontWeight: "700",
+      },
+      dangerBtn: {
+        minHeight: 48,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: t.border,
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 8,
+      },
+      dangerBtnText: {
+        color: t.destructive,
+        fontSize: 16,
+        fontWeight: "700",
+      },
+      photoModalRoot: {
+        flex: 1,
+        backgroundColor: t.viewerBackdrop,
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 16,
+      },
+      photoModalHeader: {
+        position: "absolute",
+        top: 48,
+        right: 20,
+        zIndex: 2,
+      },
+      photoClose: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: t.overlayLight,
+      },
+      fullPhoto: {
+        width: "100%",
+        height: "82%",
+      },
+      pressed: {
+        opacity: 0.72,
+      },
+    })
+  );
 
   if (!currentUser) {
     return (
@@ -178,7 +286,7 @@ export default function ProfileScreen() {
           />
           {saving && isOwnProfile ? (
             <View style={styles.savingOverlay}>
-              <ActivityIndicator color={colors.primaryForeground} />
+              <ActivityIndicator color={theme.primaryForeground} />
             </View>
           ) : null}
         </Pressable>
@@ -199,7 +307,7 @@ export default function ProfileScreen() {
               <Ionicons
                 name="image-outline"
                 size={18}
-                color={colors.primaryForeground}
+                color={theme.primaryForeground}
               />
               <Text style={styles.primaryBtnText}>
                 {currentUser.photoUrl ? "Trocar foto" : "Adicionar foto"}
@@ -218,13 +326,15 @@ export default function ProfileScreen() {
                 <Ionicons
                   name="trash-outline"
                   size={18}
-                  color={colors.destructive}
+                  color={theme.destructive}
                 />
                 <Text style={styles.dangerBtnText}>Remover foto</Text>
               </Pressable>
             ) : null}
           </View>
         ) : null}
+
+        {isOwnProfile ? <ThemePicker /> : null}
       </View>
 
       <Modal
@@ -243,7 +353,7 @@ export default function ProfileScreen() {
               hitSlop={12}
               style={styles.photoClose}
             >
-              <Ionicons name="close" size={28} color={colors.primaryForeground} />
+              <Ionicons name="close" size={28} color={theme.primaryForeground} />
             </Pressable>
           </View>
           {viewedProfile.photoUrl ? (
@@ -258,107 +368,3 @@ export default function ProfileScreen() {
     </ScreenContainer>
   );
 }
-
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  center: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  content: {
-    flex: 1,
-    alignItems: "center",
-    paddingHorizontal: 24,
-    paddingTop: 36,
-  },
-  avatarWrap: {
-    width: 132,
-    height: 132,
-    borderRadius: 66,
-    overflow: "hidden",
-  },
-  savingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.35)",
-  },
-  name: {
-    marginTop: 18,
-    fontSize: 22,
-    fontWeight: "700",
-    color: colors.foreground,
-    textAlign: "center",
-  },
-  meta: {
-    marginTop: 6,
-    fontSize: 14,
-    color: colors.mutedForeground,
-  },
-  actions: {
-    alignSelf: "stretch",
-    marginTop: 32,
-    gap: 12,
-  },
-  primaryBtn: {
-    minHeight: 48,
-    borderRadius: 12,
-    backgroundColor: colors.primary,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-  primaryBtnText: {
-    color: colors.primaryForeground,
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  dangerBtn: {
-    minHeight: 48,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-  dangerBtnText: {
-    color: colors.destructive,
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  photoModalRoot: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.92)",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 16,
-  },
-  photoModalHeader: {
-    position: "absolute",
-    top: 48,
-    right: 20,
-    zIndex: 2,
-  },
-  photoClose: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.14)",
-  },
-  fullPhoto: {
-    width: "100%",
-    height: "82%",
-  },
-  pressed: {
-    opacity: 0.72,
-  },
-});

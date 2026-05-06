@@ -4,10 +4,12 @@ import { NotificationNavigation } from "@/components/NotificationNavigation";
 import { PushTokenSync } from "@/components/PushTokenSync";
 import { AuthProvider } from "@/context/AuthContext";
 import { registerBackgroundNotificationTask } from "@/lib/backgroundNotifications";
+import { ThemeProvider, useTheme } from "@/theme/ThemeContext";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import * as SystemUI from "expo-system-ui";
 import { useEffect } from "react";
 import { LogBox, View } from "react-native";
 import { KeyboardProvider } from "react-native-keyboard-controller";
@@ -16,6 +18,14 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 LogBox.ignoreLogs([
   /\[expo-notifications\] Error thrown while updating the device push token/,
 ]);
+
+function ThemedChrome() {
+  const { theme, resolvedScheme } = useTheme();
+  useEffect(() => {
+    void SystemUI.setBackgroundColorAsync(theme.background);
+  }, [theme.background]);
+  return <StatusBar style={resolvedScheme === "dark" ? "light" : "dark"} />;
+}
 
 function RootLayoutNav() {
   return (
@@ -47,14 +57,16 @@ export default function RootLayout() {
   }
 
   return (
-    <SafeAreaProvider>
-      <KeyboardProvider>
-        <AuthProvider>
-          <PushTokenSync />
-          <StatusBar style="auto" />
-          <RootLayoutNav />
-        </AuthProvider>
-      </KeyboardProvider>
-    </SafeAreaProvider>
+    <ThemeProvider>
+      <SafeAreaProvider>
+        <KeyboardProvider>
+          <AuthProvider>
+            <PushTokenSync />
+            <ThemedChrome />
+            <RootLayoutNav />
+          </AuthProvider>
+        </KeyboardProvider>
+      </SafeAreaProvider>
+    </ThemeProvider>
   );
 }

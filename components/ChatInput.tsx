@@ -1,5 +1,6 @@
 import { useSendMessage } from "@/hooks/useSendMessage";
-import { colors } from "@/theme/colors";
+import { useTheme } from "@/theme/ThemeContext";
+import { useThemedStyles } from "@/theme/useThemedStyles";
 import type { MessageReplySnapshot } from "@/types/chat";
 import { Ionicons } from "@expo/vector-icons";
 import {
@@ -53,6 +54,94 @@ function ChatInput({
   onCancelReply,
   onSend,
 }, ref) {
+  const { theme } = useTheme();
+  const styles = useThemedStyles((t) =>
+    StyleSheet.create({
+      bar: {
+        borderTopWidth: StyleSheet.hairlineWidth,
+        borderTopColor: t.border,
+        backgroundColor: t.chatInputBg,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+      },
+      row: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+      },
+      inputShell: {
+        flex: 1,
+        borderRadius: 22,
+        borderWidth: 1,
+        borderColor: t.inputBorder,
+        backgroundColor: t.background,
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        minHeight: 44,
+        justifyContent: "center",
+      },
+      input: {
+        fontSize: 15,
+        color: t.foreground,
+        padding: 0,
+      },
+      roundBtn: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: t.primary,
+        alignItems: "center",
+        justifyContent: "center",
+      },
+      attachBtn: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        alignItems: "center",
+        justifyContent: "center",
+      },
+      recordingOverlay: {
+        position: "absolute",
+        left: 0,
+        top: 0,
+        bottom: 0,
+        right: 52,
+        borderRadius: 12,
+        backgroundColor: t.muted,
+        flexDirection: "row",
+        alignItems: "center",
+        paddingHorizontal: 14,
+        gap: 10,
+        pointerEvents: "none",
+      },
+      recDot: {
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+        backgroundColor: t.recording,
+      },
+      recText: {
+        flex: 1,
+        fontSize: 14,
+        fontWeight: "600",
+        color: t.recording,
+      },
+      recTimer: {
+        fontSize: 14,
+        fontWeight: "700",
+        color: t.foreground,
+        minWidth: 38,
+        textAlign: "right",
+      },
+      pressed: {
+        opacity: 0.85,
+        transform: [{ scale: 0.97 }],
+      },
+      disabled: {
+        opacity: 0.5,
+      },
+    })
+  );
   const { sendText, sendAudio, sendImage, isSending } = useSendMessage(chatId);
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const insets = useSafeAreaInsets();
@@ -273,7 +362,7 @@ function ChatInput({
           <Ionicons
             name="add"
             size={26}
-            color={colors.mutedForeground}
+            color={theme.mutedForeground}
           />
         </Pressable>
         <View style={styles.inputShell}>
@@ -281,7 +370,7 @@ function ChatInput({
             ref={inputRef}
             value={text}
             placeholder="Digite uma mensagem"
-            placeholderTextColor={colors.mutedForeground}
+            placeholderTextColor={theme.mutedForeground}
             style={styles.input}
             multiline={true}
             editable
@@ -304,7 +393,7 @@ function ChatInput({
             <Ionicons
               name="send"
               size={18}
-              color={colors.primaryForeground}
+              color={theme.primaryForeground}
             />
           </Pressable>
         ) : (
@@ -321,7 +410,7 @@ function ChatInput({
             <Ionicons
               name="mic"
               size={20}
-              color={colors.primaryForeground}
+              color={theme.primaryForeground}
             />
           </Pressable>
         )}
@@ -351,90 +440,4 @@ function ChatInput({
       />
     </Animated.View>
   );
-});
-
-const styles = StyleSheet.create({
-  bar: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-    backgroundColor: colors.chatInputBg,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  inputShell: {
-    flex: 1,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.background,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    minHeight: 44,
-    justifyContent: "center",
-  },
-  input: {
-    fontSize: 15,
-    color: colors.foreground,
-    padding: 0,
-  },
-  roundBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  attachBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  recordingOverlay: {
-    position: "absolute",
-    left: 0,
-    top: 0,
-    bottom: 0,
-    right: 52,
-    borderRadius: 12,
-    backgroundColor: colors.muted,
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 14,
-    gap: 10,
-    pointerEvents: "none",
-  },
-  recDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: colors.recording,
-  },
-  recText: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: "600",
-    color: colors.recording,
-  },
-  recTimer: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: colors.foreground,
-    minWidth: 38,
-    textAlign: "right",
-  },
-  pressed: {
-    opacity: 0.85,
-    transform: [{ scale: 0.97 }],
-  },
-  disabled: {
-    opacity: 0.5,
-  },
 });

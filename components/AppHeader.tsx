@@ -1,4 +1,5 @@
-import { colors } from "@/theme/colors";
+import { useTheme } from "@/theme/ThemeContext";
+import { useThemedStyles } from "@/theme/useThemedStyles";
 import { Ionicons } from "@expo/vector-icons";
 import type { ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -27,6 +28,59 @@ export function AppHeader({
   onRightPress,
   rightActions,
 }: AppHeaderProps) {
+  const { theme } = useTheme();
+  const styles = useThemedStyles((t) =>
+    StyleSheet.create({
+      container: {
+        backgroundColor: t.chatHeader,
+      },
+      bar: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+        paddingHorizontal: 12,
+        paddingBottom: 10,
+        paddingTop: 10,
+      },
+      iconBtn: {
+        width: 36,
+        height: 36,
+        alignItems: "center",
+        justifyContent: "center",
+        borderRadius: 18,
+      },
+      iconPlaceholder: {
+        width: 36,
+        height: 36,
+      },
+      actions: {
+        minWidth: 36,
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "flex-end",
+        gap: 4,
+      },
+      pressed: {
+        opacity: 0.7,
+      },
+      titleWrap: {
+        flex: 1,
+        alignSelf: "stretch",
+        justifyContent: "center",
+        minHeight: 36,
+      },
+      title: {
+        fontWeight: "600",
+        color: t.chatHeaderForeground,
+      },
+      titleWithBack: {
+        fontSize: 18,
+      },
+      titleLarge: {
+        fontSize: 20,
+      },
+    })
+  );
   const actions =
     rightActions ??
     (rightIcon && onRightPress
@@ -45,7 +99,7 @@ export function AppHeader({
             <Ionicons
               name="chevron-back"
               size={24}
-              color={colors.chatHeaderForeground}
+              color={theme.chatHeaderForeground}
             />
           </Pressable>
         ) : null}
@@ -80,7 +134,7 @@ export function AppHeader({
                     <Ionicons
                       name={action.icon}
                       size={22}
-                      color={colors.chatHeaderForeground}
+                      color={theme.chatHeaderForeground}
                     />
                   ) : null)}
               </Pressable>
@@ -93,54 +147,3 @@ export function AppHeader({
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    backgroundColor: colors.chatHeader,
-  },
-  bar: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingBottom: 10,
-    paddingTop: 10,
-  },
-  iconBtn: {
-    width: 36,
-    height: 36,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 18,
-  },
-  iconPlaceholder: {
-    width: 36,
-    height: 36,
-  },
-  actions: {
-    minWidth: 36,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "flex-end",
-    gap: 4,
-  },
-  pressed: {
-    opacity: 0.7,
-  },
-  titleWrap: {
-    flex: 1,
-    alignSelf: "stretch",
-    justifyContent: "center",
-    minHeight: 36,
-  },
-  title: {
-    fontWeight: "600",
-    color: colors.chatHeaderForeground,
-  },
-  titleWithBack: {
-    fontSize: 18,
-  },
-  titleLarge: {
-    fontSize: 20,
-  },
-});

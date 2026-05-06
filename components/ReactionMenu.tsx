@@ -1,4 +1,4 @@
-import { colors } from "@/theme/colors";
+import { useThemedStyles } from "@/theme/useThemedStyles";
 import React, { useEffect, useRef } from "react";
 import {
   Animated,
@@ -32,6 +32,43 @@ export function ReactionMenu({
   onEmojiSelect,
   onClose,
 }: ReactionMenuProps) {
+  const styles = useThemedStyles((t) =>
+    StyleSheet.create({
+      backdrop: {
+        flex: 1,
+      },
+      menu: {
+        position: "absolute",
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 2,
+        paddingHorizontal: 8,
+        height: MENU_HEIGHT,
+        backgroundColor: t.card,
+        borderRadius: 28,
+        borderWidth: 1,
+        borderColor: t.border,
+        shadowColor: t.shadow,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: t.shadowOpacity * 1.8,
+        shadowRadius: 8,
+        elevation: 8,
+      },
+      emojiButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        alignItems: "center",
+        justifyContent: "center",
+      },
+      emojiButtonPressed: {
+        backgroundColor: t.muted,
+      },
+      emojiText: {
+        fontSize: 26,
+      },
+    })
+  );
   const scale = useRef(new Animated.Value(0)).current;
   const opacity = useRef(new Animated.Value(0)).current;
 
@@ -100,39 +137,3 @@ export function ReactionMenu({
     </Modal>
   );
 }
-
-const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-  },
-  menu: {
-    position: "absolute",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 2,
-    paddingHorizontal: 8,
-    height: MENU_HEIGHT,
-    backgroundColor: colors.card,
-    borderRadius: 28,
-    borderWidth: 1,
-    borderColor: colors.border,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  emojiButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  emojiButtonPressed: {
-    backgroundColor: colors.muted,
-  },
-  emojiText: {
-    fontSize: 26,
-  },
-});

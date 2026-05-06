@@ -1,6 +1,6 @@
 import { LoadingDots } from "@/components/LoadingDots";
 import { useAuth } from "@/context/AuthContext";
-import { colors } from "@/theme/colors";
+import { useThemedStyles } from "@/theme/useThemedStyles";
 import { Redirect, Stack } from "expo-router";
 import { StyleSheet, View } from "react-native";
 
@@ -14,6 +14,16 @@ export default function ProtectedLayout() {
     needsPushToken,
     needsPasswordRestore,
   } = useAuth();
+  const styles = useThemedStyles((t) =>
+    StyleSheet.create({
+      center: {
+        flex: 1,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: t.background,
+      },
+    })
+  );
   const hasApprovedSession = currentUser != null && deviceApproved === true;
 
   if (loading || (firebaseUser && !sessionReady)) {
@@ -50,12 +60,3 @@ export default function ProtectedLayout() {
 
   return <Stack screenOptions={{ headerShown: false }} />;
 }
-
-const styles = StyleSheet.create({
-  center: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.background,
-  },
-});

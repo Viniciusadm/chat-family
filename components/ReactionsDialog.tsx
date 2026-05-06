@@ -1,4 +1,4 @@
-import { colors } from "@/theme/colors";
+import { useThemedStyles } from "@/theme/useThemedStyles";
 import type { Reaction } from "@/types/chat";
 import React, { useMemo } from "react";
 import {
@@ -27,6 +27,104 @@ export function ReactionsDialog({
   onRemoveReaction,
   onClose,
 }: ReactionsDialogProps) {
+  const styles = useThemedStyles((t) =>
+    StyleSheet.create({
+      backdrop: {
+        flex: 1,
+        backgroundColor: t.modalBackdrop,
+        justifyContent: "center",
+        alignItems: "center",
+        padding: 32,
+      },
+      card: {
+        width: "100%",
+        maxWidth: 320,
+        maxHeight: "80%",
+        backgroundColor: t.card,
+        borderRadius: 20,
+        padding: 20,
+        shadowColor: t.shadow,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: t.shadowOpacity * 2.5,
+        shadowRadius: 12,
+        elevation: 10,
+      },
+      title: {
+        fontSize: 17,
+        fontWeight: "700",
+        color: t.foreground,
+        textAlign: "center",
+        marginBottom: 16,
+      },
+      barRow: {
+        flexDirection: "row",
+        justifyContent: "center",
+        alignItems: "flex-end",
+        gap: 6,
+        marginBottom: 20,
+        paddingBottom: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: t.border,
+      },
+      barItem: {
+        alignItems: "center",
+        gap: 4,
+      },
+      barEmoji: {
+        fontSize: 22,
+      },
+      barFill: {
+        height: 4,
+        borderRadius: 2,
+        backgroundColor: t.primary,
+        minWidth: 8,
+      },
+      barCount: {
+        fontSize: 12,
+        fontWeight: "600",
+        color: t.mutedForeground,
+      },
+      list: {
+        maxHeight: 260,
+      },
+      entry: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        paddingVertical: 10,
+      },
+      entryLeft: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+      },
+      entryEmoji: {
+        fontSize: 20,
+      },
+      entryName: {
+        fontSize: 15,
+        color: t.foreground,
+        fontWeight: "500",
+      },
+      removeButton: {
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 8,
+      },
+      removeButtonPressed: {
+        backgroundColor: t.muted,
+      },
+      removeText: {
+        fontSize: 12,
+        color: t.destructive,
+        fontWeight: "500",
+      },
+      divider: {
+        height: 1,
+        backgroundColor: t.border,
+      },
+    })
+  );
   const { emojiBar, entries } = useMemo(() => {
     const counts = new Map<string, number>();
     const userOrder: Reaction[] = [];
@@ -123,100 +221,3 @@ export function ReactionsDialog({
     </Modal>
   );
 }
-
-const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 32,
-  },
-  card: {
-    width: "100%",
-    maxWidth: 320,
-    maxHeight: "80%",
-    backgroundColor: colors.card,
-    borderRadius: 20,
-    padding: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 10,
-  },
-  title: {
-    fontSize: 17,
-    fontWeight: "700",
-    color: colors.foreground,
-    textAlign: "center",
-    marginBottom: 16,
-  },
-  barRow: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "flex-end",
-    gap: 6,
-    marginBottom: 20,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  barItem: {
-    alignItems: "center",
-    gap: 4,
-  },
-  barEmoji: {
-    fontSize: 22,
-  },
-  barFill: {
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.primary,
-    minWidth: 8,
-  },
-  barCount: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: colors.mutedForeground,
-  },
-  list: {
-    maxHeight: 260,
-  },
-  entry: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 10,
-  },
-  entryLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  entryEmoji: {
-    fontSize: 20,
-  },
-  entryName: {
-    fontSize: 15,
-    color: colors.foreground,
-    fontWeight: "500",
-  },
-  removeButton: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  removeButtonPressed: {
-    backgroundColor: colors.muted,
-  },
-  removeText: {
-    fontSize: 12,
-    color: colors.destructive,
-    fontWeight: "500",
-  },
-  divider: {
-    height: 1,
-    backgroundColor: colors.border,
-  },
-});

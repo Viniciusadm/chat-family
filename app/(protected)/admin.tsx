@@ -5,7 +5,8 @@ import { ScreenContainer } from "@/components/ScreenContainer";
 import { useAuth } from "@/context/AuthContext";
 import { useAdminData } from "@/hooks/useAdminData";
 import { getChatDisplayName } from "@/lib/chatDisplayName";
-import { colors } from "@/theme/colors";
+import { useTheme } from "@/theme/ThemeContext";
+import { useThemedStyles } from "@/theme/useThemedStyles";
 import type { AppMember, Chat, UserRole } from "@/types/chat";
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
@@ -33,6 +34,265 @@ function formatTime(date: Date) {
 export default function AdminScreen() {
   const router = useRouter();
   const { currentUser, firebaseUser, logout } = useAuth();
+  const { theme } = useTheme();
+  const styles = useThemedStyles((t) =>
+    StyleSheet.create({
+      screen: {
+        flex: 1,
+        backgroundColor: t.background,
+      },
+      center: {
+        flex: 1,
+        alignItems: "center",
+        justifyContent: "center",
+      },
+      scroll: {
+        padding: 16,
+        paddingBottom: 40,
+        gap: 8,
+      },
+      sectionHead: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+        marginTop: 16,
+        marginBottom: 8,
+      },
+      sectionLabel: {
+        fontSize: 12,
+        fontWeight: "600",
+        color: t.mutedForeground,
+        textTransform: "uppercase",
+        letterSpacing: 0.5,
+      },
+      card: {
+        backgroundColor: t.card,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: t.border,
+        padding: 14,
+        marginBottom: 8,
+      },
+      cardRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+      },
+      deviceRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+      },
+      cardBody: {
+        flex: 1,
+        minWidth: 0,
+      },
+      cardTitle: {
+        fontSize: 16,
+        fontWeight: "600",
+        color: t.foreground,
+      },
+      cardMeta: {
+        marginTop: 4,
+        fontSize: 12,
+        color: t.mutedForeground,
+      },
+      codeRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+        marginTop: 4,
+      },
+      codeText: {
+        fontFamily: "monospace",
+        fontSize: 12,
+        color: t.mutedForeground,
+        letterSpacing: 1,
+      },
+      badge: {
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 8,
+      },
+      badgeAdult: {
+        backgroundColor: t.primary,
+      },
+      badgeChild: {
+        backgroundColor: t.muted,
+      },
+      badgeText: {
+        fontSize: 12,
+        fontWeight: "600",
+        color: t.foreground,
+      },
+      badgeTextAdult: {
+        color: t.primaryForeground,
+      },
+      emptyBox: {
+        backgroundColor: t.muted,
+        borderRadius: 12,
+        padding: 24,
+        alignItems: "center",
+        marginBottom: 8,
+      },
+      emptyText: {
+        fontSize: 14,
+        color: t.mutedForeground,
+      },
+      outlineBtn: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 8,
+        borderWidth: 1,
+        borderColor: t.border,
+        borderRadius: 12,
+        paddingVertical: 12,
+        marginTop: 4,
+        marginBottom: 8,
+      },
+      outlineBtnText: {
+        fontSize: 15,
+        color: t.foreground,
+      },
+      iconAct: {
+        padding: 6,
+      },
+      pressed: {
+        opacity: 0.85,
+      },
+      modalRoot: {
+        flex: 1,
+        justifyContent: "center",
+        paddingHorizontal: 20,
+      },
+      modalOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: t.modalBackdrop,
+      },
+      modalCard: {
+        backgroundColor: t.background,
+        borderRadius: 16,
+        padding: 20,
+        maxHeight: "85%",
+      },
+      modalTall: {
+        maxHeight: "80%",
+      },
+      modalTitle: {
+        fontSize: 18,
+        fontWeight: "600",
+        color: t.foreground,
+        marginBottom: 16,
+      },
+      input: {
+        borderWidth: 1,
+        borderColor: t.inputBorder,
+        borderRadius: 10,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        fontSize: 16,
+        color: t.foreground,
+        marginBottom: 12,
+      },
+      fieldLabel: {
+        fontSize: 14,
+        fontWeight: "500",
+        color: t.mutedForeground,
+        marginBottom: 8,
+      },
+      roleRow: {
+        flexDirection: "row",
+        gap: 10,
+        marginBottom: 12,
+      },
+      roleChip: {
+        flex: 1,
+        paddingVertical: 10,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: t.border,
+        alignItems: "center",
+      },
+      roleChipOn: {
+        borderColor: t.primary,
+        backgroundColor: t.primaryTint,
+      },
+      roleChipText: {
+        fontSize: 15,
+        color: t.foreground,
+      },
+      roleChipTextOn: {
+        fontWeight: "600",
+        color: t.primary,
+      },
+      error: {
+        fontSize: 14,
+        color: t.destructive,
+        marginBottom: 8,
+      },
+      modalActions: {
+        flexDirection: "row",
+        justifyContent: "flex-end",
+        gap: 12,
+        marginTop: 16,
+      },
+      modalGhost: {
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+      },
+      modalPrimary: {
+        backgroundColor: t.primary,
+        borderRadius: 10,
+        paddingVertical: 10,
+        paddingHorizontal: 18,
+      },
+      modalPrimaryRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+      },
+      modalDanger: {
+        backgroundColor: t.destructive,
+        borderRadius: 10,
+        paddingVertical: 10,
+        paddingHorizontal: 18,
+      },
+      ghostText: {
+        fontSize: 16,
+        color: t.mutedForeground,
+      },
+      primaryText: {
+        fontSize: 16,
+        fontWeight: "600",
+        color: t.primaryForeground,
+      },
+      btnDisabled: {
+        opacity: 0.5,
+      },
+      participantList: {
+        maxHeight: 220,
+        marginBottom: 8,
+      },
+      checkRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+        paddingVertical: 10,
+        paddingHorizontal: 4,
+      },
+      checkLabel: {
+        fontSize: 15,
+        color: t.foreground,
+      },
+      deleteDesc: {
+        fontSize: 14,
+        lineHeight: 20,
+        color: t.mutedForeground,
+        marginBottom: 8,
+      },
+    })
+  );
 
   const {
     members,
@@ -90,6 +350,19 @@ export default function AdminScreen() {
   if (currentUser?.role !== "adult" || firebaseUser?.isAnonymous) {
     return <Redirect href="/" />;
   }
+
+  const SectionTitle = ({
+    icon,
+    label,
+  }: {
+    icon: keyof typeof Ionicons.glyphMap;
+    label: string;
+  }) => (
+    <View style={styles.sectionHead}>
+      <Ionicons name={icon} size={16} color={theme.primary} />
+      <Text style={styles.sectionLabel}>{label}</Text>
+    </View>
+  );
 
   const copyLoginCode = async (code: string) => {
     await Clipboard.setStringAsync(code);
@@ -206,7 +479,7 @@ export default function AdminScreen() {
       />
       {loading ? (
         <View style={styles.center}>
-          <ActivityIndicator size="large" color={colors.primary} />
+          <ActivityIndicator size="large" color={theme.primary} />
           <View style={{ height: 16 }} />
           <LoadingDots />
         </View>
@@ -237,7 +510,7 @@ export default function AdminScreen() {
                         <Ionicons
                           name="copy-outline"
                           size={18}
-                          color={colors.mutedForeground}
+                          color={theme.mutedForeground}
                         />
                       </Pressable>
                     </View>
@@ -271,7 +544,7 @@ export default function AdminScreen() {
                     <Ionicons
                       name="trash-outline"
                       size={22}
-                      color={colors.destructive}
+                      color={theme.destructive}
                     />
                   </Pressable>
                 ) : null}
@@ -289,7 +562,7 @@ export default function AdminScreen() {
               <Ionicons
                 name="person-add-outline"
                 size={18}
-                color={colors.foreground}
+                color={theme.foreground}
               />
               <Text style={styles.outlineBtnText}>Adicionar participante</Text>
             </Pressable>
@@ -324,7 +597,7 @@ export default function AdminScreen() {
                           <Ionicons
                             name="checkmark-circle"
                             size={28}
-                            color={colors.primary}
+                            color={theme.primary}
                           />
                         </Pressable>
                         <Pressable
@@ -334,7 +607,7 @@ export default function AdminScreen() {
                           <Ionicons
                             name="close-circle"
                             size={28}
-                            color={colors.destructive}
+                            color={theme.destructive}
                           />
                         </Pressable>
                       </>
@@ -376,7 +649,7 @@ export default function AdminScreen() {
                         <Ionicons
                           name="pencil-outline"
                           size={22}
-                          color={colors.primary}
+                          color={theme.primary}
                         />
                       </Pressable>
                       <Pressable
@@ -386,7 +659,7 @@ export default function AdminScreen() {
                         <Ionicons
                           name="trash-outline"
                           size={22}
-                          color={colors.destructive}
+                          color={theme.destructive}
                         />
                       </Pressable>
                     </>
@@ -406,7 +679,7 @@ export default function AdminScreen() {
               <Ionicons
                 name="add-circle-outline"
                 size={18}
-                color={colors.foreground}
+                color={theme.foreground}
               />
               <Text style={styles.outlineBtnText}>Criar conversa</Text>
             </Pressable>
@@ -421,7 +694,7 @@ export default function AdminScreen() {
               <Ionicons
                 name="lock-closed-outline"
                 size={22}
-                color={colors.foreground}
+                color={theme.foreground}
               />
               <View style={styles.cardBody}>
                 <Text style={styles.cardTitle}>Senha de criptografia</Text>
@@ -432,7 +705,7 @@ export default function AdminScreen() {
               <Ionicons
                 name="chevron-forward"
                 size={20}
-                color={colors.mutedForeground}
+                color={theme.mutedForeground}
               />
             </View>
           </Pressable>
@@ -453,7 +726,7 @@ export default function AdminScreen() {
             <TextInput
               style={styles.input}
               placeholder="Nome"
-              placeholderTextColor={colors.mutedForeground}
+              placeholderTextColor={theme.inputPlaceholder}
               value={newUserName}
               onChangeText={setNewUserName}
             />
@@ -534,7 +807,7 @@ export default function AdminScreen() {
             <TextInput
               style={styles.input}
               placeholder="Nome do grupo (opcional)"
-              placeholderTextColor={colors.mutedForeground}
+              placeholderTextColor={theme.inputPlaceholder}
               value={chatName}
               onChangeText={setChatName}
               editable={!creatingChat}
@@ -557,8 +830,8 @@ export default function AdminScreen() {
                     size={22}
                     color={
                       selectedParticipants.includes(m.id)
-                        ? colors.primary
-                        : colors.border
+                        ? theme.primary
+                        : theme.border
                     }
                   />
                   <Text style={styles.checkLabel}>{m.name}</Text>
@@ -586,7 +859,7 @@ export default function AdminScreen() {
                 {creatingChat ? (
                   <ActivityIndicator
                     size="small"
-                    color={colors.primaryForeground}
+                    color={theme.primaryForeground}
                   />
                 ) : null}
                 <Text style={styles.primaryText}>
@@ -609,7 +882,7 @@ export default function AdminScreen() {
             <TextInput
               style={styles.input}
               placeholder="Nome do grupo (opcional)"
-              placeholderTextColor={colors.mutedForeground}
+              placeholderTextColor={theme.inputPlaceholder}
               value={editChatName}
               onChangeText={setEditChatName}
             />
@@ -630,8 +903,8 @@ export default function AdminScreen() {
                     size={22}
                     color={
                       editChatParticipants.includes(m.id)
-                        ? colors.primary
-                        : colors.border
+                        ? theme.primary
+                        : theme.border
                     }
                   />
                   <Text style={styles.checkLabel}>{m.name}</Text>
@@ -711,7 +984,7 @@ export default function AdminScreen() {
               <Ionicons
                 name={deleteChildMessages ? "checkbox" : "square-outline"}
                 size={22}
-                color={deleteChildMessages ? colors.primary : colors.border}
+                color={deleteChildMessages ? theme.primary : theme.border}
               />
               <Text style={styles.checkLabel}>apagar também as mensagens</Text>
             </Pressable>
@@ -742,269 +1015,3 @@ export default function AdminScreen() {
     </ScreenContainer>
   );
 }
-
-function SectionTitle({ icon, label }: { icon: keyof typeof Ionicons.glyphMap; label: string }) {
-  return (
-    <View style={styles.sectionHead}>
-      <Ionicons name={icon} size={16} color={colors.primary} />
-      <Text style={styles.sectionLabel}>{label}</Text>
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  center: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  scroll: {
-    padding: 16,
-    paddingBottom: 40,
-    gap: 8,
-  },
-  sectionHead: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  sectionLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: colors.mutedForeground,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  card: {
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 14,
-    marginBottom: 8,
-  },
-  cardRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  deviceRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  cardBody: {
-    flex: 1,
-    minWidth: 0,
-  },
-  cardTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: colors.foreground,
-  },
-  cardMeta: {
-    marginTop: 4,
-    fontSize: 12,
-    color: colors.mutedForeground,
-  },
-  codeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginTop: 4,
-  },
-  codeText: {
-    fontFamily: "monospace",
-    fontSize: 12,
-    color: colors.mutedForeground,
-    letterSpacing: 1,
-  },
-  badge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  badgeAdult: {
-    backgroundColor: colors.primary,
-  },
-  badgeChild: {
-    backgroundColor: colors.muted,
-  },
-  badgeText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: colors.foreground,
-  },
-  badgeTextAdult: {
-    color: colors.primaryForeground,
-  },
-  emptyBox: {
-    backgroundColor: colors.muted,
-    borderRadius: 12,
-    padding: 24,
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  emptyText: {
-    fontSize: 14,
-    color: colors.mutedForeground,
-  },
-  outlineBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    paddingVertical: 12,
-    marginTop: 4,
-    marginBottom: 8,
-  },
-  outlineBtnText: {
-    fontSize: 15,
-    color: colors.foreground,
-  },
-  iconAct: {
-    padding: 6,
-  },
-  pressed: {
-    opacity: 0.85,
-  },
-  modalRoot: {
-    flex: 1,
-    justifyContent: "center",
-    paddingHorizontal: 20,
-  },
-  modalOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.45)",
-  },
-  modalCard: {
-    backgroundColor: colors.background,
-    borderRadius: 16,
-    padding: 20,
-    maxHeight: "85%",
-  },
-  modalTall: {
-    maxHeight: "80%",
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: colors.foreground,
-    marginBottom: 16,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-    color: colors.foreground,
-    marginBottom: 12,
-  },
-  fieldLabel: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: colors.mutedForeground,
-    marginBottom: 8,
-  },
-  roleRow: {
-    flexDirection: "row",
-    gap: 10,
-    marginBottom: 12,
-  },
-  roleChip: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: "center",
-  },
-  roleChipOn: {
-    borderColor: colors.primary,
-    backgroundColor: "rgba(31, 168, 92, 0.1)",
-  },
-  roleChipText: {
-    fontSize: 15,
-    color: colors.foreground,
-  },
-  roleChipTextOn: {
-    fontWeight: "600",
-    color: colors.primary,
-  },
-  error: {
-    fontSize: 14,
-    color: colors.destructive,
-    marginBottom: 8,
-  },
-  modalActions: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    gap: 12,
-    marginTop: 16,
-  },
-  modalGhost: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-  },
-  modalPrimary: {
-    backgroundColor: colors.primary,
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 18,
-  },
-  modalPrimaryRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  modalDanger: {
-    backgroundColor: colors.destructive,
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 18,
-  },
-  ghostText: {
-    fontSize: 16,
-    color: colors.mutedForeground,
-  },
-  primaryText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: colors.primaryForeground,
-  },
-  btnDisabled: {
-    opacity: 0.5,
-  },
-  participantList: {
-    maxHeight: 220,
-    marginBottom: 8,
-  },
-  checkRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 4,
-  },
-  checkLabel: {
-    fontSize: 15,
-    color: colors.foreground,
-  },
-  deleteDesc: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: colors.mutedForeground,
-    marginBottom: 8,
-  },
-});

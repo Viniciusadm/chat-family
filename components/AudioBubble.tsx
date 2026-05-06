@@ -1,4 +1,5 @@
-import { colors } from "@/theme/colors";
+import { useTheme } from "@/theme/ThemeContext";
+import { useThemedStyles } from "@/theme/useThemedStyles";
 import { Ionicons } from "@expo/vector-icons";
 import {
   setAudioModeAsync,
@@ -49,6 +50,84 @@ export function AudioBubble({
   onAudioFinished,
   onPlaybackRateChange,
 }: AudioBubbleProps) {
+  const { theme } = useTheme();
+  const styles = useThemedStyles((t) =>
+    StyleSheet.create({
+      row: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+        minWidth: 240,
+      },
+      playBtn: {
+        width: 42,
+        height: 42,
+        borderRadius: 21,
+        alignItems: "center",
+        justifyContent: "center",
+      },
+      playSelf: {
+        backgroundColor: t.primaryTintStrong,
+      },
+      playOther: {
+        backgroundColor: t.muted,
+      },
+      playDisabled: {
+        opacity: 0.7,
+      },
+      trackCol: {
+        flex: 1,
+        gap: 2,
+      },
+      rateBtn: {
+        minWidth: 34,
+        paddingHorizontal: 7,
+        paddingVertical: 5,
+        borderRadius: 11,
+        backgroundColor: t.progressTrack,
+      },
+      rateText: {
+        fontSize: 11,
+        fontWeight: "600",
+        color: t.timestamp,
+      },
+      trackHitArea: {
+        height: 28,
+        justifyContent: "center",
+      },
+      track: {
+        height: 6,
+        borderRadius: 3,
+        backgroundColor: t.border,
+        overflow: "hidden",
+      },
+      fill: {
+        height: "100%",
+        borderRadius: 3,
+        backgroundColor: t.audioProgress,
+      },
+      knob: {
+        position: "absolute",
+        top: 7,
+        width: 14,
+        height: 14,
+        marginLeft: -7,
+        borderRadius: 7,
+        backgroundColor: t.audioProgress,
+        borderWidth: 2,
+        borderColor: t.background,
+        shadowColor: t.shadow,
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: t.shadowOpacity * 2,
+        shadowRadius: 2,
+        elevation: 2,
+      },
+      time: {
+        fontSize: 11,
+        color: t.timestamp,
+      },
+    })
+  );
   const player = useAudioPlayer({ uri: audioUrl }, { updateInterval: 200 });
   const status = useAudioPlayerStatus(player);
   const [waitingForPlayback, setWaitingForPlayback] = useState(false);
@@ -238,12 +317,12 @@ export function AudioBubble({
         ]}
       >
         {isLoading ? (
-          <ActivityIndicator size="small" color={colors.primary} />
+          <ActivityIndicator size="small" color={theme.primary} />
         ) : (
           <Ionicons
             name={isPlaying ? "pause" : "play"}
             size={20}
-            color={colors.primary}
+            color={theme.primary}
             style={isPlaying ? undefined : { marginLeft: 2 }}
           />
         )}
@@ -276,79 +355,3 @@ export function AudioBubble({
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    minWidth: 240,
-  },
-  playBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  playSelf: {
-    backgroundColor: "rgba(31, 168, 92, 0.2)",
-  },
-  playOther: {
-    backgroundColor: colors.muted,
-  },
-  playDisabled: {
-    opacity: 0.7,
-  },
-  trackCol: {
-    flex: 1,
-    gap: 2,
-  },
-  rateBtn: {
-    minWidth: 34,
-    paddingHorizontal: 7,
-    paddingVertical: 5,
-    borderRadius: 11,
-    backgroundColor: "rgba(0,0,0,0.08)",
-  },
-  rateText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: colors.timestamp,
-  },
-  trackHitArea: {
-    height: 28,
-    justifyContent: "center",
-  },
-  track: {
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.border,
-    overflow: "hidden",
-  },
-  fill: {
-    height: "100%",
-    borderRadius: 3,
-    backgroundColor: colors.audioProgress,
-  },
-  knob: {
-    position: "absolute",
-    top: 7,
-    width: 14,
-    height: 14,
-    marginLeft: -7,
-    borderRadius: 7,
-    backgroundColor: colors.audioProgress,
-    borderWidth: 2,
-    borderColor: "#fff",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.18,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  time: {
-    fontSize: 11,
-    color: colors.timestamp,
-  },
-});

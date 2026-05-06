@@ -1,4 +1,5 @@
-import { colors } from "@/theme/colors";
+import { useTheme } from "@/theme/ThemeContext";
+import { useThemedStyles } from "@/theme/useThemedStyles";
 import type { Message } from "@/types/chat";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
@@ -24,6 +25,38 @@ const MIN_RATIO = 0.6;
 const MAX_RATIO = 2.4;
 
 function ImageBubbleImpl({ message, onPress, onRetry }: ImageBubbleProps) {
+  const { theme } = useTheme();
+  const styles = useThemedStyles((t) =>
+    StyleSheet.create({
+      wrap: {
+        borderRadius: 12,
+        overflow: "hidden",
+        backgroundColor: t.muted,
+      },
+      placeholder: {
+        backgroundColor: t.muted,
+      },
+      // Image-content overlays kept theme-agnostic to ensure white text contrast over arbitrary photos.
+      overlay: {
+        ...StyleSheet.absoluteFillObject,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "rgba(0,0,0,0.18)",
+      },
+      errorOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "rgba(0,0,0,0.55)",
+        gap: 6,
+      },
+      errorText: {
+        color: "#ffffff",
+        fontSize: 12,
+        fontWeight: "600",
+      },
+    })
+  );
   const aspect = useMemo(() => {
     if (!message.imageWidth || !message.imageHeight) return DEFAULT_RATIO;
     const raw = message.imageWidth / message.imageHeight;
@@ -63,7 +96,7 @@ function ImageBubbleImpl({ message, onPress, onRetry }: ImageBubbleProps) {
 
       {isUploading ? (
         <View style={styles.overlay}>
-          <ActivityIndicator color={colors.primaryForeground} />
+          <ActivityIndicator color={theme.primaryForeground} />
         </View>
       ) : null}
 
@@ -76,7 +109,7 @@ function ImageBubbleImpl({ message, onPress, onRetry }: ImageBubbleProps) {
           <Ionicons
             name="alert-circle"
             size={32}
-            color={colors.primaryForeground}
+            color="#ffffff"
           />
           <Text style={styles.errorText}>Toque para tentar de novo</Text>
         </Pressable>
@@ -86,32 +119,3 @@ function ImageBubbleImpl({ message, onPress, onRetry }: ImageBubbleProps) {
 }
 
 export const ImageBubble = memo(ImageBubbleImpl);
-
-const styles = StyleSheet.create({
-  wrap: {
-    borderRadius: 12,
-    overflow: "hidden",
-    backgroundColor: colors.muted,
-  },
-  placeholder: {
-    backgroundColor: colors.muted,
-  },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.18)",
-  },
-  errorOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.55)",
-    gap: 6,
-  },
-  errorText: {
-    color: colors.primaryForeground,
-    fontSize: 12,
-    fontWeight: "600",
-  },
-});

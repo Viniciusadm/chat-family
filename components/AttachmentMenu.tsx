@@ -1,4 +1,5 @@
-import { colors } from "@/theme/colors";
+import { useTheme } from "@/theme/ThemeContext";
+import { useThemedStyles } from "@/theme/useThemedStyles";
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
@@ -16,6 +17,46 @@ export function AttachmentMenu({
   onChooseGallery,
   onChooseCamera,
 }: AttachmentMenuProps) {
+  const { theme } = useTheme();
+  const styles = useThemedStyles((t) =>
+    StyleSheet.create({
+      backdrop: {
+        flex: 1,
+        backgroundColor: t.modalBackdrop,
+        justifyContent: "flex-end",
+      },
+      sheet: {
+        backgroundColor: t.background,
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        paddingHorizontal: 24,
+        paddingTop: 24,
+        paddingBottom: 36,
+        flexDirection: "row",
+        gap: 24,
+      },
+      option: {
+        flex: 1,
+        alignItems: "center",
+        gap: 8,
+      },
+      pressed: {
+        opacity: 0.72,
+      },
+      iconCircle: {
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        alignItems: "center",
+        justifyContent: "center",
+      },
+      optionLabel: {
+        fontSize: 14,
+        fontWeight: "600",
+        color: t.foreground,
+      },
+    })
+  );
   return (
     <Modal
       visible={visible}
@@ -33,9 +74,9 @@ export function AttachmentMenu({
             }}
           >
             <View
-              style={[styles.iconCircle, { backgroundColor: colors.primary }]}
+              style={[styles.iconCircle, { backgroundColor: theme.primary }]}
             >
-              <Ionicons name="camera" size={24} color={colors.primaryForeground} />
+              <Ionicons name="camera" size={24} color={theme.primaryForeground} />
             </View>
             <Text style={styles.optionLabel}>Câmera</Text>
           </Pressable>
@@ -47,8 +88,8 @@ export function AttachmentMenu({
               onChooseGallery();
             }}
           >
-            <View style={[styles.iconCircle, { backgroundColor: "#7c3aed" }]}>
-              <Ionicons name="image" size={24} color="#ffffff" />
+            <View style={[styles.iconCircle, { backgroundColor: theme.accent }]}>
+              <Ionicons name="image" size={24} color={theme.accentForeground} />
             </View>
             <Text style={styles.optionLabel}>Galeria</Text>
           </Pressable>
@@ -57,41 +98,3 @@ export function AttachmentMenu({
     </Modal>
   );
 }
-
-const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.45)",
-    justifyContent: "flex-end",
-  },
-  sheet: {
-    backgroundColor: colors.background,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 24,
-    paddingTop: 24,
-    paddingBottom: 36,
-    flexDirection: "row",
-    gap: 24,
-  },
-  option: {
-    flex: 1,
-    alignItems: "center",
-    gap: 8,
-  },
-  pressed: {
-    opacity: 0.72,
-  },
-  iconCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  optionLabel: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: colors.foreground,
-  },
-});

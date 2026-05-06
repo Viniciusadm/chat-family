@@ -13,7 +13,8 @@ import { useReactions } from "@/hooks/useReactions";
 import { useSendMessage } from "@/hooks/useSendMessage";
 import { getChatDisplayName } from "@/lib/chatDisplayName";
 import { createReplySnapshot } from "@/lib/messageReply";
-import { colors } from "@/theme/colors";
+import { useTheme } from "@/theme/ThemeContext";
+import { useThemedStyles } from "@/theme/useThemedStyles";
 import type { Message, MessageReplySnapshot } from "@/types/chat";
 import { Ionicons } from "@expo/vector-icons";
 import type { Timestamp } from "firebase/firestore";
@@ -100,6 +101,75 @@ export default function ChatScreen() {
   const { chatId } = useLocalSearchParams<{ chatId: string }>();
   const router = useRouter();
   const { currentUser } = useAuth();
+  const { theme } = useTheme();
+  const styles = useThemedStyles((t) =>
+    StyleSheet.create({
+      screen: {
+        flex: 1,
+        backgroundColor: t.chatBg,
+      },
+      messagesWrap: {
+        flex: 1,
+      },
+      listContent: {
+        paddingVertical: 16,
+        gap: 8,
+      },
+      separatorWrap: {
+        flexDirection: "row",
+        marginVertical: 12,
+        paddingHorizontal: 14,
+      },
+      separatorLine: {
+        flex: 1,
+        height: 1,
+        backgroundColor: t.border,
+      },
+      separatorText: {
+        marginHorizontal: 10,
+        fontSize: 12,
+        fontWeight: "600",
+        color: t.timestamp,
+        textTransform: "capitalize",
+      },
+      dayBadge: {
+        position: "absolute",
+        top: 8,
+        alignSelf: "center",
+        backgroundColor: t.chatHeader,
+        borderRadius: 999,
+        paddingHorizontal: 14,
+        paddingVertical: 6,
+        zIndex: 2,
+      },
+      dayBadgeText: {
+        color: t.chatHeaderForeground,
+        fontSize: 12,
+        fontWeight: "700",
+        textTransform: "capitalize",
+      },
+      jumpToLatestButton: {
+        position: "absolute",
+        right: 18,
+        bottom: 18,
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: t.primary,
+        shadowColor: t.shadow,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: t.shadowOpacity * 2,
+        shadowRadius: 4,
+        elevation: 4,
+        zIndex: 3,
+      },
+      jumpToLatestButtonPressed: {
+        opacity: 0.85,
+      },
+    })
+  );
   const currentUserId = currentUser?.id;
   const { isOnline } = useConnectivity();
   const { chats } = useChats();
@@ -607,7 +677,7 @@ export default function ChatScreen() {
             <Ionicons
               name="chevron-down"
               size={24}
-              color={colors.primaryForeground}
+              color={theme.primaryForeground}
             />
           </Pressable>
         ) : null}
@@ -622,70 +692,3 @@ export default function ChatScreen() {
     </KeyboardAvoidingView>
   );
 }
-
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: colors.chatBg,
-  },
-  messagesWrap: {
-    flex: 1,
-  },
-  listContent: {
-    paddingVertical: 16,
-    gap: 8,
-  },
-  separatorWrap: {
-    flexDirection: "row",
-    marginVertical: 12,
-    paddingHorizontal: 14,
-  },
-  separatorLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: colors.border,
-  },
-  separatorText: {
-    marginHorizontal: 10,
-    fontSize: 12,
-    fontWeight: "600",
-    color: colors.timestamp,
-    textTransform: "capitalize",
-  },
-  dayBadge: {
-    position: "absolute",
-    top: 8,
-    alignSelf: "center",
-    backgroundColor: "rgba(45, 143, 82, 0.9)",
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    zIndex: 2,
-  },
-  dayBadgeText: {
-    color: colors.primaryForeground,
-    fontSize: 12,
-    fontWeight: "700",
-    textTransform: "capitalize",
-  },
-  jumpToLatestButton: {
-    position: "absolute",
-    right: 18,
-    bottom: 18,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.primary,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.18,
-    shadowRadius: 4,
-    elevation: 4,
-    zIndex: 3,
-  },
-  jumpToLatestButtonPressed: {
-    opacity: 0.85,
-  },
-});
