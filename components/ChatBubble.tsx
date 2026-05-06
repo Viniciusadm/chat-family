@@ -308,6 +308,7 @@ function ChatBubbleImpl({
               onPress={() => {
                 if (fullImageUri) setImageViewerOpen(true);
               }}
+              onLongPress={handleLongPress}
               onRetry={
                 message.status === "failed"
                   ? () => onRetryImage?.(message)

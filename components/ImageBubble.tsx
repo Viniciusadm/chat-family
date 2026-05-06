@@ -16,6 +16,7 @@ interface ImageBubbleProps {
   message: Message;
   isSelf: boolean;
   onPress: () => void;
+  onLongPress?: () => void;
   onRetry?: () => void;
 }
 
@@ -24,7 +25,7 @@ const DEFAULT_RATIO = 4 / 3;
 const MIN_RATIO = 0.6;
 const MAX_RATIO = 2.4;
 
-function ImageBubbleImpl({ message, onPress, onRetry }: ImageBubbleProps) {
+function ImageBubbleImpl({ message, onPress, onLongPress, onRetry }: ImageBubbleProps) {
   const { theme } = useTheme();
   const styles = useThemedStyles((t) =>
     StyleSheet.create({
@@ -79,6 +80,8 @@ function ImageBubbleImpl({ message, onPress, onRetry }: ImageBubbleProps) {
   return (
     <Pressable
       onPress={onPress}
+      onLongPress={onLongPress}
+      delayLongPress={400}
       style={[styles.wrap, { width: MAX_BUBBLE_WIDTH, height }]}
     >
       {source ? (

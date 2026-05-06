@@ -612,7 +612,8 @@ export default function ChatScreen() {
   }
 
   return (
-    <KeyboardAvoidingView behavior="padding" style={styles.screen}>
+    <View style={{ flex: 1 }}>
+      <KeyboardAvoidingView behavior="padding" style={styles.screen}>
       <AppHeader
         title={chatTitle}
         onBack={() => router.back()}
@@ -763,50 +764,6 @@ export default function ChatScreen() {
             );
           }}
         />
-        {reactionTarget ? (() => {
-          const targetMessage = messagesById.get(reactionTarget.messageId);
-          const isOwn =
-            targetMessage != null && targetMessage.senderId === currentUserId;
-          const canModify =
-            targetMessage != null && canModifyMessage(targetMessage);
-          const isText = targetMessage?.type === "text";
-          const isDeleted = targetMessage?.isDeleted === true;
-          const closeAndRun = (fn: () => void) => () => {
-            setReactionTarget(null);
-            fn();
-          };
-          return (
-            <ReactionMenu
-              visible
-              targetX={reactionTarget.x}
-              targetY={reactionTarget.y}
-              targetWidth={reactionTarget.width}
-              targetHeight={reactionTarget.height}
-              onEmojiSelect={handleQuickEmojiSelect}
-              onClose={closeReactionMenu}
-              onReply={
-                targetMessage && !isDeleted
-                  ? closeAndRun(() => handleReplySelect(targetMessage))
-                  : undefined
-              }
-              onCopy={
-                targetMessage && isText && !isDeleted
-                  ? closeAndRun(() => void handleCopyMessage(targetMessage))
-                  : undefined
-              }
-              onEdit={
-                targetMessage && isOwn && isText && canModify
-                  ? closeAndRun(() => handleEditPress(targetMessage))
-                  : undefined
-              }
-              onDelete={
-                targetMessage && isOwn && canModify
-                  ? closeAndRun(() => handleDeletePress(targetMessage))
-                  : undefined
-              }
-            />
-          );
-        })() : null}
         <ReactionsDialog
           visible={reactionsDialogMessageId !== null}
           reactions={dialogReactions}
@@ -843,5 +800,50 @@ export default function ChatScreen() {
         onCancelEdit={clearEdit}
       />
     </KeyboardAvoidingView>
+      {reactionTarget ? (() => {
+        const targetMessage = messagesById.get(reactionTarget.messageId);
+        const isOwn =
+          targetMessage != null && targetMessage.senderId === currentUserId;
+        const canModify =
+          targetMessage != null && canModifyMessage(targetMessage);
+        const isText = targetMessage?.type === "text";
+        const isDeleted = targetMessage?.isDeleted === true;
+        const closeAndRun = (fn: () => void) => () => {
+          setReactionTarget(null);
+          fn();
+        };
+        return (
+          <ReactionMenu
+            visible
+            targetX={reactionTarget.x}
+            targetY={reactionTarget.y}
+            targetWidth={reactionTarget.width}
+            targetHeight={reactionTarget.height}
+            onEmojiSelect={handleQuickEmojiSelect}
+            onClose={closeReactionMenu}
+            onReply={
+              targetMessage && !isDeleted
+                ? closeAndRun(() => handleReplySelect(targetMessage))
+                : undefined
+            }
+            onCopy={
+              targetMessage && isText && !isDeleted
+                ? closeAndRun(() => void handleCopyMessage(targetMessage))
+                : undefined
+            }
+            onEdit={
+              targetMessage && isOwn && isText && canModify
+                ? closeAndRun(() => handleEditPress(targetMessage))
+                : undefined
+            }
+            onDelete={
+              targetMessage && isOwn && canModify
+                ? closeAndRun(() => handleDeletePress(targetMessage))
+                : undefined
+            }
+          />
+        );
+      })() : null}
+    </View>
   );
 }

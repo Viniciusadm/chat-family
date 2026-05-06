@@ -5,7 +5,6 @@ import React, { useEffect, useRef } from "react";
 import {
   Animated,
   Dimensions,
-  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -55,9 +54,6 @@ export function ReactionMenu({
   const { theme } = useTheme();
   const styles = useThemedStyles((t) =>
     StyleSheet.create({
-      backdrop: {
-        flex: 1,
-      },
       container: {
         position: "absolute",
         gap: 8,
@@ -201,14 +197,11 @@ export function ReactionMenu({
   const aboveY = targetY - totalHeight - GAP;
   const containerY = aboveY < 8 ? targetY + targetHeight + GAP : aboveY;
 
+  if (!visible) return null;
+
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="none"
-      onRequestClose={onClose}
-    >
-      <Pressable style={styles.backdrop} onPress={onClose}>
+    <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+      <Pressable style={StyleSheet.absoluteFill} onPress={onClose}>
         <Animated.View
           style={[
             styles.container,
@@ -267,6 +260,6 @@ export function ReactionMenu({
           ) : null}
         </Animated.View>
       </Pressable>
-    </Modal>
+    </View>
   );
 }
