@@ -28,6 +28,7 @@ export default function EncryptionSettingsScreen() {
     currentUser,
     hasBackupPassword,
     backupUnlocked,
+    cryptoInProgress,
     setupBackupPassword,
     changeBackupPassword,
     disableBackupPassword,
@@ -284,7 +285,17 @@ export default function EncryptionSettingsScreen() {
           em outros aparelhos.
         </Text>
 
-        {mode === "idle" ? (
+        {cryptoInProgress ? (
+          <View style={styles.center}>
+            <ActivityIndicator size="large" color={theme.primary} />
+            <Text style={[styles.statusText, { marginTop: 20, textAlign: "center" }]}>
+              Configurando sua senha...
+            </Text>
+            <Text style={[styles.sub, { textAlign: "center", marginTop: 8, marginBottom: 0 }]}>
+              Isso pode levar alguns segundos. Você pode sair desta tela, mas não feche o app.
+            </Text>
+          </View>
+        ) : mode === "idle" ? (
           <View style={styles.actions}>
             {!hasBackupPassword ? (
               <Pressable
