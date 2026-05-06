@@ -1,4 +1,4 @@
-import { pbkdf2Async } from "@noble/hashes/pbkdf2.js";
+import { hmac } from "@noble/hashes/hmac.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { gcm } from "@noble/ciphers/aes.js";
 import { randomBytes } from "./randomBytes";
@@ -12,6 +12,7 @@ import {
 const PBKDF2_ITERATIONS = 600_000;
 const KEK_BYTES = 32;
 const SALT_BYTES = 16;
+const TICK_MS = 16;
 const VERIFIER_PLAINTEXT = "e2e-pwd-verifier-v1";
 
 export interface PasswordVerifier {
@@ -23,17 +24,40 @@ export function generatePasswordSalt(): string {
   return bytesToBase64(randomBytes(SALT_BYTES));
 }
 
+// Yield real para macrotask — permite que eventos nativos (RN bridge) sejam
+// processados durante o PBKDF2. `await Promise.resolve()` só drena microtasks
+// e não destrava o JS thread para events nativos.
+function macroTick(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 export async function deriveKeyFromPassword(
   password: string,
   saltBase64: string,
 ): Promise<Uint8Array> {
   if (!password) throw new Error("Empty password");
   const salt = base64ToBytes(saltBase64);
-  return pbkdf2Async(sha256, utf8Encode(password), salt, {
-    c: PBKDF2_ITERATIONS,
-    dkLen: KEK_BYTES,
-    asyncTick: 20,
-  });
+  const passwordBytes = utf8Encode(password);
+
+  // PBKDF2-HMAC-SHA256 com dkLen=32 = um único bloco T_1 (RFC 8018 §5.2).
+  const block = new Uint8Array(salt.length + 4);
+  block.set(salt);
+  block[salt.length + 3] = 1;
+
+  let u = hmac(sha256, passwordBytes, block);
+  const result = new Uint8Array(u);
+
+  let lastTick = Date.now();
+  for (let i = 1; i < PBKDF2_ITERATIONS; i++) {
+    u = hmac(sha256, passwordBytes, u);
+    for (let j = 0; j < KEK_BYTES; j++) result[j] ^= u[j];
+    if (Date.now() - lastTick >= TICK_MS) {
+      await macroTick();
+      lastTick = Date.now();
+    }
+  }
+
+  return result;
 }
 
 export function makePasswordVerifier(kek: Uint8Array): PasswordVerifier {
