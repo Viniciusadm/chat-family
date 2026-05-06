@@ -281,13 +281,6 @@ export default function EncryptionSettingsScreen() {
     <ScreenContainer style={styles.screen} edges={["bottom"]}>
       <AppHeader title="Senha de criptografia" onBack={() => router.back()} />
       <View style={styles.content}>
-        {renderStatus()}
-        <Text style={styles.sub}>
-          A senha protege o backup das chaves das conversas no servidor. O servidor nunca vê a
-          senha nem as chaves abertas. Se esquecer, conversas antigas não poderão ser restauradas
-          em outros aparelhos.
-        </Text>
-
         {cryptoInProgress ? (
           <View style={styles.center}>
             <ActivityIndicator size="large" color={theme.primary} />
@@ -298,7 +291,15 @@ export default function EncryptionSettingsScreen() {
               Isso pode levar alguns segundos. Você pode sair desta tela, mas não feche o app.
             </Text>
           </View>
-        ) : mode === "idle" ? (
+        ) : (
+          <>
+            {renderStatus()}
+            <Text style={styles.sub}>
+              A senha protege o backup das chaves das conversas no servidor. O servidor nunca vê
+              a senha nem as chaves abertas. Se esquecer, conversas antigas não poderão ser
+              restauradas em outros aparelhos.
+            </Text>
+            {mode === "idle" ? (
           <View style={styles.actions}>
             {!hasBackupPassword ? (
               <Pressable
@@ -423,6 +424,8 @@ export default function EncryptionSettingsScreen() {
               <Text style={styles.cancelText}>Cancelar</Text>
             </Pressable>
           </View>
+            )}
+          </>
         )}
       </View>
     </ScreenContainer>
