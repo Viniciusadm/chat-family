@@ -69,9 +69,11 @@ export type LocalMessageInput = {
 type Listener = () => void;
 
 const listeners = new Map<string, Set<Listener>>();
+const allListeners = new Set<Listener>();
 
 function emit(conversationId: string) {
   listeners.get(conversationId)?.forEach((listener) => listener());
+  allListeners.forEach((listener) => listener());
 }
 
 function normalizeReplyType(type: string | null | undefined): MessageReplyType {
@@ -205,6 +207,49 @@ export const MessageRepository = {
         listeners.delete(conversationId);
       }
     };
+  },
+
+  subscribeAll(listener: Listener) {
+    allListeners.add(listener);
+    return () => {
+      allListeners.delete(listener);
+    };
+  },
+
+  async getAllTextMessages(tenantId: string): Promise<
+    {
+      id: string;
+      chatId: string;
+      senderId: string;
+      content: string;
+      createdAtMs: number;
+    }[]
+  > {
+    const db = await getDatabase();
+    const rows = await db.getAllAsync<{
+      id: string;
+      conversation_id: string;
+      sender_id: string;
+      body: string;
+      created_at: string;
+    }>(
+      `SELECT m.id, m.conversation_id, m.sender_id, m.body, m.created_at
+       FROM messages m
+       INNER JOIN chats c ON c.id = m.conversation_id
+       WHERE c.tenant_id = ?
+         AND m.type = 'text'
+         AND m.body IS NOT NULL
+         AND m.body <> ''
+       ORDER BY m.created_at DESC`,
+      [tenantId]
+    );
+    return rows.map((row) => ({
+      id: row.id,
+      chatId: row.conversation_id,
+      senderId: row.sender_id,
+      content: row.body,
+      createdAtMs: new Date(row.created_at).getTime(),
+    }));
   },
 
   async getLocalMessages(conversationId: string): Promise<Message[]> {

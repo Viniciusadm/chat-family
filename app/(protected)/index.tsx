@@ -1,15 +1,20 @@
 import { AppHeader } from "@/components/AppHeader";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { ProfileAvatar } from "@/components/ProfileAvatar";
+import { SearchBar } from "@/components/SearchBar";
+import { SearchResultItem } from "@/components/SearchResultItem";
 import { useAuth } from "@/context/AuthContext";
 import { useChats } from "@/hooks/useChats";
 import { useMemberProfiles } from "@/hooks/useMemberProfiles";
+import { useMessageSearch } from "@/hooks/useMessageSearch";
 import { getChatDisplayName } from "@/lib/chatDisplayName";
 import { useTheme } from "@/theme/ThemeContext";
 import { useThemedStyles } from "@/theme/useThemedStyles";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { useMemo } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   Pressable,
   StyleSheet,
@@ -33,6 +38,11 @@ export default function ChatListScreen() {
   const { chats, loading } = useChats();
   const { currentUser, firebaseUser } = useAuth();
   const memberProfiles = useMemberProfiles();
+  const search = useMessageSearch();
+  const chatById = useMemo(
+    () => new Map(chats.map((c) => [c.id, c])),
+    [chats]
+  );
   const { theme } = useTheme();
   const styles = useThemedStyles((t) =>
     StyleSheet.create({
@@ -138,6 +148,27 @@ export default function ChatListScreen() {
         textAlign: "center",
         maxWidth: 280,
       },
+      searchEmpty: {
+        flex: 1,
+        alignItems: "center",
+        justifyContent: "center",
+        paddingHorizontal: 32,
+        paddingTop: 48,
+      },
+      searchEmptyTitle: {
+        fontSize: 16,
+        fontWeight: "600",
+        color: t.foreground,
+        textAlign: "center",
+      },
+      searchEmptySub: {
+        marginTop: 6,
+        fontSize: 14,
+        lineHeight: 20,
+        color: t.mutedForeground,
+        textAlign: "center",
+        maxWidth: 280,
+      },
     })
   );
   const canAccessAdmin =
@@ -173,7 +204,65 @@ export default function ChatListScreen() {
             : []),
         ]}
       />
-      {chats.length === 0 && loading ? (
+      <SearchBar value={search.query} onChangeText={search.setQuery} />
+      {search.isSearching ? (
+        search.loading ? (
+          <View style={styles.center}>
+            <ActivityIndicator color={theme.primary} />
+          </View>
+        ) : search.error ? (
+          <View style={styles.searchEmpty}>
+            <Text style={styles.searchEmptyTitle}>
+              Não foi possível buscar
+            </Text>
+            <Text style={styles.searchEmptySub}>
+              Tente novamente em alguns instantes.
+            </Text>
+          </View>
+        ) : search.results.length === 0 ? (
+          <View style={styles.searchEmpty}>
+            <Text style={styles.searchEmptyTitle}>Nenhum resultado</Text>
+            <Text style={styles.searchEmptySub}>
+              Não encontramos mensagens com “{search.query.trim()}”.
+            </Text>
+          </View>
+        ) : (
+          <FlatList
+            data={search.results}
+            keyExtractor={(r) => r.message.id}
+            contentContainerStyle={styles.list}
+            keyboardShouldPersistTaps="handled"
+            renderItem={({ item }) => {
+              const chat = chatById.get(item.message.chatId);
+              const isMine = item.message.senderId === currentUser?.id;
+              const chatName = chat
+                ? getChatDisplayName(chat, currentUser?.id, memberProfiles)
+                : "Conversa";
+              const isGroup = chat?.isGroup ?? false;
+              const otherName =
+                memberProfiles[item.message.senderId]?.name ?? null;
+              const senderLabel = isMine
+                ? "Você"
+                : isGroup
+                  ? otherName
+                  : null;
+              return (
+                <SearchResultItem
+                  result={item}
+                  chatName={chatName}
+                  senderLabel={senderLabel}
+                  isMine={isMine}
+                  onPress={() =>
+                    router.push(
+                      `/chat/${item.message.chatId}?messageId=${item.message.id}`
+                    )
+                  }
+                />
+              );
+            }}
+          />
+        )
+      ) : chats.length === 0 && loading ? (
         <View style={styles.center} />
       ) : chats.length === 0 ? (
         <View style={styles.empty}>

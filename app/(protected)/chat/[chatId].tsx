@@ -98,7 +98,10 @@ function formatDayLabel(date: Date): string {
 }
 
 export default function ChatScreen() {
-  const { chatId } = useLocalSearchParams<{ chatId: string }>();
+  const { chatId, messageId: deepLinkMessageId } = useLocalSearchParams<{
+    chatId: string;
+    messageId?: string;
+  }>();
   const router = useRouter();
   const { currentUser } = useAuth();
   const { theme } = useTheme();
@@ -460,6 +463,32 @@ export default function ChatScreen() {
     },
     [chatListData, highlightMessage]
   );
+
+  const pendingDeepLinkMessageIdRef = useRef<string | null>(null);
+  const consumedDeepLinkRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (typeof deepLinkMessageId !== "string" || deepLinkMessageId.length === 0) {
+      return;
+    }
+    if (consumedDeepLinkRef.current === deepLinkMessageId) return;
+    pendingDeepLinkMessageIdRef.current = deepLinkMessageId;
+  }, [deepLinkMessageId]);
+
+  useEffect(() => {
+    const target = pendingDeepLinkMessageIdRef.current;
+    if (!target) return;
+    const exists = chatListData.some(
+      (entry) => entry.type === "message" && entry.message.id === target
+    );
+    if (!exists) return;
+    const handle = setTimeout(() => {
+      jumpToMessage(target);
+      consumedDeepLinkRef.current = target;
+      pendingDeepLinkMessageIdRef.current = null;
+    }, 120);
+    return () => clearTimeout(handle);
+  }, [chatListData, jumpToMessage]);
 
   const handleReactionPress = useCallback(
     (messageId: string, x: number, y: number, width: number, height: number) => {
