@@ -1,7 +1,6 @@
 import { useAuth } from "@/context/AuthContext";
 import { useConnectivity } from "@/hooks/useConnectivity";
 import { ChatRepository } from "@/lib/ChatRepository";
-import { decryptIncomingMessage } from "@/lib/encryptedMessages";
 import { db } from "@/lib/firebase";
 import {
   syncChatHistories,
@@ -73,23 +72,14 @@ export function useChats(): { chats: Chat[]; loading: boolean } {
 
         const ids = listSnap.docs.map((d) => d.id);
         if (ids.length === 0) {
-          setChats([]);
           setLoading(false);
           syncChatHistories([], isOnline);
           return;
         }
 
-        const byId = new Map<string, Chat>();
-
         const emit = () => {
-          const arr = [...byId.values()].sort((a, b) => {
-            const ta = a.lastMessage?.timestamp?.getTime() ?? 0;
-            const tb = b.lastMessage?.timestamp?.getTime() ?? 0;
-            return tb - ta;
-          });
-          setChats(arr);
           setLoading(false);
-          syncChatHistories(arr.map((chat) => chat.id), isOnline);
+          syncChatHistories(ids, isOnline);
           void syncPendingTextMessages(currentUser, tenantId, isOnline);
           void syncPendingImageMessages(currentUser, tenantId, isOnline);
         };
@@ -100,8 +90,7 @@ export function useChats(): { chats: Chat[]; loading: boolean } {
             (snap) => {
               void (async () => {
                 if (!snap.exists()) {
-                  byId.delete(chatId);
-                  await ChatRepository.deleteChat(chatId, { notify: false });
+                  await ChatRepository.deleteChat(chatId);
                   if (!active) return;
                   emit();
                   return;
@@ -116,26 +105,10 @@ export function useChats(): { chats: Chat[]; loading: boolean } {
                   unreadCount: data.unreadBy?.[memberId] ?? 0,
                   readUpTo: data.readUpTo,
                 };
-                if (data.lastMessageAt) {
-                  let text: string | null;
-                  if (data.lastMessageCiphertext && data.lastMessageIv) {
-                    text = await decryptIncomingMessage(chatId, {
-                      ciphertext: data.lastMessageCiphertext,
-                      iv: data.lastMessageIv,
-                      text: null,
-                    });
-                  } else {
-                    text = data.lastMessageText;
-                  }
-                  chat.lastMessage = {
-                    text,
-                    type: data.lastMessageType,
-                    timestamp: data.lastMessageAt.toDate(),
-                  };
-                }
                 if (!active) return;
-                byId.set(chatId, chat);
-                await ChatRepository.upsertChat(chat, { notify: false });
+                await ChatRepository.upsertChat(chat);
+                if (!active) return;
+                await ChatRepository.refreshLastMessageFromLocal(chatId);
                 if (!active) return;
                 emit();
               })();

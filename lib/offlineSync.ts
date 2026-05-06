@@ -1,3 +1,4 @@
+import { ChatRepository } from "@/lib/ChatRepository";
 import { ensureConversationKey } from "@/lib/conversationKeys";
 import { encryptMessageText } from "@/lib/encryptedMessages";
 import {
@@ -98,6 +99,7 @@ export async function syncChatHistory(chatId: string, isOnline = true) {
     }
 
     await MessageRepository.saveMessageSyncState(chatId, newestMessageAt);
+    await ChatRepository.refreshLastMessageFromLocal(chatId);
   } catch {
     // Offline or permission errors are retried by the next listener/sync pass.
   } finally {

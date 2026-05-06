@@ -127,7 +127,7 @@ export const ChatRepository = {
   async upsertChat(chat: Chat, options: { notify?: boolean } = {}) {
     await withExclusiveWrite(async (tx) => {
       await tx.runAsync(
-        `INSERT OR REPLACE INTO chats (
+        `INSERT INTO chats (
           id,
           tenant_id,
           participants,
@@ -139,7 +139,30 @@ export const ChatRepository = {
           last_message_at,
           read_up_to,
           updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          tenant_id = excluded.tenant_id,
+          participants = excluded.participants,
+          is_group = excluded.is_group,
+          name = excluded.name,
+          unread_count = excluded.unread_count,
+          last_message_text = CASE
+            WHEN excluded.last_message_at IS NULL
+              THEN chats.last_message_text
+            ELSE excluded.last_message_text
+          END,
+          last_message_type = CASE
+            WHEN excluded.last_message_at IS NULL
+              THEN chats.last_message_type
+            ELSE excluded.last_message_type
+          END,
+          last_message_at = CASE
+            WHEN excluded.last_message_at IS NULL
+              THEN chats.last_message_at
+            ELSE excluded.last_message_at
+          END,
+          read_up_to = excluded.read_up_to,
+          updated_at = excluded.updated_at`,
         [
           chat.id,
           chat.tenantId,
@@ -245,5 +268,36 @@ export const ChatRepository = {
     if (options.notify !== false) {
       emit();
     }
+  },
+
+  async refreshLastMessageFromLocal(
+    chatId: string,
+    options: { notify?: boolean } = {}
+  ) {
+    const db = await getDatabase();
+    const row = await db.getFirstAsync<{
+      body: string | null;
+      type: string;
+      created_at: string;
+    }>(
+      `SELECT body, type, created_at
+       FROM messages
+       WHERE conversation_id = ?
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [chatId]
+    );
+    if (!row) return;
+    const type: "text" | "audio" | "image" =
+      row.type === "audio" ? "audio" : row.type === "image" ? "image" : "text";
+    await this.updateLastMessage(
+      chatId,
+      {
+        text: type === "text" ? row.body : null,
+        type,
+        timestamp: new Date(row.created_at),
+      },
+      options
+    );
   },
 };

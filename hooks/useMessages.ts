@@ -1,6 +1,7 @@
 import { useAuth } from "@/context/AuthContext";
 import { useConnectivity } from "@/hooks/useConnectivity";
 import { AudioCacheRepository } from "@/lib/AudioCacheRepository";
+import { ChatRepository } from "@/lib/ChatRepository";
 import { ImageCacheRepository } from "@/lib/ImageCacheRepository";
 import { ImageGalleryRepository } from "@/lib/ImageGalleryRepository";
 import { db } from "@/lib/firebase";
@@ -186,6 +187,7 @@ export function useMessages(chatId: string): { messages: Message[]; loading: boo
               });
             }
           }
+          await ChatRepository.refreshLastMessageFromLocal(chatId);
           await loadLocalMessages(chatId, isActive);
         })();
       }, () => {
