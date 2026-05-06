@@ -10,7 +10,11 @@ import { useConnectivity } from "@/hooks/useConnectivity";
 import { useMemberProfiles } from "@/hooks/useMemberProfiles";
 import { useMessages } from "@/hooks/useMessages";
 import { useReactions } from "@/hooks/useReactions";
-import { useSendMessage } from "@/hooks/useSendMessage";
+import {
+  EDIT_DELETE_WINDOW_MS,
+  useSendMessage,
+} from "@/hooks/useSendMessage";
+import * as Clipboard from "expo-clipboard";
 import { getChatDisplayName } from "@/lib/chatDisplayName";
 import { createReplySnapshot } from "@/lib/messageReply";
 import { useTheme } from "@/theme/ThemeContext";
@@ -21,6 +25,7 @@ import type { Timestamp } from "firebase/firestore";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Alert,
   Animated,
   FlatList,
   NativeScrollEvent,
@@ -201,13 +206,18 @@ export default function ChatScreen() {
   const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingScrollIndexRef = useRef<number | null>(null);
 
-  const { retryImageMessage } = useSendMessage(chatId);
+  const {
+    retryImageMessage,
+    deleteMessage,
+    canModifyMessage,
+  } = useSendMessage(chatId);
 
   const [activeDayLabel, setActiveDayLabel] = useState<string>("");
   const [activeAudioMessageId, setActiveAudioMessageId] = useState<string | null>(null);
   const [audioPlaybackRate, setAudioPlaybackRate] = useState<1 | 1.5 | 2>(1);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const [replyTo, setReplyTo] = useState<MessageReplySnapshot | null>(null);
+  const [editingMessage, setEditingMessage] = useState<Message | null>(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
 
   const [reactionTarget, setReactionTarget] = useState<{
@@ -253,8 +263,22 @@ export default function ChatScreen() {
   useEffect(() => {
     setActiveAudioMessageId(null);
     setReplyTo(null);
+    setEditingMessage(null);
     setHighlightedMessageId(null);
   }, [chatId]);
+
+  useEffect(() => {
+    if (!editingMessage) return;
+    const fresh = messagesById.get(editingMessage.id);
+    if (!fresh) return;
+    if (fresh.isDeleted) {
+      setEditingMessage(null);
+      return;
+    }
+    if (Date.now() - fresh.timestamp.getTime() > EDIT_DELETE_WINDOW_MS) {
+      setEditingMessage(null);
+    }
+  }, [editingMessage, messagesById]);
 
   const chatListData = useMemo<ChatListItem[]>(() => {
     const ordered = [...messagesWithReactions].reverse();
@@ -431,6 +455,46 @@ export default function ChatScreen() {
 
   const clearReply = useCallback(() => {
     setReplyTo(null);
+  }, []);
+
+  const clearEdit = useCallback(() => {
+    setEditingMessage(null);
+  }, []);
+
+  const handleEditPress = useCallback((message: Message) => {
+    setReplyTo(null);
+    setEditingMessage(message);
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+    });
+  }, []);
+
+  const handleDeletePress = useCallback(
+    (message: Message) => {
+      Alert.alert(
+        "Apagar mensagem",
+        "Tem certeza que deseja apagar esta mensagem? Essa ação não pode ser desfeita.",
+        [
+          { text: "Cancelar", style: "cancel" },
+          {
+            text: "Apagar",
+            style: "destructive",
+            onPress: () => {
+              if (editingMessage?.id === message.id) {
+                setEditingMessage(null);
+              }
+              void deleteMessage(message);
+            },
+          },
+        ]
+      );
+    },
+    [deleteMessage, editingMessage]
+  );
+
+  const handleCopyMessage = useCallback(async (message: Message) => {
+    if (message.type !== "text" || !message.content) return;
+    await Clipboard.setStringAsync(message.content);
   }, []);
 
   const highlightMessage = useCallback((messageId: string) => {
@@ -674,17 +738,50 @@ export default function ChatScreen() {
             );
           }}
         />
-        {reactionTarget ? (
-          <ReactionMenu
-            visible
-            targetX={reactionTarget.x}
-            targetY={reactionTarget.y}
-            targetWidth={reactionTarget.width}
-            targetHeight={reactionTarget.height}
-            onEmojiSelect={handleQuickEmojiSelect}
-            onClose={closeReactionMenu}
-          />
-        ) : null}
+        {reactionTarget ? (() => {
+          const targetMessage = messagesById.get(reactionTarget.messageId);
+          const isOwn =
+            targetMessage != null && targetMessage.senderId === currentUserId;
+          const canModify =
+            targetMessage != null && canModifyMessage(targetMessage);
+          const isText = targetMessage?.type === "text";
+          const isDeleted = targetMessage?.isDeleted === true;
+          const closeAndRun = (fn: () => void) => () => {
+            setReactionTarget(null);
+            fn();
+          };
+          return (
+            <ReactionMenu
+              visible
+              targetX={reactionTarget.x}
+              targetY={reactionTarget.y}
+              targetWidth={reactionTarget.width}
+              targetHeight={reactionTarget.height}
+              onEmojiSelect={handleQuickEmojiSelect}
+              onClose={closeReactionMenu}
+              onReply={
+                targetMessage && !isDeleted
+                  ? closeAndRun(() => handleReplySelect(targetMessage))
+                  : undefined
+              }
+              onCopy={
+                targetMessage && isText && !isDeleted
+                  ? closeAndRun(() => void handleCopyMessage(targetMessage))
+                  : undefined
+              }
+              onEdit={
+                targetMessage && isOwn && isText && canModify
+                  ? closeAndRun(() => handleEditPress(targetMessage))
+                  : undefined
+              }
+              onDelete={
+                targetMessage && isOwn && canModify
+                  ? closeAndRun(() => handleDeletePress(targetMessage))
+                  : undefined
+              }
+            />
+          );
+        })() : null}
         <ReactionsDialog
           visible={reactionsDialogMessageId !== null}
           reactions={dialogReactions}
@@ -717,6 +814,8 @@ export default function ChatScreen() {
         replyTo={replyTo}
         onCancelReply={clearReply}
         onSend={jumpToLatestMessages}
+        editingMessage={editingMessage}
+        onCancelEdit={clearEdit}
       />
     </KeyboardAvoidingView>
   );

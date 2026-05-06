@@ -137,6 +137,19 @@ async function migrate(db: SQLite.SQLiteDatabase) {
   await ensureColumn(db, "messages", "image_file_size", "REAL");
   await ensureColumn(db, "messages", "image_pending_source_uri", "TEXT");
   await ensureColumn(db, "messages", "image_downloaded_at", "TEXT");
+  await ensureColumn(db, "messages", "is_edited", "INTEGER NOT NULL DEFAULT 0");
+  await ensureColumn(db, "messages", "edited_at", "TEXT");
+  await ensureColumn(db, "messages", "is_deleted", "INTEGER NOT NULL DEFAULT 0");
+  await ensureColumn(db, "messages", "deleted_at", "TEXT");
+  await ensureColumn(db, "messages", "pending_op", "TEXT");
+  await ensureColumn(db, "messages", "original_body", "TEXT");
+  await ensureColumn(db, "messages", "updated_at", "TEXT");
+  await ensureColumn(db, "messages", "edit_attempts", "INTEGER NOT NULL DEFAULT 0");
+
+  await db.execAsync(`
+    CREATE INDEX IF NOT EXISTS idx_messages_pending_op
+      ON messages (pending_op);
+  `);
 }
 
 export async function getDatabase() {

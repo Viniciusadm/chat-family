@@ -108,6 +108,44 @@ export async function ensureAudioMessageInFirestore({
   });
 }
 
+export async function updateTextMessageInFirestore({
+  chatId,
+  messageId,
+  ciphertext,
+  iv,
+}: {
+  chatId: string;
+  messageId: string;
+  ciphertext: string;
+  iv: string;
+}) {
+  const messageRef = doc(db, "chats", chatId, "messages", messageId);
+  await updateDoc(messageRef, {
+    ciphertext,
+    iv,
+    encVersion: 1,
+    text: null,
+    editedAt: serverTimestamp(),
+  });
+}
+
+export async function softDeleteMessageInFirestore({
+  chatId,
+  messageId,
+}: {
+  chatId: string;
+  messageId: string;
+}) {
+  const messageRef = doc(db, "chats", chatId, "messages", messageId);
+  await updateDoc(messageRef, {
+    ciphertext: null,
+    iv: null,
+    text: null,
+    isDeleted: true,
+    deletedAt: serverTimestamp(),
+  });
+}
+
 export async function ensureImageMessageInFirestore({
   chatId,
   messageId,

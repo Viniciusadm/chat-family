@@ -153,6 +153,16 @@ function ChatBubbleImpl({
         fontStyle: "italic",
         opacity: 0.75,
       },
+      deletedText: {
+        fontSize: 14,
+        fontStyle: "italic",
+        color: t.mutedForeground,
+      },
+      editedLabel: {
+        fontSize: 10,
+        fontStyle: "italic",
+        color: t.timestamp,
+      },
       meta: {
         marginTop: 4,
         flexDirection: "row",
@@ -207,12 +217,14 @@ function ChatBubbleImpl({
     () =>
       PanResponder.create({
         onMoveShouldSetPanResponder: (_, gesture) =>
-          gesture.dx > 12 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.4,
+          !message.isDeleted &&
+          gesture.dx > 12 &&
+          Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.4,
         onPanResponderMove: (_, gesture) => {
           swipeX.setValue(Math.min(gesture.dx, 56));
         },
         onPanResponderRelease: (_, gesture) => {
-          if (gesture.dx > 48) {
+          if (gesture.dx > 48 && !message.isDeleted) {
             onReply?.(message);
           }
           Animated.spring(swipeX, {
@@ -232,6 +244,7 @@ function ChatBubbleImpl({
 
   const handleLongPress = () => {
     if (!onReactionPress) return;
+    if (message.isDeleted) return;
     bubbleRef.current?.measureInWindow((x, y, width, height) => {
       onReactionPress(message.id, x, y, width, height);
     });
@@ -278,7 +291,7 @@ function ChatBubbleImpl({
               {senderName}
             </Text>
           ) : null}
-          {message.replyTo ? (
+          {message.replyTo && !message.isDeleted ? (
             <QuotedReply
               reply={message.replyTo}
               available={replyAvailable}
@@ -286,7 +299,9 @@ function ChatBubbleImpl({
               onPress={onQuotedReplyPress}
             />
           ) : null}
-          {isImage ? (
+          {message.isDeleted ? (
+            <Text style={styles.deletedText}>Mensagem apagada</Text>
+          ) : isImage ? (
             <ImageBubble
               message={message}
               isSelf={isSelf}
@@ -346,8 +361,11 @@ function ChatBubbleImpl({
             </Text>
           )}
           <View style={[styles.meta, isSelf ? styles.metaSelf : styles.metaOther]}>
+            {message.isEdited && !message.isDeleted ? (
+              <Text style={styles.editedLabel}>editada</Text>
+            ) : null}
             <Text style={styles.timestamp}>{formatTime(message.timestamp)}</Text>
-            {selfReadReceipt ? (
+            {selfReadReceipt && !message.isDeleted ? (
               <View style={styles.receiptIconSlot}>
                 <MaterialIcons
                   name={
@@ -366,7 +384,7 @@ function ChatBubbleImpl({
             ) : null}
           </View>
         </Pressable>
-        {reactions && currentUserId && onReactionChipPress ? (
+        {reactions && currentUserId && onReactionChipPress && !message.isDeleted ? (
           <View style={[styles.reactionRow, isSelf ? styles.reactionRowSelf : styles.reactionRowOther]}>
             <ReactionBubble
               reactions={reactions}

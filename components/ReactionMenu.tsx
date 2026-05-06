@@ -1,4 +1,6 @@
+import { useTheme } from "@/theme/ThemeContext";
 import { useThemedStyles } from "@/theme/useThemedStyles";
+import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useRef } from "react";
 import {
   Animated,
@@ -7,11 +9,21 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  View,
 } from "react-native";
 
 const QUICK_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
-const MENU_HEIGHT = 56;
+const EMOJI_ROW_HEIGHT = 56;
+const ACTIONS_ROW_HEIGHT = 44;
 const GAP = 8;
+
+type ActionItem = {
+  key: string;
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  onPress: () => void;
+  destructive?: boolean;
+};
 
 interface ReactionMenuProps {
   visible: boolean;
@@ -21,6 +33,10 @@ interface ReactionMenuProps {
   targetHeight: number;
   onEmojiSelect: (emoji: string) => void;
   onClose: () => void;
+  onReply?: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
+  onCopy?: () => void;
 }
 
 export function ReactionMenu({
@@ -31,19 +47,27 @@ export function ReactionMenu({
   targetHeight,
   onEmojiSelect,
   onClose,
+  onReply,
+  onEdit,
+  onDelete,
+  onCopy,
 }: ReactionMenuProps) {
+  const { theme } = useTheme();
   const styles = useThemedStyles((t) =>
     StyleSheet.create({
       backdrop: {
         flex: 1,
       },
-      menu: {
+      container: {
         position: "absolute",
+        gap: 8,
+      },
+      menu: {
         flexDirection: "row",
         alignItems: "center",
         gap: 2,
         paddingHorizontal: 8,
-        height: MENU_HEIGHT,
+        height: EMOJI_ROW_HEIGHT,
         backgroundColor: t.card,
         borderRadius: 28,
         borderWidth: 1,
@@ -66,6 +90,42 @@ export function ReactionMenu({
       },
       emojiText: {
         fontSize: 26,
+      },
+      actionsRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 4,
+        paddingHorizontal: 6,
+        height: ACTIONS_ROW_HEIGHT,
+        backgroundColor: t.card,
+        borderRadius: 22,
+        borderWidth: 1,
+        borderColor: t.border,
+        shadowColor: t.shadow,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: t.shadowOpacity * 1.4,
+        shadowRadius: 6,
+        elevation: 6,
+        alignSelf: "flex-start",
+      },
+      actionButton: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 4,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 16,
+      },
+      actionButtonPressed: {
+        backgroundColor: t.muted,
+      },
+      actionLabel: {
+        fontSize: 13,
+        color: t.foreground,
+        fontWeight: "500",
+      },
+      actionLabelDestructive: {
+        color: t.destructive,
       },
     })
   );
@@ -92,6 +152,41 @@ export function ReactionMenu({
     }
   }, [visible, scale, opacity]);
 
+  const actions: ActionItem[] = [];
+  if (onReply) {
+    actions.push({
+      key: "reply",
+      label: "Responder",
+      icon: "arrow-undo-outline",
+      onPress: onReply,
+    });
+  }
+  if (onCopy) {
+    actions.push({
+      key: "copy",
+      label: "Copiar",
+      icon: "copy-outline",
+      onPress: onCopy,
+    });
+  }
+  if (onEdit) {
+    actions.push({
+      key: "edit",
+      label: "Editar",
+      icon: "pencil-outline",
+      onPress: onEdit,
+    });
+  }
+  if (onDelete) {
+    actions.push({
+      key: "delete",
+      label: "Apagar",
+      icon: "trash-outline",
+      onPress: onDelete,
+      destructive: true,
+    });
+  }
+
   const { width: screenWidth } = Dimensions.get("window");
   const menuWidth = QUICK_EMOJIS.length * 44 + 16;
 
@@ -99,7 +194,10 @@ export function ReactionMenu({
   if (menuX < 8) menuX = 8;
   if (menuX + menuWidth > screenWidth - 8) menuX = screenWidth - menuWidth - 8;
 
-  const menuY = targetY - MENU_HEIGHT - GAP;
+  const totalHeight =
+    EMOJI_ROW_HEIGHT + (actions.length > 0 ? ACTIONS_ROW_HEIGHT + 8 : 0);
+  const aboveY = targetY - totalHeight - GAP;
+  const containerY = aboveY < 8 ? targetY + targetHeight + GAP : aboveY;
 
   return (
     <Modal
@@ -111,27 +209,60 @@ export function ReactionMenu({
       <Pressable style={styles.backdrop} onPress={onClose}>
         <Animated.View
           style={[
-            styles.menu,
+            styles.container,
             {
               left: menuX,
-              top: menuY < 8 ? targetY + targetHeight + GAP : menuY,
+              top: containerY,
               opacity,
               transform: [{ scale }],
+              width: menuWidth,
             },
           ]}
         >
-          {QUICK_EMOJIS.map((emoji) => (
-            <Pressable
-              key={emoji}
-              onPress={() => onEmojiSelect(emoji)}
-              style={({ pressed }) => [
-                styles.emojiButton,
-                pressed ? styles.emojiButtonPressed : null,
-              ]}
-            >
-              <Text style={styles.emojiText}>{emoji}</Text>
-            </Pressable>
-          ))}
+          <View style={styles.menu}>
+            {QUICK_EMOJIS.map((emoji) => (
+              <Pressable
+                key={emoji}
+                onPress={() => onEmojiSelect(emoji)}
+                style={({ pressed }) => [
+                  styles.emojiButton,
+                  pressed ? styles.emojiButtonPressed : null,
+                ]}
+              >
+                <Text style={styles.emojiText}>{emoji}</Text>
+              </Pressable>
+            ))}
+          </View>
+          {actions.length > 0 ? (
+            <View style={styles.actionsRow}>
+              {actions.map((action) => (
+                <Pressable
+                  key={action.key}
+                  onPress={action.onPress}
+                  style={({ pressed }) => [
+                    styles.actionButton,
+                    pressed ? styles.actionButtonPressed : null,
+                  ]}
+                >
+                  <Ionicons
+                    name={action.icon}
+                    size={16}
+                    color={
+                      action.destructive ? theme.destructive : theme.foreground
+                    }
+                  />
+                  <Text
+                    style={[
+                      styles.actionLabel,
+                      action.destructive ? styles.actionLabelDestructive : null,
+                    ]}
+                  >
+                    {action.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
         </Animated.View>
       </Pressable>
     </Modal>

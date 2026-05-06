@@ -3,7 +3,9 @@ import { ensureConversationKey } from "@/lib/conversationKeys";
 import { encryptMessageText } from "@/lib/encryptedMessages";
 import {
   ensureTextMessageInFirestore,
+  softDeleteMessageInFirestore,
   updateChatAfterOutgoingMessage,
+  updateTextMessageInFirestore,
 } from "@/lib/firestoreMessages";
 import { ensureReactionInFirestore } from "@/lib/firestoreReactions";
 import { AudioCacheRepository } from "@/lib/AudioCacheRepository";
@@ -204,6 +206,50 @@ export async function syncPendingImageMessages(
     }
   } finally {
     pendingImageSyncInFlight = false;
+  }
+}
+
+let pendingOpsSyncInFlight = false;
+
+export async function syncPendingOps(
+  currentUser: AppUser,
+  isOnline = true
+) {
+  if (!isOnline) return;
+  if (pendingOpsSyncInFlight) return;
+  pendingOpsSyncInFlight = true;
+
+  try {
+    const messages = await MessageRepository.getPendingOps();
+    for (const message of messages) {
+      if (message.senderId !== currentUser.id) continue;
+      try {
+        if (message.pendingOp === "delete") {
+          await softDeleteMessageInFirestore({
+            chatId: message.chatId,
+            messageId: message.id,
+          });
+          await MessageRepository.clearPendingOp(message.id);
+        } else if (message.pendingOp === "update" && message.type === "text") {
+          await ensureConversationKey(message.chatId);
+          const enc = await encryptMessageText(message.chatId, message.content);
+          if (!enc) continue;
+          await updateTextMessageInFirestore({
+            chatId: message.chatId,
+            messageId: message.id,
+            ciphertext: enc.ciphertext,
+            iv: enc.iv,
+          });
+          await MessageRepository.clearPendingOp(message.id);
+        }
+      } catch {
+        await MessageRepository.incrementEditAttempts(message.id).catch(
+          () => {}
+        );
+      }
+    }
+  } finally {
+    pendingOpsSyncInFlight = false;
   }
 }
 

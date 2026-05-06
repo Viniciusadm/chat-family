@@ -1,7 +1,7 @@
 import { useSendMessage } from "@/hooks/useSendMessage";
 import { useTheme } from "@/theme/ThemeContext";
 import { useThemedStyles } from "@/theme/useThemedStyles";
-import type { MessageReplySnapshot } from "@/types/chat";
+import type { Message, MessageReplySnapshot } from "@/types/chat";
 import { Ionicons } from "@expo/vector-icons";
 import {
   RecordingPresets,
@@ -33,6 +33,7 @@ import Animated, {
   useAnimatedStyle,
 } from "react-native-reanimated";
 import { AttachmentMenu } from "./AttachmentMenu";
+import { EditPreview } from "./EditPreview";
 import { ImagePreviewModal } from "./ImagePreviewModal";
 import { ReplyPreview } from "./ReplyPreview";
 
@@ -41,6 +42,8 @@ interface ChatInputProps {
   replyTo?: MessageReplySnapshot | null;
   onCancelReply?: () => void;
   onSend?: () => void;
+  editingMessage?: Message | null;
+  onCancelEdit?: () => void;
 }
 
 export interface ChatInputHandle {
@@ -53,6 +56,8 @@ function ChatInput({
   replyTo = null,
   onCancelReply,
   onSend,
+  editingMessage = null,
+  onCancelEdit,
 }, ref) {
   const { theme } = useTheme();
   const styles = useThemedStyles((t) =>
@@ -142,7 +147,13 @@ function ChatInput({
       },
     })
   );
-  const { sendText, sendAudio, sendImage, isSending } = useSendMessage(chatId);
+  const {
+    sendText,
+    sendAudio,
+    sendImage,
+    editTextMessage,
+    isSending,
+  } = useSendMessage(chatId);
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const insets = useSafeAreaInsets();
   const { progress } = useReanimatedKeyboardAnimation();
@@ -168,6 +179,18 @@ function ChatInput({
   const recordingActiveRef = useRef(false);
   const recordSessionRef = useRef(0);
   const recordingStartMsRef = useRef(0);
+  const editingIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (editingMessage && editingMessage.id !== editingIdRef.current) {
+      setText(editingMessage.content);
+      editingIdRef.current = editingMessage.id;
+      requestAnimationFrame(() => inputRef.current?.focus());
+    } else if (!editingMessage && editingIdRef.current) {
+      setText("");
+      editingIdRef.current = null;
+    }
+  }, [editingMessage]);
 
   useEffect(() => {
     if (!isRecording) return;
@@ -195,6 +218,20 @@ function ChatInput({
   const handleSendText = useCallback(async () => {
     const trimmed = text.trim();
     if (!trimmed || isSending) return;
+    if (editingMessage) {
+      if (trimmed === editingMessage.content) {
+        onCancelEdit?.();
+        return;
+      }
+      const target = editingMessage;
+      setText("");
+      onCancelEdit?.();
+      requestAnimationFrame(() => {
+        inputRef.current?.focus();
+      });
+      await editTextMessage(target, trimmed);
+      return;
+    }
     setText("");
     onSend?.();
     onCancelReply?.();
@@ -203,7 +240,17 @@ function ChatInput({
     });
     const selectedReply = replyTo;
     await sendText(trimmed, { replyTo: selectedReply });
-  }, [text, isSending, onCancelReply, onSend, replyTo, sendText]);
+  }, [
+    text,
+    isSending,
+    editingMessage,
+    onCancelEdit,
+    editTextMessage,
+    onCancelReply,
+    onSend,
+    replyTo,
+    sendText,
+  ]);
 
   const resetRecordingState = useCallback(() => {
     recordingActiveRef.current = false;
@@ -343,33 +390,46 @@ function ChatInput({
     await restorePlaybackMode();
   };
 
+  const isEditing = editingMessage != null;
+  const trimmedText = text.trim();
+  const editIsUnchanged = isEditing && trimmedText === editingMessage.content;
+  const editSendDisabled =
+    isEditing && (isSending || trimmedText.length === 0 || editIsUnchanged);
+
   return (
     <Animated.View style={[styles.bar, animatedBarStyle]}>
-      {replyTo && onCancelReply ? (
+      {isEditing && onCancelEdit ? (
+        <EditPreview
+          originalText={editingMessage.content}
+          onCancel={onCancelEdit}
+        />
+      ) : replyTo && onCancelReply ? (
         <ReplyPreview reply={replyTo} onCancel={onCancelReply} />
       ) : null}
       <View style={styles.row}>
-        <Pressable
-          onPress={() => setAttachmentMenuVisible(true)}
-          disabled={isSending || isRecording}
-          hitSlop={6}
-          style={({ pressed }) => [
-            styles.attachBtn,
-            pressed && styles.pressed,
-            (isSending || isRecording) && styles.disabled,
-          ]}
-        >
-          <Ionicons
-            name="add"
-            size={26}
-            color={theme.mutedForeground}
-          />
-        </Pressable>
+        {!isEditing ? (
+          <Pressable
+            onPress={() => setAttachmentMenuVisible(true)}
+            disabled={isSending || isRecording}
+            hitSlop={6}
+            style={({ pressed }) => [
+              styles.attachBtn,
+              pressed && styles.pressed,
+              (isSending || isRecording) && styles.disabled,
+            ]}
+          >
+            <Ionicons
+              name="add"
+              size={26}
+              color={theme.mutedForeground}
+            />
+          </Pressable>
+        ) : null}
         <View style={styles.inputShell}>
           <TextInput
             ref={inputRef}
             value={text}
-            placeholder="Digite uma mensagem"
+            placeholder={isEditing ? "Edite a mensagem" : "Digite uma mensagem"}
             placeholderTextColor={theme.mutedForeground}
             style={styles.input}
             multiline={true}
@@ -380,7 +440,23 @@ function ChatInput({
             }}
           />
         </View>
-        {text.trim() && !isRecording ? (
+        {isEditing ? (
+          <Pressable
+            onPress={() => void handleSendText()}
+            disabled={editSendDisabled}
+            style={({ pressed }) => [
+              styles.roundBtn,
+              pressed && styles.pressed,
+              editSendDisabled && styles.disabled,
+            ]}
+          >
+            <Ionicons
+              name="checkmark"
+              size={20}
+              color={theme.primaryForeground}
+            />
+          </Pressable>
+        ) : trimmedText && !isRecording ? (
           <Pressable
             onPress={() => void handleSendText()}
             disabled={isSending}

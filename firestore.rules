@@ -177,7 +177,18 @@ service cloud.firestore {
           request.resource.data.keys().hasAny(['audioUrl']) ||
           request.resource.data.keys().hasAny(['imageUrl'])
         );
-      allow update: if false;
+      allow update: if request.auth != null &&
+        chatDoc(chatId).data.tenantId == userTenant() &&
+        memberId() in chatDoc(chatId).data.participants &&
+        resource.data.senderId == memberId() &&
+        request.time <= resource.data.createdAt + duration.value(1, 'h') &&
+        request.resource.data.tenantId == resource.data.tenantId &&
+        request.resource.data.senderId == resource.data.senderId &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'ciphertext', 'iv', 'encVersion', 'text',
+          'editedAt', 'isDeleted', 'deletedAt'
+        ]);
       allow delete: if request.auth != null &&
         chatDoc(chatId).data.tenantId == userTenant() &&
         memberId() in chatDoc(chatId).data.participants;

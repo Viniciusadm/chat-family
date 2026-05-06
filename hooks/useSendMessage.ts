@@ -7,7 +7,9 @@ import { encryptMessageText } from "@/lib/encryptedMessages";
 import {
   ensureAudioMessageInFirestore,
   ensureTextMessageInFirestore,
+  softDeleteMessageInFirestore,
   updateChatAfterOutgoingMessage,
+  updateTextMessageInFirestore,
 } from "@/lib/firestoreMessages";
 import { storage } from "@/lib/firebase";
 import { ImageCacheRepository } from "@/lib/ImageCacheRepository";
@@ -15,12 +17,15 @@ import { ImageGalleryRepository } from "@/lib/ImageGalleryRepository";
 import { processImageForUpload } from "@/lib/ImageProcessor";
 import { uploadAndPersistImage } from "@/lib/imageUpload";
 import { MessageRepository } from "@/lib/MessageRepository";
+import { syncPendingTextMessages } from "@/lib/offlineSync";
 import { randomUuid } from "@/lib/randomUuid";
 import type { Message, MessageReplySnapshot } from "@/types/chat";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { useState } from "react";
 
 export type SendableAudio = Blob | Uint8Array | ArrayBuffer;
+
+export const EDIT_DELETE_WINDOW_MS = 60 * 60 * 1000;
 
 export function useSendMessage(chatId: string) {
   const { currentUser, tenantId, firebaseUser } = useAuth();
@@ -255,5 +260,99 @@ export function useSendMessage(chatId: string) {
     }
   };
 
-  return { sendText, sendAudio, sendImage, retryImageMessage, isSending };
+  const canModifyMessage = (message: Message): boolean => {
+    if (!currentUser) return false;
+    if (message.senderId !== currentUser.id) return false;
+    if (message.isDeleted) return false;
+    const ageMs = Date.now() - message.timestamp.getTime();
+    return ageMs <= EDIT_DELETE_WINDOW_MS;
+  };
+
+  const editTextMessage = async (
+    message: Message,
+    newText: string
+  ): Promise<boolean> => {
+    if (!currentUser || !tenantId) return false;
+    if (!canModifyMessage(message)) return false;
+    if (message.type !== "text") return false;
+    const trimmed = newText.trim();
+    if (!trimmed || trimmed === message.content) return false;
+
+    if (message.status === "loading") {
+      await MessageRepository.overwritePendingCreateBody(message.id, trimmed);
+      if (isOnline && firebaseUser) {
+        void syncPendingTextMessages(currentUser, tenantId, isOnline);
+      }
+      return true;
+    }
+
+    const editedAt = new Date();
+    await MessageRepository.markAsEdited(message.id, {
+      newBody: trimmed,
+      editedAt,
+      pendingOp: "update",
+      preserveOriginal: !message.isEdited,
+    });
+
+    if (!isOnline || !firebaseUser) return true;
+    try {
+      await ensureConversationKey(message.chatId);
+      const enc = await encryptMessageText(message.chatId, trimmed);
+      if (!enc) return true;
+      await updateTextMessageInFirestore({
+        chatId: message.chatId,
+        messageId: message.id,
+        ciphertext: enc.ciphertext,
+        iv: enc.iv,
+      });
+      await MessageRepository.clearPendingOp(message.id);
+    } catch {
+      await MessageRepository.incrementEditAttempts(message.id).catch(() => {});
+    }
+    return true;
+  };
+
+  const deleteMessage = async (message: Message): Promise<boolean> => {
+    if (!currentUser) return false;
+    if (!canModifyMessage(message)) return false;
+
+    const deletedAt = new Date();
+
+    if (message.status === "loading") {
+      await MessageRepository.markAsDeleted(message.id, {
+        deletedAt,
+        pendingOp: null,
+      });
+      await MessageRepository.cancelPendingCreate(message.id);
+      return true;
+    }
+
+    await MessageRepository.markAsDeleted(message.id, {
+      deletedAt,
+      pendingOp: "delete",
+    });
+
+    if (!isOnline || !firebaseUser) return true;
+    try {
+      await softDeleteMessageInFirestore({
+        chatId: message.chatId,
+        messageId: message.id,
+      });
+      await MessageRepository.clearPendingOp(message.id);
+    } catch {
+      await MessageRepository.incrementEditAttempts(message.id).catch(() => {});
+    }
+    return true;
+  };
+
+  return {
+    sendText,
+    sendAudio,
+    sendImage,
+    retryImageMessage,
+    editTextMessage,
+    deleteMessage,
+    canModifyMessage,
+    isSending,
+  };
 }

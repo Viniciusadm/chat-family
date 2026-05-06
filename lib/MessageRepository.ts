@@ -3,6 +3,7 @@ import { getDatabase, withExclusiveWrite } from "@/lib/db";
 import type {
   Message,
   MessageDoc,
+  MessagePendingOp,
   MessageReplySnapshot,
   MessageReplyType,
   MessageStatus,
@@ -35,6 +36,14 @@ type MessageRow = {
   image_file_size: number | null;
   image_pending_source_uri: string | null;
   image_downloaded_at: string | null;
+  is_edited: number | null;
+  edited_at: string | null;
+  is_deleted: number | null;
+  deleted_at: string | null;
+  pending_op: string | null;
+  original_body: string | null;
+  updated_at: string | null;
+  edit_attempts: number | null;
 };
 
 type MessageSyncRow = {
@@ -64,6 +73,10 @@ export type LocalMessageInput = {
   imageFileSize?: number | null;
   imagePendingSourceUri?: string | null;
   imageDownloadedAt?: Date | null;
+  isEdited?: boolean;
+  editedAt?: Date | null;
+  isDeleted?: boolean;
+  deletedAt?: Date | null;
 };
 
 type Listener = () => void;
@@ -97,14 +110,20 @@ function rowToMessage(row: MessageRow): Message {
   const type: MessageType =
     row.type === "audio" ? "audio" : row.type === "image" ? "image" : "text";
   const timestamp = new Date(row.created_at);
+  const isDeleted = row.is_deleted === 1;
+  const isEdited = row.is_edited === 1;
   const decryptionFailed =
-    type === "text" && row.status === "sent" && row.body == null;
+    type === "text" && row.status === "sent" && row.body == null && !isDeleted;
   const status: MessageStatus =
     row.status === "loading"
       ? "loading"
       : row.status === "failed"
         ? "failed"
         : "sent";
+  const pendingOp: MessagePendingOp | null =
+    row.pending_op === "update" || row.pending_op === "delete"
+      ? row.pending_op
+      : null;
 
   return {
     id: row.id,
@@ -154,6 +173,11 @@ function rowToMessage(row: MessageRow): Message {
     status,
     replyTo: rowReplyTo(row),
     decryptionFailed: decryptionFailed || undefined,
+    isEdited: isEdited || undefined,
+    editedAt: row.edited_at ? new Date(row.edited_at) : null,
+    isDeleted: isDeleted || undefined,
+    deletedAt: row.deleted_at ? new Date(row.deleted_at) : null,
+    pendingOp,
   };
 }
 
@@ -188,6 +212,10 @@ function inputParams(message: LocalMessageInput) {
     $imageDownloadedAt: message.imageDownloadedAt
       ? message.imageDownloadedAt.toISOString()
       : null,
+    $isEdited: message.isEdited ? 1 : 0,
+    $editedAt: message.editedAt ? message.editedAt.toISOString() : null,
+    $isDeleted: message.isDeleted ? 1 : 0,
+    $deletedAt: message.deletedAt ? message.deletedAt.toISOString() : null,
   };
 }
 
@@ -240,6 +268,7 @@ export const MessageRepository = {
          AND m.type = 'text'
          AND m.body IS NOT NULL
          AND m.body <> ''
+         AND COALESCE(m.is_deleted, 0) = 0
        ORDER BY m.created_at DESC`,
       [tenantId]
     );
@@ -296,7 +325,11 @@ export const MessageRepository = {
           image_height,
           image_file_size,
           image_pending_source_uri,
-          image_downloaded_at
+          image_downloaded_at,
+          is_edited,
+          edited_at,
+          is_deleted,
+          deleted_at
         ) VALUES (
           $id,
           $conversationId,
@@ -322,12 +355,19 @@ export const MessageRepository = {
           $imageHeight,
           $imageFileSize,
           $imagePendingSourceUri,
-          $imageDownloadedAt
+          $imageDownloadedAt,
+          $isEdited,
+          $editedAt,
+          $isDeleted,
+          $deletedAt
         )
         ON CONFLICT(id) DO UPDATE SET
           conversation_id = excluded.conversation_id,
           sender_id = excluded.sender_id,
-          body = excluded.body,
+          body = CASE
+            WHEN messages.pending_op IS NOT NULL THEN messages.body
+            ELSE excluded.body
+          END,
           type = excluded.type,
           status = CASE
             WHEN messages.status = 'loading' AND excluded.status = 'sent'
@@ -338,6 +378,22 @@ export const MessageRepository = {
           END,
           created_at = excluded.created_at,
           synced_at = COALESCE(excluded.synced_at, messages.synced_at),
+          is_edited = CASE
+            WHEN messages.pending_op IS NOT NULL THEN messages.is_edited
+            ELSE excluded.is_edited
+          END,
+          edited_at = CASE
+            WHEN messages.pending_op IS NOT NULL THEN messages.edited_at
+            ELSE COALESCE(excluded.edited_at, messages.edited_at)
+          END,
+          is_deleted = CASE
+            WHEN messages.pending_op IS NOT NULL THEN messages.is_deleted
+            ELSE excluded.is_deleted
+          END,
+          deleted_at = CASE
+            WHEN messages.pending_op IS NOT NULL THEN messages.deleted_at
+            ELSE COALESCE(excluded.deleted_at, messages.deleted_at)
+          END,
           local_audio_uri = COALESCE(excluded.local_audio_uri, messages.local_audio_uri),
           audio_downloaded_at = COALESCE(
             excluded.audio_downloaded_at,
@@ -535,6 +591,9 @@ export const MessageRepository = {
     const isAudio = data.audioUrl != null;
     const isImage = !isAudio && data.imageUrl != null;
     const createdAt = data.createdAt ? data.createdAt.toDate() : new Date();
+    const isDeleted = data.isDeleted === true;
+    const editedAt = data.editedAt ? data.editedAt.toDate() : null;
+    const deletedAt = data.deletedAt ? data.deletedAt.toDate() : null;
 
     let body: string | null;
     let type: MessageType;
@@ -569,6 +628,10 @@ export const MessageRepository = {
         imageHeight: isImage ? data.imageHeight ?? null : null,
         imageFileSize: isImage ? data.imageFileSize ?? null : null,
         replyTo: data.replyTo ?? null,
+        isEdited: editedAt != null,
+        editedAt,
+        isDeleted,
+        deletedAt,
       },
       options
     );
@@ -607,10 +670,168 @@ export const MessageRepository = {
        FROM messages
        WHERE status = 'loading'
          AND type = 'text'
+         AND COALESCE(is_deleted, 0) = 0
        ORDER BY created_at ASC`
     );
 
     return rows.map(rowToMessage);
+  },
+
+  async getPendingOps(): Promise<Message[]> {
+    const db = await getDatabase();
+    const rows = await db.getAllAsync<MessageRow>(
+      `SELECT *
+       FROM messages
+       WHERE pending_op IN ('update', 'delete')
+         AND status = 'sent'
+       ORDER BY COALESCE(updated_at, created_at) ASC`
+    );
+
+    return rows.map(rowToMessage);
+  },
+
+  async markAsEdited(
+    id: string,
+    options: {
+      newBody: string;
+      editedAt: Date;
+      pendingOp: MessagePendingOp | null;
+      preserveOriginal: boolean;
+    }
+  ) {
+    let conversationId: string | undefined;
+    await withExclusiveWrite(async (tx) => {
+      const existing = await tx.getFirstAsync<
+        Pick<MessageRow, "conversation_id" | "body" | "original_body">
+      >(
+        "SELECT conversation_id, body, original_body FROM messages WHERE id = ?",
+        [id]
+      );
+      if (!existing) return;
+      conversationId = existing.conversation_id;
+      const original = options.preserveOriginal
+        ? existing.original_body ?? existing.body
+        : existing.original_body;
+      const editedAtIso = options.editedAt.toISOString();
+      await tx.runAsync(
+        `UPDATE messages
+         SET body = ?,
+             original_body = ?,
+             is_edited = 1,
+             edited_at = ?,
+             pending_op = ?,
+             updated_at = ?
+         WHERE id = ?`,
+        [
+          options.newBody,
+          original ?? null,
+          editedAtIso,
+          options.pendingOp,
+          editedAtIso,
+          id,
+        ]
+      );
+    });
+    if (conversationId) emit(conversationId);
+  },
+
+  async overwritePendingCreateBody(id: string, newBody: string) {
+    let conversationId: string | undefined;
+    await withExclusiveWrite(async (tx) => {
+      const existing = await tx.getFirstAsync<Pick<MessageRow, "conversation_id">>(
+        "SELECT conversation_id FROM messages WHERE id = ?",
+        [id]
+      );
+      if (!existing) return;
+      conversationId = existing.conversation_id;
+      await tx.runAsync(
+        `UPDATE messages
+         SET body = ?, updated_at = ?
+         WHERE id = ?`,
+        [newBody, new Date().toISOString(), id]
+      );
+    });
+    if (conversationId) emit(conversationId);
+  },
+
+  async markAsDeleted(
+    id: string,
+    options: { deletedAt: Date; pendingOp: MessagePendingOp | null }
+  ) {
+    let conversationId: string | undefined;
+    await withExclusiveWrite(async (tx) => {
+      const existing = await tx.getFirstAsync<Pick<MessageRow, "conversation_id">>(
+        "SELECT conversation_id FROM messages WHERE id = ?",
+        [id]
+      );
+      if (!existing) return;
+      conversationId = existing.conversation_id;
+      const deletedAtIso = options.deletedAt.toISOString();
+      await tx.runAsync(
+        `UPDATE messages
+         SET is_deleted = 1,
+             deleted_at = ?,
+             pending_op = ?,
+             updated_at = ?
+         WHERE id = ?`,
+        [deletedAtIso, options.pendingOp, deletedAtIso, id]
+      );
+    });
+    if (conversationId) emit(conversationId);
+  },
+
+  async cancelPendingCreate(id: string) {
+    let conversationId: string | undefined;
+    await withExclusiveWrite(async (tx) => {
+      const existing = await tx.getFirstAsync<Pick<MessageRow, "conversation_id">>(
+        "SELECT conversation_id FROM messages WHERE id = ?",
+        [id]
+      );
+      if (!existing) return;
+      conversationId = existing.conversation_id;
+      const now = new Date().toISOString();
+      await tx.runAsync(
+        `UPDATE messages
+         SET status = 'sent',
+             synced_at = ?,
+             pending_op = NULL,
+             updated_at = ?
+         WHERE id = ?`,
+        [now, now, id]
+      );
+    });
+    if (conversationId) emit(conversationId);
+  },
+
+  async clearPendingOp(id: string) {
+    let conversationId: string | undefined;
+    await withExclusiveWrite(async (tx) => {
+      const existing = await tx.getFirstAsync<Pick<MessageRow, "conversation_id">>(
+        "SELECT conversation_id FROM messages WHERE id = ?",
+        [id]
+      );
+      if (!existing) return;
+      conversationId = existing.conversation_id;
+      await tx.runAsync(
+        `UPDATE messages
+         SET pending_op = NULL,
+             updated_at = ?
+         WHERE id = ?`,
+        [new Date().toISOString(), id]
+      );
+    });
+    if (conversationId) emit(conversationId);
+  },
+
+  async incrementEditAttempts(id: string) {
+    await withExclusiveWrite(async (tx) => {
+      await tx.runAsync(
+        `UPDATE messages
+         SET edit_attempts = COALESCE(edit_attempts, 0) + 1
+         WHERE id = ?`,
+        [id]
+      );
+    });
   },
 
   async getConversationIdsWithPendingTextMessages(): Promise<string[]> {

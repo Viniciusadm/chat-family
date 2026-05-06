@@ -9,6 +9,7 @@ import { MessageRepository } from "@/lib/MessageRepository";
 import {
   syncChatHistory,
   syncPendingImageMessages,
+  syncPendingOps,
   syncPendingTextMessages,
 } from "@/lib/offlineSync";
 import type { Message, MessageDoc } from "@/types/chat";
@@ -141,8 +142,11 @@ export function useMessages(chatId: string): { messages: Message[]; loading: boo
       void refreshLocalImageCache(chatId, isActive, isOnline);
 
       if (currentUser && tenantId && firebaseUser) {
-        void syncPendingTextMessages(currentUser, tenantId, isOnline);
-        void syncPendingImageMessages(currentUser, tenantId, isOnline);
+        void (async () => {
+          await syncPendingTextMessages(currentUser, tenantId, isOnline);
+          await syncPendingImageMessages(currentUser, tenantId, isOnline);
+          await syncPendingOps(currentUser, isOnline);
+        })();
         void syncChatHistory(chatId, isOnline);
       }
 

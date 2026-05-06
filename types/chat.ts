@@ -100,6 +100,9 @@ export interface MessageDoc {
   encVersion?: number;
   replyTo?: MessageReplySnapshot | null;
   createdAt: Timestamp;
+  editedAt?: Timestamp | null;
+  isDeleted?: boolean;
+  deletedAt?: Timestamp | null;
 }
 
 export interface Reaction {
@@ -165,6 +168,8 @@ export interface Chat {
   };
 }
 
+export type MessagePendingOp = "update" | "delete";
+
 export interface Message {
   id: string;
   chatId: string;
@@ -190,4 +195,9 @@ export interface Message {
   replyTo?: MessageReplySnapshot;
   reactions?: Reaction[];
   decryptionFailed?: boolean;
+  isEdited?: boolean;
+  editedAt?: Date | null;
+  isDeleted?: boolean;
+  deletedAt?: Date | null;
+  pendingOp?: MessagePendingOp | null;
 }

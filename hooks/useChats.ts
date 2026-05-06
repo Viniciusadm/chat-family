@@ -5,6 +5,7 @@ import { db } from "@/lib/firebase";
 import {
   syncChatHistories,
   syncPendingImageMessages,
+  syncPendingOps,
   syncPendingTextMessages,
 } from "@/lib/offlineSync";
 import type { Chat, ChatDoc } from "@/types/chat";
@@ -80,8 +81,11 @@ export function useChats(): { chats: Chat[]; loading: boolean } {
         const emit = () => {
           setLoading(false);
           syncChatHistories(ids, isOnline);
-          void syncPendingTextMessages(currentUser, tenantId, isOnline);
-          void syncPendingImageMessages(currentUser, tenantId, isOnline);
+          void (async () => {
+            await syncPendingTextMessages(currentUser, tenantId, isOnline);
+            await syncPendingImageMessages(currentUser, tenantId, isOnline);
+            await syncPendingOps(currentUser, isOnline);
+          })();
         };
 
         for (const chatId of ids) {
