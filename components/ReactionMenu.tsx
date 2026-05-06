@@ -14,7 +14,7 @@ import {
 
 const QUICK_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 const EMOJI_ROW_HEIGHT = 56;
-const ACTIONS_ROW_HEIGHT = 44;
+const ACTIONS_ROW_HEIGHT = 56;
 const GAP = 8;
 
 type ActionItem = {
@@ -93,12 +93,12 @@ export function ReactionMenu({
       },
       actionsRow: {
         flexDirection: "row",
-        alignItems: "center",
+        alignItems: "stretch",
         gap: 4,
         paddingHorizontal: 6,
-        height: ACTIONS_ROW_HEIGHT,
+        paddingVertical: 4,
         backgroundColor: t.card,
-        borderRadius: 22,
+        borderRadius: 18,
         borderWidth: 1,
         borderColor: t.border,
         shadowColor: t.shadow,
@@ -106,23 +106,25 @@ export function ReactionMenu({
         shadowOpacity: t.shadowOpacity * 1.4,
         shadowRadius: 6,
         elevation: 6,
-        alignSelf: "flex-start",
       },
       actionButton: {
-        flexDirection: "row",
+        flex: 1,
+        flexDirection: "column",
         alignItems: "center",
-        gap: 4,
-        paddingHorizontal: 10,
+        justifyContent: "center",
+        gap: 2,
         paddingVertical: 6,
-        borderRadius: 16,
+        paddingHorizontal: 4,
+        borderRadius: 14,
       },
       actionButtonPressed: {
         backgroundColor: t.muted,
       },
       actionLabel: {
-        fontSize: 13,
+        fontSize: 11,
         color: t.foreground,
         fontWeight: "500",
+        textAlign: "center",
       },
       actionLabelDestructive: {
         color: t.destructive,
@@ -246,7 +248,7 @@ export function ReactionMenu({
                 >
                   <Ionicons
                     name={action.icon}
-                    size={16}
+                    size={20}
                     color={
                       action.destructive ? theme.destructive : theme.foreground
                     }
