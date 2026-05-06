@@ -56,7 +56,7 @@ export async function setupBackupPassword(uid: string, password: string): Promis
     throw new Error("Password already configured. Use changeBackupPassword.");
   }
   const salt = generatePasswordSalt();
-  const kek = deriveKeyFromPassword(password, salt);
+  const kek = await deriveKeyFromPassword(password, salt);
   const verifier = makePasswordVerifier(kek);
   await writePasswordSettings(uid, { salt, verifier });
   unlocked = { uid, kek };
@@ -69,7 +69,7 @@ export async function unlockBackupWithPassword(
 ): Promise<{ ok: true } | { ok: false; reason: "no-settings" | "wrong-password" }> {
   const settings = await getPasswordSettings(uid);
   if (!settings) return { ok: false, reason: "no-settings" };
-  const kek = deriveKeyFromPassword(password, settings.salt);
+  const kek = await deriveKeyFromPassword(password, settings.salt);
   if (!checkPasswordVerifier(kek, settings.verifier)) {
     kek.fill(0);
     return { ok: false, reason: "wrong-password" };
@@ -85,14 +85,14 @@ export async function changeBackupPassword(
 ): Promise<{ ok: true } | { ok: false; reason: "no-settings" | "wrong-password" }> {
   const settings = await getPasswordSettings(uid);
   if (!settings) return { ok: false, reason: "no-settings" };
-  const oldKek = deriveKeyFromPassword(oldPassword, settings.salt);
+  const oldKek = await deriveKeyFromPassword(oldPassword, settings.salt);
   if (!checkPasswordVerifier(oldKek, settings.verifier)) {
     oldKek.fill(0);
     return { ok: false, reason: "wrong-password" };
   }
   oldKek.fill(0);
   const newSalt = generatePasswordSalt();
-  const newKek = deriveKeyFromPassword(newPassword, newSalt);
+  const newKek = await deriveKeyFromPassword(newPassword, newSalt);
   const newVerifier = makePasswordVerifier(newKek);
   await writePasswordSettings(uid, { salt: newSalt, verifier: newVerifier });
   unlocked = { uid, kek: newKek };
@@ -113,7 +113,7 @@ export async function restoreBackups(
 ): Promise<RestoreResult> {
   const settings = await getPasswordSettings(uid);
   if (!settings) return { ok: false, reason: "no-settings" };
-  const kek = deriveKeyFromPassword(password, settings.salt);
+  const kek = await deriveKeyFromPassword(password, settings.salt);
   if (!checkPasswordVerifier(kek, settings.verifier)) {
     kek.fill(0);
     return { ok: false, reason: "wrong-password" };

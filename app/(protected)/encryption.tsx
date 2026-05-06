@@ -1,6 +1,7 @@
 import { AppHeader } from "@/components/AppHeader";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { useAuth } from "@/context/AuthContext";
+import { validatePasswordStrength } from "@/lib/crypto/passwordKey";
 import { useTheme } from "@/theme/ThemeContext";
 import { useThemedStyles } from "@/theme/useThemedStyles";
 import { Ionicons } from "@expo/vector-icons";
@@ -18,7 +19,8 @@ import {
 
 type Mode = "idle" | "setup" | "change" | "unlock";
 
-const MIN_LENGTH = 8;
+const PASSWORD_RULES_HINT =
+  "Mínimo 8 caracteres com letra maiúscula, minúscula, número e caractere especial.";
 
 export default function EncryptionSettingsScreen() {
   const router = useRouter();
@@ -136,6 +138,11 @@ export default function EncryptionSettingsScreen() {
         color: t.destructive,
         fontSize: 13,
       },
+      hint: {
+        color: t.mutedForeground,
+        fontSize: 12,
+        lineHeight: 16,
+      },
       pressed: {
         opacity: 0.72,
       },
@@ -167,8 +174,9 @@ export default function EncryptionSettingsScreen() {
   };
 
   const submitSetup = async () => {
-    if (password.length < MIN_LENGTH) {
-      setError(`A senha precisa ter pelo menos ${MIN_LENGTH} caracteres.`);
+    const strengthError = validatePasswordStrength(password);
+    if (strengthError) {
+      setError(strengthError);
       return;
     }
     if (password !== confirm) {
@@ -190,8 +198,9 @@ export default function EncryptionSettingsScreen() {
   };
 
   const submitChange = async () => {
-    if (password.length < MIN_LENGTH) {
-      setError(`A nova senha precisa ter pelo menos ${MIN_LENGTH} caracteres.`);
+    const strengthError = validatePasswordStrength(password);
+    if (strengthError) {
+      setError(strengthError);
       return;
     }
     if (password !== confirm) {
@@ -386,6 +395,9 @@ export default function EncryptionSettingsScreen() {
                 editable={!busy}
                 style={styles.input}
               />
+            ) : null}
+            {mode !== "unlock" ? (
+              <Text style={styles.hint}>{PASSWORD_RULES_HINT}</Text>
             ) : null}
             {error ? <Text style={styles.error}>{error}</Text> : null}
             <Pressable

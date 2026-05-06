@@ -1,4 +1,4 @@
-import { pbkdf2 } from "@noble/hashes/pbkdf2.js";
+import { pbkdf2Async } from "@noble/hashes/pbkdf2.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { gcm } from "@noble/ciphers/aes.js";
 import { randomBytes } from "./randomBytes";
@@ -23,15 +23,16 @@ export function generatePasswordSalt(): string {
   return bytesToBase64(randomBytes(SALT_BYTES));
 }
 
-export function deriveKeyFromPassword(
+export async function deriveKeyFromPassword(
   password: string,
   saltBase64: string,
-): Uint8Array {
+): Promise<Uint8Array> {
   if (!password) throw new Error("Empty password");
   const salt = base64ToBytes(saltBase64);
-  return pbkdf2(sha256, utf8Encode(password), salt, {
+  return pbkdf2Async(sha256, utf8Encode(password), salt, {
     c: PBKDF2_ITERATIONS,
     dkLen: KEK_BYTES,
+    asyncTick: 20,
   });
 }
 
@@ -72,4 +73,19 @@ export function decryptConversationKeyWithKek(
   const iv = base64ToBytes(ivB64);
   const ct = base64ToBytes(ciphertextB64);
   return gcm(kek, iv).decrypt(ct);
+}
+
+export const PASSWORD_MIN_LENGTH = 8;
+
+export function validatePasswordStrength(password: string): string | null {
+  if (password.length < PASSWORD_MIN_LENGTH) {
+    return `A senha precisa ter pelo menos ${PASSWORD_MIN_LENGTH} caracteres.`;
+  }
+  if (!/[a-z]/.test(password)) return "Inclua pelo menos uma letra minúscula.";
+  if (!/[A-Z]/.test(password)) return "Inclua pelo menos uma letra maiúscula.";
+  if (!/[0-9]/.test(password)) return "Inclua pelo menos um número.";
+  if (!/[^A-Za-z0-9]/.test(password)) {
+    return "Inclua pelo menos um caractere especial (ex.: !@#$%).";
+  }
+  return null;
 }
