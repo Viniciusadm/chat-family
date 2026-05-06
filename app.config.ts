@@ -118,6 +118,7 @@ export default (): ExpoConfig => {
           isAccessMediaLocationEnabled: false,
         },
       ],
+      "expo-build-properties",
       "react-native-quick-crypto",
     ],
     experiments: {
