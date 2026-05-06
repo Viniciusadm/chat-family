@@ -617,6 +617,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         void showCryptoSuccessNotification();
       })
       .catch((e: unknown) => {
+        if (auth.currentUser?.uid !== uid) return;
         setCryptoInProgress(false);
         void showCryptoErrorNotification(
           e instanceof Error ? e.message : "Falha ao salvar a senha.",
@@ -638,6 +639,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (result.ok) {
           setHasBackupPassword(true);
           setBackupUnlocked(true);
+          setNeedsPasswordRestore(false);
           void showCryptoSuccessNotification();
         } else if (result.reason === "wrong-password") {
           void showCryptoErrorNotification("Senha atual incorreta.");
@@ -646,6 +648,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       })
       .catch((e: unknown) => {
+        if (auth.currentUser?.uid !== uid) return;
         setCryptoInProgress(false);
         void showCryptoErrorNotification(
           e instanceof Error ? e.message : "Falha ao alterar a senha.",
