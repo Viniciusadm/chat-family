@@ -10,6 +10,8 @@ import { useThemedStyles } from "@/theme/useThemedStyles";
 import type { AppMember, Chat, UserRole } from "@/types/chat";
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
+import * as ImageManipulator from "expo-image-manipulator";
+import * as ImagePicker from "expo-image-picker";
 import { Redirect, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
@@ -291,6 +293,21 @@ export default function AdminScreen() {
         color: t.mutedForeground,
         marginBottom: 8,
       },
+      groupPhotoSection: {
+        alignItems: "center",
+        marginBottom: 16,
+        gap: 12,
+      },
+      groupPhotoActions: {
+        flexDirection: "row",
+        gap: 12,
+      },
+      groupPhotoBtn: {
+        flex: 0,
+        paddingHorizontal: 16,
+        marginTop: 0,
+        marginBottom: 0,
+      },
     })
   );
 
@@ -306,6 +323,8 @@ export default function AdminScreen() {
     rejectDevice,
     createChat,
     updateChat,
+    updateChatPhoto,
+    removeChatPhoto,
     deleteChat,
     deleteChildMember,
   } = useAdminData();
@@ -409,7 +428,7 @@ export default function AdminScreen() {
   };
 
   const handleCreateChat = async () => {
-    if (selectedParticipants.length < 2 || creatingChat) return;
+    if (selectedParticipants.length < 3 || creatingChat) return;
     setCreatingChat(true);
     try {
       const name = chatName.trim() || defaultChatName(selectedParticipants);
@@ -429,10 +448,43 @@ export default function AdminScreen() {
   };
 
   const handleUpdateChat = async () => {
-    if (!editingChatId || editChatParticipants.length < 2) return;
+    if (!editingChatId || editChatParticipants.length < 3) return;
     const name = editChatName.trim() || defaultChatName(editChatParticipants);
     await updateChat(editingChatId, name, editChatParticipants);
     setEditingChatId(null);
+  };
+
+  const handlePickGroupPhoto = async () => {
+    if (!editingChatId) return;
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) return;
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.86,
+    });
+    if (result.canceled || result.assets.length === 0) return;
+    const asset = result.assets[0];
+    const compressed = await ImageManipulator.manipulateAsync(
+      asset.uri,
+      [{ resize: { width: 512 } }],
+      { compress: 0.85, format: ImageManipulator.SaveFormat.JPEG },
+    );
+    try {
+      await updateChatPhoto(editingChatId, compressed.uri);
+    } catch (e) {
+      Alert.alert("", e instanceof Error ? e.message : "Erro ao enviar foto.");
+    }
+  };
+
+  const handleClearGroupPhoto = async () => {
+    if (!editingChatId) return;
+    try {
+      await removeChatPhoto(editingChatId);
+    } catch (e) {
+      Alert.alert("", e instanceof Error ? e.message : "Erro ao remover foto.");
+    }
   };
 
   const handleConfirmDeleteChat = async () => {
@@ -631,7 +683,8 @@ export default function AdminScreen() {
                 <View style={styles.cardRow}>
                   <ProfileAvatar
                     name={displayName}
-                    icon="chatbubble-outline"
+                    photoUrl={chat.isGroup ? chat.photoUrl : undefined}
+                    icon={chat.isGroup ? "people-outline" : "chatbubble-outline"}
                     size={40}
                   />
                   <View style={styles.cardBody}>
@@ -640,7 +693,7 @@ export default function AdminScreen() {
                       {chat.participants.length} membros
                     </Text>
                   </View>
-                  {canMutate ? (
+                  {canMutate && chat.isGroup ? (
                     <>
                       <Pressable
                         onPress={() => openEditChat(chat)}
@@ -812,7 +865,9 @@ export default function AdminScreen() {
               onChangeText={setChatName}
               editable={!creatingChat}
             />
-            <Text style={styles.fieldLabel}>Participantes</Text>
+            <Text style={styles.fieldLabel}>
+              Participantes (mínimo 3)
+            </Text>
             <ScrollView style={styles.participantList} nestedScrollEnabled>
               {members.map((m) => (
                 <Pressable
@@ -848,11 +903,11 @@ export default function AdminScreen() {
               </Pressable>
               <Pressable
                 onPress={() => void handleCreateChat()}
-                disabled={selectedParticipants.length < 2 || creatingChat}
+                disabled={selectedParticipants.length < 3 || creatingChat}
                 style={[
                   styles.modalPrimary,
                   styles.modalPrimaryRow,
-                  (selectedParticipants.length < 2 || creatingChat) &&
+                  (selectedParticipants.length < 3 || creatingChat) &&
                     styles.btnDisabled,
                 ]}
               >
@@ -879,6 +934,63 @@ export default function AdminScreen() {
           />
           <View style={[styles.modalCard, styles.modalTall]}>
             <Text style={styles.modalTitle}>Editar conversa</Text>
+            {(() => {
+              const editingChat = chats.find((c) => c.id === editingChatId);
+              if (!editingChat) return null;
+              return (
+                <View style={styles.groupPhotoSection}>
+                  <ProfileAvatar
+                    name={editingChat.name}
+                    photoUrl={editingChat.photoUrl}
+                    icon="people-outline"
+                    size={88}
+                  />
+                  <View style={styles.groupPhotoActions}>
+                    <Pressable
+                      onPress={() => void handlePickGroupPhoto()}
+                      style={({ pressed }) => [
+                        styles.outlineBtn,
+                        styles.groupPhotoBtn,
+                        pressed && styles.pressed,
+                      ]}
+                    >
+                      <Ionicons
+                        name="camera-outline"
+                        size={18}
+                        color={theme.foreground}
+                      />
+                      <Text style={styles.outlineBtnText}>
+                        {editingChat.photoUrl ? "Trocar foto" : "Adicionar foto"}
+                      </Text>
+                    </Pressable>
+                    {editingChat.photoUrl ? (
+                      <Pressable
+                        onPress={() => void handleClearGroupPhoto()}
+                        style={({ pressed }) => [
+                          styles.outlineBtn,
+                          styles.groupPhotoBtn,
+                          pressed && styles.pressed,
+                        ]}
+                      >
+                        <Ionicons
+                          name="trash-outline"
+                          size={18}
+                          color={theme.destructive}
+                        />
+                        <Text
+                          style={[
+                            styles.outlineBtnText,
+                            { color: theme.destructive },
+                          ]}
+                        >
+                          Remover
+                        </Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                </View>
+              );
+            })()}
             <TextInput
               style={styles.input}
               placeholder="Nome do grupo (opcional)"
@@ -886,7 +998,9 @@ export default function AdminScreen() {
               value={editChatName}
               onChangeText={setEditChatName}
             />
-            <Text style={styles.fieldLabel}>Participantes</Text>
+            <Text style={styles.fieldLabel}>
+              Participantes (mínimo 3)
+            </Text>
             <ScrollView style={styles.participantList} nestedScrollEnabled>
               {members.map((m) => (
                 <Pressable
@@ -920,10 +1034,10 @@ export default function AdminScreen() {
               </Pressable>
               <Pressable
                 onPress={() => void handleUpdateChat()}
-                disabled={editChatParticipants.length < 2}
+                disabled={editChatParticipants.length < 3}
                 style={[
                   styles.modalPrimary,
-                  editChatParticipants.length < 2 && styles.btnDisabled,
+                  editChatParticipants.length < 3 && styles.btnDisabled,
                 ]}
               >
                 <Text style={styles.primaryText}>Salvar</Text>

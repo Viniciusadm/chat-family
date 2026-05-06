@@ -1,6 +1,7 @@
 import { AppHeader } from "@/components/AppHeader";
 import { ChatBubble } from "@/components/ChatBubble";
 import { ChatInput, type ChatInputHandle } from "@/components/ChatInput";
+import { ProfileAvatar } from "@/components/ProfileAvatar";
 import { ReactionMenu } from "@/components/ReactionMenu";
 import { ReactionsDialog } from "@/components/ReactionsDialog";
 import { useAuth } from "@/context/AuthContext";
@@ -612,7 +613,31 @@ export default function ChatScreen() {
 
   return (
     <KeyboardAvoidingView behavior="padding" style={styles.screen}>
-      <AppHeader title={chatTitle} onBack={() => router.back()} />
+      <AppHeader
+        title={chatTitle}
+        onBack={() => router.back()}
+        leading={(() => {
+          const otherId =
+            chat && !chat.isGroup
+              ? chat.participants.find((id) => id !== currentUserId)
+              : undefined;
+          const otherProfile = otherId ? memberProfiles[otherId] : undefined;
+          const photoUrl = chat?.isGroup
+            ? chat?.photoUrl ?? undefined
+            : otherProfile?.photoUrl ?? undefined;
+          const icon: keyof typeof Ionicons.glyphMap = chat?.isGroup
+            ? "people-outline"
+            : "chatbubble-outline";
+          return (
+            <ProfileAvatar
+              name={otherProfile?.name ?? chatTitle}
+              photoUrl={photoUrl}
+              icon={icon}
+              size={32}
+            />
+          );
+        })()}
+      />
       <View style={styles.messagesWrap}>
         {activeDayLabel ? (
           <Animated.View style={[styles.dayBadge, { opacity: badgeOpacity }]}>

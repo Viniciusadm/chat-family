@@ -73,6 +73,8 @@ export interface ChatDoc {
   participants: string[];
   isGroup: boolean;
   name: string;
+  photoUrl?: string | null;
+  photoPath?: string | null;
   lastMessageText: string | null;
   lastMessageCiphertext: string | null;
   lastMessageIv: string | null;
@@ -159,6 +161,8 @@ export interface Chat {
   participants: string[];
   isGroup: boolean;
   name: string;
+  photoUrl?: string | null;
+  photoPath?: string | null;
   unreadCount: number;
   readUpTo?: Record<string, Timestamp>;
   lastMessage?: {

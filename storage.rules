@@ -17,6 +17,10 @@ service firebase.storage {
       return userDoc().data.memberId;
     }
 
+    function isAdult() {
+      return userDoc().data.role == 'adult';
+    }
+
     match /profilePhotos/{tenantId}/{memberId}/{fileName} {
       allow read: if signedIn() && tenantId == userTenant();
       allow create, update: if signedIn()
@@ -27,6 +31,18 @@ service firebase.storage {
       allow delete: if signedIn()
         && tenantId == userTenant()
         && memberId == userMemberId();
+    }
+
+    match /groupPhotos/{tenantId}/{chatId}/{fileName} {
+      allow read: if signedIn() && tenantId == userTenant();
+      allow create, update: if signedIn()
+        && tenantId == userTenant()
+        && isAdult()
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if signedIn()
+        && tenantId == userTenant()
+        && isAdult();
     }
 
     match /audios/{allPaths=**} {

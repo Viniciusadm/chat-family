@@ -126,6 +126,8 @@ async function migrate(db: SQLite.SQLiteDatabase) {
   await ensureColumn(db, "messages", "reply_to_type", "TEXT");
   await ensureColumn(db, "messages", "reply_to_preview", "TEXT");
   await ensureColumn(db, "chats", "read_up_to", "TEXT");
+  await ensureColumn(db, "chats", "photo_url", "TEXT");
+  await ensureColumn(db, "chats", "photo_path", "TEXT");
   await ensureColumn(db, "app_sessions", "photo_url", "TEXT");
   await ensureColumn(db, "app_sessions", "photo_path", "TEXT");
   await ensureColumn(db, "messages", "image_remote_url", "TEXT");

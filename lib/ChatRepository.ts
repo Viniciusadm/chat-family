@@ -8,6 +8,8 @@ type ChatRow = {
   participants: string;
   is_group: number;
   name: string;
+  photo_url: string | null;
+  photo_path: string | null;
   unread_count: number;
   last_message_text: string | null;
   last_message_type: string | null;
@@ -71,6 +73,8 @@ function rowToChat(row: ChatRow): Chat {
     participants: parseParticipants(row.participants),
     isGroup: row.is_group === 1,
     name: row.name,
+    photoUrl: row.photo_url,
+    photoPath: row.photo_path,
     unreadCount: row.unread_count,
     readUpTo: parseReadUpTo(row.read_up_to),
   };
@@ -133,18 +137,22 @@ export const ChatRepository = {
           participants,
           is_group,
           name,
+          photo_url,
+          photo_path,
           unread_count,
           last_message_text,
           last_message_type,
           last_message_at,
           read_up_to,
           updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           tenant_id = excluded.tenant_id,
           participants = excluded.participants,
           is_group = excluded.is_group,
           name = excluded.name,
+          photo_url = excluded.photo_url,
+          photo_path = excluded.photo_path,
           unread_count = excluded.unread_count,
           last_message_text = CASE
             WHEN excluded.last_message_at IS NULL THEN chats.last_message_text
@@ -172,6 +180,8 @@ export const ChatRepository = {
           JSON.stringify(chat.participants),
           chat.isGroup ? 1 : 0,
           chat.name,
+          chat.photoUrl ?? null,
+          chat.photoPath ?? null,
           chat.unreadCount,
           chat.lastMessage?.text ?? null,
           chat.lastMessage?.type ?? null,
@@ -203,19 +213,23 @@ export const ChatRepository = {
             participants,
             is_group,
             name,
+            photo_url,
+            photo_path,
             unread_count,
             last_message_text,
             last_message_type,
             last_message_at,
             read_up_to,
             updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             chat.id,
             chat.tenantId,
             JSON.stringify(chat.participants),
             chat.isGroup ? 1 : 0,
             chat.name,
+            chat.photoUrl ?? null,
+            chat.photoPath ?? null,
             chat.unreadCount,
             chat.lastMessage?.text ?? null,
             chat.lastMessage?.type ?? null,

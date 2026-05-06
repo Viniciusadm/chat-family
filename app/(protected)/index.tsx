@@ -296,6 +296,12 @@ export default function ChatListScreen() {
               currentUser?.id,
               memberProfiles
             );
+            const avatarPhotoUrl = chat.isGroup
+              ? chat.photoUrl ?? undefined
+              : otherProfile?.photoUrl ?? undefined;
+            const avatarIcon = chat.isGroup
+              ? "people-outline"
+              : "chatbubble-ellipses-outline";
 
             return (
               <Pressable
@@ -307,8 +313,8 @@ export default function ChatListScreen() {
               >
                 <ProfileAvatar
                   name={otherProfile?.name ?? displayName}
-                  photoUrl={otherProfile?.photoUrl}
-                  icon="chatbubble-ellipses-outline"
+                  photoUrl={avatarPhotoUrl}
+                  icon={avatarIcon}
                   size={48}
                 />
                 <View style={styles.rowBody}>

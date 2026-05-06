@@ -9,6 +9,7 @@ type Ion = keyof typeof Ionicons.glyphMap;
 
 interface AppHeaderProps {
   title: string;
+  leading?: ReactNode;
   onBack?: () => void;
   rightIcon?: Ion;
   onRightPress?: () => void;
@@ -23,6 +24,7 @@ interface AppHeaderProps {
 
 export function AppHeader({
   title,
+  leading,
   onBack,
   rightIcon,
   onRightPress,
@@ -52,6 +54,11 @@ export function AppHeader({
       iconPlaceholder: {
         width: 36,
         height: 36,
+      },
+      leading: {
+        marginRight: 4,
+        alignItems: "center",
+        justifyContent: "center",
       },
       actions: {
         minWidth: 36,
@@ -103,6 +110,8 @@ export function AppHeader({
             />
           </Pressable>
         ) : null}
+
+        {leading ? <View style={styles.leading}>{leading}</View> : null}
 
         <View style={styles.titleWrap}>
           <Text

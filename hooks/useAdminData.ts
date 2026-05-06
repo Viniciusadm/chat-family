@@ -10,6 +10,7 @@ import {
   distributeConversationKey,
 } from "@/lib/keyDistribution";
 import { db, functions, storage } from "@/lib/firebase";
+import { clearChatPhoto, setChatPhoto, uploadGroupPhoto } from "@/lib/groupPhoto";
 import { httpsCallable } from "firebase/functions";
 import { randomUuid } from "@/lib/randomUuid";
 import type {
@@ -205,6 +206,8 @@ export function useAdminData() {
               participants: data.participants,
               isGroup: data.isGroup,
               name: data.name,
+              photoUrl: data.photoUrl ?? null,
+              photoPath: data.photoPath ?? null,
               unreadCount: 0,
             };
             if (data.lastMessageAt) {
@@ -248,12 +251,58 @@ export function useAdminData() {
       photoPath: null,
       createdAt: serverTimestamp(),
     });
-    await setDoc(doc(db, "loginCodes", loginCode), {
-      memberId: memberRef.id,
-      tenantId: tid,
-      name,
-      role,
-    });
+    const newMemberId = memberRef.id;
+
+    const otherMembers = members.filter((m) => m.id !== newMemberId);
+    const newChatRefs = otherMembers.map((other) => ({
+      ref: doc(collection(db, "chats")),
+      otherId: other.id,
+    }));
+
+    const batch = writeBatch(db);
+    for (const { ref: chatRef, otherId } of newChatRefs) {
+      batch.set(chatRef, {
+        tenantId: tid,
+        participants: [newMemberId, otherId],
+        isGroup: false,
+        name: "",
+        photoUrl: null,
+        photoPath: null,
+        lastMessageText: null,
+        lastMessageCiphertext: null,
+        lastMessageIv: null,
+        lastMessageAt: null,
+        lastMessageType: null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    }
+
+    await Promise.all([
+      setDoc(doc(db, "loginCodes", loginCode), {
+        memberId: newMemberId,
+        tenantId: tid,
+        name,
+        role,
+      }),
+      newChatRefs.length > 0 ? batch.commit() : Promise.resolve(),
+    ]);
+
+    if (currentUser && newChatRefs.length > 0) {
+      const tidLocal = tid;
+      const wrappedBy = currentUser.id;
+      await Promise.all(
+        newChatRefs.map(({ ref: chatRef }) => ensureConversationKey(chatRef.id)),
+      );
+      for (const { ref: chatRef, otherId } of newChatRefs) {
+        void distributeConversationKey(
+          chatRef.id,
+          [newMemberId, otherId],
+          tidLocal,
+          wrappedBy,
+        ).catch(() => {});
+      }
+    }
   };
 
   const approveDevice = async (deviceIdParam: string) => {
@@ -299,13 +348,20 @@ export function useAdminData() {
 
   const createChat = async (name: string, participantIds: string[]) => {
     if (!canMutate) throw new Error("Esta ação precisa de conexão.");
-    if (!effectiveTenantId || participantIds.length < 2) return;
+    if (!effectiveTenantId) return;
+    if (participantIds.length < 3) {
+      throw new Error("Grupos precisam de pelo menos 3 participantes.");
+    }
     const chatRef = await addDoc(collection(db, "chats"), {
       tenantId: effectiveTenantId,
       participants: participantIds,
-      isGroup: participantIds.length > 2,
+      isGroup: true,
       name,
+      photoUrl: null,
+      photoPath: null,
       lastMessageText: null,
+      lastMessageCiphertext: null,
+      lastMessageIv: null,
       lastMessageAt: null,
       lastMessageType: null,
       createdAt: serverTimestamp(),
@@ -324,11 +380,13 @@ export function useAdminData() {
 
   const updateChat = async (chatId: string, name: string, participantIds: string[]) => {
     if (!canMutate) throw new Error("Esta ação precisa de conexão.");
-    if (participantIds.length < 2) return;
+    if (participantIds.length < 3) {
+      throw new Error("Grupos precisam de pelo menos 3 participantes.");
+    }
     await updateDoc(doc(db, "chats", chatId), {
       name,
       participants: participantIds,
-      isGroup: participantIds.length > 2,
+      isGroup: true,
       updatedAt: serverTimestamp(),
     });
   };
@@ -356,8 +414,35 @@ export function useAdminData() {
 
   const deleteChildMember = async (memberId: string, deleteMessages: boolean) => {
     if (!canMutate) throw new Error("Esta ação precisa de conexão.");
+
+    const directChats = chats.filter(
+      (c) => !c.isGroup && c.participants.includes(memberId),
+    );
+    for (const c of directChats) {
+      await deleteChat(c.id);
+    }
+
     const fn = httpsCallable(functions, "deleteChildMember");
     await fn({ memberId, deleteMessages });
+  };
+
+  const updateChatPhoto = async (chatId: string, localUri: string) => {
+    if (!canMutate) throw new Error("Esta ação precisa de conexão.");
+    if (!effectiveTenantId) throw new Error("Sem tenant.");
+    const existing = chats.find((c) => c.id === chatId);
+    const previousPath = existing?.photoPath ?? null;
+    const uploaded = await uploadGroupPhoto({
+      tenantId: effectiveTenantId,
+      chatId,
+      localUri,
+    });
+    await setChatPhoto(chatId, uploaded, previousPath);
+  };
+
+  const removeChatPhoto = async (chatId: string) => {
+    if (!canMutate) throw new Error("Esta ação precisa de conexão.");
+    const existing = chats.find((c) => c.id === chatId);
+    await clearChatPhoto(chatId, existing?.photoPath ?? null);
   };
 
   return {
@@ -373,6 +458,8 @@ export function useAdminData() {
     rejectDevice,
     createChat,
     updateChat,
+    updateChatPhoto,
+    removeChatPhoto,
     deleteChat,
     deleteChildMember,
   };

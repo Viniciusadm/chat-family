@@ -107,6 +107,8 @@ export function useChats(): { chats: Chat[]; loading: boolean } {
                   participants: data.participants,
                   isGroup: data.isGroup,
                   name: data.name,
+                  photoUrl: data.photoUrl ?? null,
+                  photoPath: data.photoPath ?? null,
                   unreadCount: data.unreadBy?.[memberId] ?? 0,
                   readUpTo: data.readUpTo,
                 };
