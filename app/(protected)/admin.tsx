@@ -411,6 +411,31 @@ export default function AdminScreen() {
               <Text style={styles.outlineBtnText}>Criar conversa</Text>
             </Pressable>
           ) : null}
+
+          <SectionTitle icon="lock-closed-outline" label="Segurança" />
+          <Pressable
+            onPress={() => router.push("/encryption")}
+            style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+          >
+            <View style={styles.cardRow}>
+              <Ionicons
+                name="lock-closed-outline"
+                size={22}
+                color={colors.foreground}
+              />
+              <View style={styles.cardBody}>
+                <Text style={styles.cardTitle}>Senha de criptografia</Text>
+                <Text style={styles.cardMeta}>
+                  Proteger backup das chaves no servidor
+                </Text>
+              </View>
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={colors.mutedForeground}
+              />
+            </View>
+          </Pressable>
         </ScrollView>
       )}
 

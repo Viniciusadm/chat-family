@@ -23,8 +23,20 @@ import { auth, db } from "@/lib/firebase";
 import { ensureDeviceKeyPair } from "@/lib/deviceIdentity";
 import { fetchExpoPushToken, isValidExpoPushTokenString } from "@/lib/expoPushToken";
 import { consumePendingKeyShares } from "@/lib/keyDistribution";
+import {
+  changeBackupPassword as changeBackupPasswordImpl,
+  disableBackupPassword as disableBackupPasswordImpl,
+  hasPasswordConfigured,
+  hasRemoteBackups,
+  isBackupUnlockedFor,
+  lockBackup as lockBackupImpl,
+  restoreBackups as restoreBackupsImpl,
+  setupBackupPassword as setupBackupPasswordImpl,
+  unlockBackupWithPassword,
+} from "@/lib/keyBackup";
 import { syncChatHistory } from "@/lib/offlineSync";
 import { randomUuid } from "@/lib/randomUuid";
+import { SecureKeyStore } from "@/lib/secureKeyStore";
 import { SessionRepository } from "@/lib/SessionRepository";
 import type { AppUser, LoginCodeDoc, UserDoc } from "@/types/chat";
 
@@ -97,6 +109,26 @@ interface AuthContextValue {
   setCurrentUserPhoto: (photoUrl: string | null, photoPath: string | null) => Promise<void>;
   deletedAccountMessage: string | null;
   clearDeletedAccountMessage: () => void;
+  backupUnlocked: boolean;
+  needsPasswordRestore: boolean;
+  hasBackupPassword: boolean;
+  setupBackupPassword: (password: string) => Promise<void>;
+  changeBackupPassword: (
+    oldPassword: string,
+    newPassword: string,
+  ) => Promise<{ ok: true } | { ok: false; reason: "wrong-password" | "no-settings" }>;
+  disableBackupPassword: () => Promise<void>;
+  unlockBackupPassword: (
+    password: string,
+  ) => Promise<{ ok: true } | { ok: false; reason: "wrong-password" | "no-settings" }>;
+  restorePasswordBackups: (
+    password: string,
+  ) => Promise<
+    | { ok: true; restoredChatIds: string[] }
+    | { ok: false; reason: "wrong-password" | "no-settings" | "no-backups" }
+  >;
+  lockBackupPassword: () => void;
+  dismissPasswordRestore: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -119,6 +151,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const deviceIdRef = useRef("");
   const deviceUnsub = useRef<(() => void) | null>(null);
   const signingOutRef = useRef(false);
+  const [backupUnlocked, setBackupUnlocked] = useState(false);
+  const [hasBackupPassword, setHasBackupPassword] = useState(false);
+  const [needsPasswordRestore, setNeedsPasswordRestore] = useState(false);
+  const [restoreDismissed, setRestoreDismissed] = useState(false);
+  const currentUserRoleRef = useRef<"adult" | "child" | null>(null);
 
   const clearDeletedAccountMessage = useCallback(() => {
     setDeletedAccountMessage(null);
@@ -133,6 +170,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setPushTokenError(null);
     setIsOfflineSession(false);
     setLoading(false);
+    lockBackupImpl();
+    setBackupUnlocked(false);
+    setHasBackupPassword(false);
+    setNeedsPasswordRestore(false);
+    setRestoreDismissed(false);
+    currentUserRoleRef.current = null;
   }, []);
 
   const signOutDeletedAccount = useCallback(async (uid: string) => {
@@ -176,6 +219,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const evaluatePasswordRestore = useCallback(
+    async (uid: string, role: "adult" | "child") => {
+      if (role !== "adult") {
+        setHasBackupPassword(false);
+        setNeedsPasswordRestore(false);
+        return;
+      }
+      try {
+        const configured = await hasPasswordConfigured(uid);
+        setHasBackupPassword(configured);
+        if (!configured) {
+          setNeedsPasswordRestore(false);
+          return;
+        }
+        if (isBackupUnlockedFor(uid)) {
+          setBackupUnlocked(true);
+          setNeedsPasswordRestore(false);
+          return;
+        }
+        const localChatIds = await SecureKeyStore.listConversationKeyChatIds();
+        if (localChatIds.length > 0) {
+          setNeedsPasswordRestore(false);
+          return;
+        }
+        const remote = await hasRemoteBackups(uid);
+        setNeedsPasswordRestore(remote);
+      } catch {
+        setNeedsPasswordRestore(false);
+      }
+    },
+    [],
+  );
+
   const attachDeviceSnapshot = useCallback(
     (deviceRef: ReturnType<typeof doc>, uid: string) => {
       if (deviceUnsub.current) deviceUnsub.current();
@@ -215,6 +291,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setNeedsPushToken(false);
           if (approved) {
             void importPendingKeyShares(deviceRef.id);
+            void evaluatePasswordRestore(uid, currentUserRoleRef.current ?? "child");
           }
         },
         () => {
@@ -223,7 +300,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       );
     },
-    [importPendingKeyShares, signOutDeletedAccount]
+    [evaluatePasswordRestore, importPendingKeyShares, signOutDeletedAccount]
   );
 
   const syncDeviceWithToken = useCallback(
@@ -382,6 +459,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const cachedSession = await SessionRepository.getLastApprovedSession();
             if (!cancelled && cachedSession) {
               setCurrentUser(cachedSession.currentUser);
+              currentUserRoleRef.current = cachedSession.currentUser.role;
               setTenantId(cachedSession.currentUser.tenantId);
               setDeviceApproved(true);
               setSessionReady(true);
@@ -413,6 +491,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const cachedSession = await SessionRepository.getSession(uid);
         if (!stale() && cachedSession) {
           setCurrentUser(cachedSession.currentUser);
+          currentUserRoleRef.current = cachedSession.currentUser.role;
           setTenantId(cachedSession.currentUser.tenantId);
           setDeviceApproved(cachedSession.deviceApproved);
           if (cachedSession.deviceApproved === true) {
@@ -476,6 +555,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           photoPath: userData.photoPath ?? null,
         };
         setCurrentUser(appUser);
+        currentUserRoleRef.current = appUser.role;
         setTenantId(userData.tenantId);
         await SessionRepository.saveSession({
           firebaseUid: uid,
@@ -511,6 +591,73 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (deviceUnsub.current) deviceUnsub.current();
     };
   }, [deviceId, resetSignedOutState, signOutDeletedAccount, syncDeviceWithToken]);
+
+  const setupBackupPassword = useCallback(
+    async (password: string) => {
+      const uid = auth.currentUser?.uid;
+      if (!uid) throw new Error("Not signed in.");
+      if (currentUserRoleRef.current !== "adult") {
+        throw new Error("Apenas adultos podem configurar a senha.");
+      }
+      await setupBackupPasswordImpl(uid, password);
+      setHasBackupPassword(true);
+      setBackupUnlocked(true);
+      setNeedsPasswordRestore(false);
+    },
+    [],
+  );
+
+  const changeBackupPassword = useCallback(
+    async (oldPassword: string, newPassword: string) => {
+      const uid = auth.currentUser?.uid;
+      if (!uid) throw new Error("Not signed in.");
+      const result = await changeBackupPasswordImpl(uid, oldPassword, newPassword);
+      if (result.ok) {
+        setHasBackupPassword(true);
+        setBackupUnlocked(true);
+      }
+      return result;
+    },
+    [],
+  );
+
+  const disableBackupPassword = useCallback(async () => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) throw new Error("Not signed in.");
+    await disableBackupPasswordImpl(uid);
+    setHasBackupPassword(false);
+    setBackupUnlocked(false);
+    setNeedsPasswordRestore(false);
+  }, []);
+
+  const unlockBackupPassword = useCallback(async (password: string) => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return { ok: false, reason: "no-settings" } as const;
+    const result = await unlockBackupWithPassword(uid, password);
+    if (result.ok) setBackupUnlocked(true);
+    return result;
+  }, []);
+
+  const restorePasswordBackups = useCallback(async (password: string) => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return { ok: false, reason: "no-settings" } as const;
+    const result = await restoreBackupsImpl(uid, password);
+    if (result.ok || (!result.ok && result.reason === "no-backups")) {
+      setBackupUnlocked(true);
+      setNeedsPasswordRestore(false);
+    }
+    return result;
+  }, []);
+
+  const lockBackupPassword = useCallback(() => {
+    lockBackupImpl();
+    setBackupUnlocked(false);
+  }, []);
+
+  const dismissPasswordRestore = useCallback(() => {
+    setRestoreDismissed(true);
+    setNeedsPasswordRestore(false);
+  }, []);
 
   const loginWithEmail = async (email: string, password: string) => {
     await signInWithEmailAndPassword(auth, email, password);
@@ -668,6 +815,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setCurrentUserPhoto,
         deletedAccountMessage,
         clearDeletedAccountMessage,
+        backupUnlocked,
+        needsPasswordRestore: needsPasswordRestore && !restoreDismissed,
+        hasBackupPassword,
+        setupBackupPassword,
+        changeBackupPassword,
+        disableBackupPassword,
+        unlockBackupPassword,
+        restorePasswordBackups,
+        lockBackupPassword,
+        dismissPasswordRestore,
       }}
     >
       {children}

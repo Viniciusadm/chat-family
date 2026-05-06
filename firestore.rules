@@ -61,6 +61,17 @@ service cloud.firestore {
         allow read: if request.auth != null && request.auth.uid == userId;
         allow write: if false;
       }
+
+      match /keyBackups/{chatId} {
+        allow read: if request.auth != null && request.auth.uid == userId;
+        allow create, update: if request.auth != null &&
+          request.auth.uid == userId &&
+          request.resource.data.keys().hasAll(['ciphertext', 'iv', 'encVersion', 'createdAt']) &&
+          request.resource.data.ciphertext is string &&
+          request.resource.data.iv is string &&
+          request.resource.data.encVersion is int;
+        allow delete: if request.auth != null && request.auth.uid == userId;
+      }
     }
 
     match /members/{memberDocId} {

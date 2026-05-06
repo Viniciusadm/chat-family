@@ -23,6 +23,18 @@ export interface LoginCodeDoc {
   role: "adult" | "child";
 }
 
+export interface PasswordVerifierField {
+  ciphertext: string;
+  iv: string;
+}
+
+export interface KeyBackupDoc {
+  ciphertext: string;
+  iv: string;
+  encVersion: number;
+  createdAt: Timestamp;
+}
+
 export interface UserDoc {
   memberId?: string;
   tenantId: string;
@@ -32,6 +44,8 @@ export interface UserDoc {
   chatIndexBuiltAt?: Timestamp;
   photoUrl?: string | null;
   photoPath?: string | null;
+  passwordSalt?: string;
+  passwordVerifier?: PasswordVerifierField;
 }
 
 export interface DeviceDoc {

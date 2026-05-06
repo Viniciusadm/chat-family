@@ -12,6 +12,7 @@ export default function ProtectedLayout() {
     loading,
     sessionReady,
     needsPushToken,
+    needsPasswordRestore,
   } = useAuth();
   const hasApprovedSession = currentUser != null && deviceApproved === true;
 
@@ -33,6 +34,10 @@ export default function ProtectedLayout() {
 
   if (deviceApproved === false) {
     return <Redirect href="/aguardando" />;
+  }
+
+  if (deviceApproved === true && needsPasswordRestore) {
+    return <Redirect href="/encryption-restore" />;
   }
 
   if (!hasApprovedSession) {
