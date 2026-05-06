@@ -34,6 +34,10 @@ import {
   setupBackupPassword as setupBackupPasswordImpl,
   unlockBackupWithPassword,
 } from "@/lib/keyBackup";
+import {
+  showCryptoSuccessNotification,
+  showCryptoErrorNotification,
+} from "@/lib/cryptoNotifications";
 import { syncChatHistory } from "@/lib/offlineSync";
 import { randomUuid } from "@/lib/randomUuid";
 import { SecureKeyStore } from "@/lib/secureKeyStore";
@@ -112,11 +116,9 @@ interface AuthContextValue {
   backupUnlocked: boolean;
   needsPasswordRestore: boolean;
   hasBackupPassword: boolean;
-  setupBackupPassword: (password: string) => Promise<void>;
-  changeBackupPassword: (
-    oldPassword: string,
-    newPassword: string,
-  ) => Promise<{ ok: true } | { ok: false; reason: "wrong-password" | "no-settings" }>;
+  cryptoInProgress: boolean;
+  setupBackupPassword: (password: string) => void;
+  changeBackupPassword: (oldPassword: string, newPassword: string) => void;
   disableBackupPassword: () => Promise<void>;
   unlockBackupPassword: (
     password: string,
@@ -154,6 +156,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [backupUnlocked, setBackupUnlocked] = useState(false);
   const [hasBackupPassword, setHasBackupPassword] = useState(false);
   const [needsPasswordRestore, setNeedsPasswordRestore] = useState(false);
+  const [cryptoInProgress, setCryptoInProgress] = useState(false);
   const [restoreDismissed, setRestoreDismissed] = useState(false);
   const currentUserRoleRef = useRef<"adult" | "child" | null>(null);
 
@@ -592,34 +595,60 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [deviceId, resetSignedOutState, signOutDeletedAccount, syncDeviceWithToken]);
 
-  const setupBackupPassword = useCallback(
-    async (password: string) => {
-      const uid = auth.currentUser?.uid;
-      if (!uid) throw new Error("Not signed in.");
-      if (currentUserRoleRef.current !== "adult") {
-        throw new Error("Apenas adultos podem configurar a senha.");
-      }
-      await setupBackupPasswordImpl(uid, password);
-      setHasBackupPassword(true);
-      setBackupUnlocked(true);
-      setNeedsPasswordRestore(false);
-    },
-    [],
-  );
-
-  const changeBackupPassword = useCallback(
-    async (oldPassword: string, newPassword: string) => {
-      const uid = auth.currentUser?.uid;
-      if (!uid) throw new Error("Not signed in.");
-      const result = await changeBackupPasswordImpl(uid, oldPassword, newPassword);
-      if (result.ok) {
+  const setupBackupPassword = useCallback((password: string) => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) {
+      void showCryptoErrorNotification("Não autenticado.");
+      return;
+    }
+    if (currentUserRoleRef.current !== "adult") {
+      void showCryptoErrorNotification("Apenas adultos podem configurar a senha.");
+      return;
+    }
+    setCryptoInProgress(true);
+    void setupBackupPasswordImpl(uid, password)
+      .then(() => {
         setHasBackupPassword(true);
         setBackupUnlocked(true);
-      }
-      return result;
-    },
-    [],
-  );
+        setNeedsPasswordRestore(false);
+        setCryptoInProgress(false);
+        void showCryptoSuccessNotification();
+      })
+      .catch((e: unknown) => {
+        setCryptoInProgress(false);
+        void showCryptoErrorNotification(
+          e instanceof Error ? e.message : "Falha ao salvar a senha.",
+        );
+      });
+  }, []);
+
+  const changeBackupPassword = useCallback((oldPassword: string, newPassword: string) => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) {
+      void showCryptoErrorNotification("Não autenticado.");
+      return;
+    }
+    setCryptoInProgress(true);
+    void changeBackupPasswordImpl(uid, oldPassword, newPassword)
+      .then((result) => {
+        setCryptoInProgress(false);
+        if (result.ok) {
+          setHasBackupPassword(true);
+          setBackupUnlocked(true);
+          void showCryptoSuccessNotification();
+        } else if (result.reason === "wrong-password") {
+          void showCryptoErrorNotification("Senha atual incorreta.");
+        } else {
+          void showCryptoErrorNotification("Sem senha configurada.");
+        }
+      })
+      .catch((e: unknown) => {
+        setCryptoInProgress(false);
+        void showCryptoErrorNotification(
+          e instanceof Error ? e.message : "Falha ao alterar a senha.",
+        );
+      });
+  }, []);
 
   const disableBackupPassword = useCallback(async () => {
     const uid = auth.currentUser?.uid;
@@ -818,6 +847,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         backupUnlocked,
         needsPasswordRestore: needsPasswordRestore && !restoreDismissed,
         hasBackupPassword,
+        cryptoInProgress,
         setupBackupPassword,
         changeBackupPassword,
         disableBackupPassword,

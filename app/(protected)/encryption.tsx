@@ -173,7 +173,7 @@ export default function EncryptionSettingsScreen() {
     setError(null);
   };
 
-  const submitSetup = async () => {
+  const submitSetup = () => {
     const strengthError = validatePasswordStrength(password);
     if (strengthError) {
       setError(strengthError);
@@ -183,21 +183,13 @@ export default function EncryptionSettingsScreen() {
       setError("As senhas não conferem.");
       return;
     }
-    setBusy(true);
     setError(null);
-    try {
-      await setupBackupPassword(password);
-      reset();
-      setMode("idle");
-      Alert.alert("Senha criada", "Suas chaves estão protegidas e foram salvas com backup.");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Falha ao salvar a senha.");
-    } finally {
-      setBusy(false);
-    }
+    setupBackupPassword(password);
+    reset();
+    setMode("idle");
   };
 
-  const submitChange = async () => {
+  const submitChange = () => {
     const strengthError = validatePasswordStrength(password);
     if (strengthError) {
       setError(strengthError);
@@ -207,24 +199,10 @@ export default function EncryptionSettingsScreen() {
       setError("As senhas não conferem.");
       return;
     }
-    setBusy(true);
     setError(null);
-    try {
-      const result = await changeBackupPassword(oldPassword, password);
-      if (result.ok) {
-        reset();
-        setMode("idle");
-        Alert.alert("Senha alterada", "Os backups foram atualizados.");
-      } else if (result.reason === "wrong-password") {
-        setError("Senha atual incorreta.");
-      } else {
-        setError("Não foi possível alterar a senha.");
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Falha ao alterar a senha.");
-    } finally {
-      setBusy(false);
-    }
+    changeBackupPassword(oldPassword, password);
+    reset();
+    setMode("idle");
   };
 
   const submitUnlock = async () => {
@@ -402,8 +380,8 @@ export default function EncryptionSettingsScreen() {
             {error ? <Text style={styles.error}>{error}</Text> : null}
             <Pressable
               onPress={() => {
-                if (mode === "setup") void submitSetup();
-                else if (mode === "change") void submitChange();
+                if (mode === "setup") submitSetup();
+                else if (mode === "change") submitChange();
                 else void submitUnlock();
               }}
               disabled={busy}
