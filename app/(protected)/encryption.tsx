@@ -2,6 +2,7 @@ import { AppHeader } from "@/components/AppHeader";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { useAuth } from "@/context/AuthContext";
 import { validatePasswordStrength } from "@/lib/crypto/passwordKey";
+import type { CryptoProgress } from "@/lib/keyBackup";
 import { useTheme } from "@/theme/ThemeContext";
 import { useThemedStyles } from "@/theme/useThemedStyles";
 import { Ionicons } from "@expo/vector-icons";
@@ -22,6 +23,38 @@ type Mode = "idle" | "setup" | "change" | "unlock";
 const PASSWORD_RULES_HINT =
   "Mínimo 8 caracteres com letra maiúscula, minúscula, número e caractere especial.";
 
+function progressTitle(p: CryptoProgress | null): string {
+  if (!p) return "Configurando sua senha...";
+  switch (p.phase) {
+    case "deriving":
+      return "Derivando chave...";
+    case "backing-up":
+      return "Salvando backup das conversas...";
+    case "restoring":
+      return "Restaurando conversas...";
+  }
+}
+
+function progressDetail(p: CryptoProgress): string {
+  switch (p.phase) {
+    case "deriving":
+      return `${Math.round(p.percent * 100)}%`;
+    case "backing-up":
+    case "restoring":
+      return `${p.done} de ${p.total}`;
+  }
+}
+
+function progressPercent(p: CryptoProgress): number {
+  switch (p.phase) {
+    case "deriving":
+      return p.percent;
+    case "backing-up":
+    case "restoring":
+      return p.total === 0 ? 1 : p.done / p.total;
+  }
+}
+
 export default function EncryptionSettingsScreen() {
   const router = useRouter();
   const {
@@ -29,6 +62,7 @@ export default function EncryptionSettingsScreen() {
     hasBackupPassword,
     backupUnlocked,
     cryptoInProgress,
+    cryptoProgress,
     setupBackupPassword,
     changeBackupPassword,
     disableBackupPassword,
@@ -146,6 +180,26 @@ export default function EncryptionSettingsScreen() {
       },
       pressed: {
         opacity: 0.72,
+      },
+      progressTrack: {
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: t.muted,
+        overflow: "hidden",
+        marginTop: 24,
+        width: "80%",
+        alignSelf: "center",
+      },
+      progressFill: {
+        height: "100%",
+        backgroundColor: t.primary,
+        borderRadius: 4,
+      },
+      progressLabel: {
+        color: t.mutedForeground,
+        fontSize: 13,
+        textAlign: "center",
+        marginTop: 8,
       },
     })
   );
@@ -285,11 +339,26 @@ export default function EncryptionSettingsScreen() {
           <View style={styles.center}>
             <ActivityIndicator size="large" color={theme.primary} />
             <Text style={[styles.statusText, { marginTop: 20, textAlign: "center" }]}>
-              Configurando sua senha...
+              {progressTitle(cryptoProgress)}
             </Text>
             <Text style={[styles.sub, { textAlign: "center", marginTop: 8, marginBottom: 0 }]}>
-              Isso pode levar alguns segundos. Você pode sair desta tela, mas não feche o app.
+              Você pode sair desta tela, mas não feche o app.
             </Text>
+            {cryptoProgress ? (
+              <>
+                <View style={styles.progressTrack}>
+                  <View
+                    style={[
+                      styles.progressFill,
+                      { width: `${Math.round(progressPercent(cryptoProgress) * 100)}%` },
+                    ]}
+                  />
+                </View>
+                <Text style={styles.progressLabel}>
+                  {progressDetail(cryptoProgress)}
+                </Text>
+              </>
+            ) : null}
           </View>
         ) : (
           <>

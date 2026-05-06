@@ -118,6 +118,7 @@ export default (): ExpoConfig => {
           isAccessMediaLocationEnabled: false,
         },
       ],
+      "react-native-quick-crypto",
     ],
     experiments: {
       typedRoutes: true,

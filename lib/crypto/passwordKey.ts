@@ -1,6 +1,7 @@
 import { hmac } from "@noble/hashes/hmac.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { gcm } from "@noble/ciphers/aes.js";
+import { Platform } from "react-native";
 import { randomBytes } from "./randomBytes";
 import {
   base64ToBytes,
@@ -20,26 +21,73 @@ export interface PasswordVerifier {
   iv: string;
 }
 
+export type DeriveProgress = (percent: number) => void;
+
 export function generatePasswordSalt(): string {
   return bytesToBase64(randomBytes(SALT_BYTES));
-}
-
-// Yield real para macrotask — permite que eventos nativos (RN bridge) sejam
-// processados durante o PBKDF2. `await Promise.resolve()` só drena microtasks
-// e não destrava o JS thread para events nativos.
-function macroTick(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 export async function deriveKeyFromPassword(
   password: string,
   saltBase64: string,
+  onProgress?: DeriveProgress,
 ): Promise<Uint8Array> {
   if (!password) throw new Error("Empty password");
+  if (Platform.OS === "web") {
+    return deriveKeyFromPasswordJs(password, saltBase64, onProgress);
+  }
+  return deriveKeyFromPasswordNative(password, saltBase64, onProgress);
+}
+
+async function deriveKeyFromPasswordNative(
+  password: string,
+  saltBase64: string,
+  onProgress?: DeriveProgress,
+): Promise<Uint8Array> {
+  const QuickCrypto = require("react-native-quick-crypto").default as {
+    pbkdf2: (
+      password: string,
+      salt: Uint8Array,
+      iterations: number,
+      keylen: number,
+      digest: string,
+      callback: (err: Error | null, derivedKey?: Uint8Array) => void,
+    ) => void;
+  };
+  const salt = base64ToBytes(saltBase64);
+  onProgress?.(0);
+  const derived = await new Promise<Uint8Array>((resolve, reject) => {
+    QuickCrypto.pbkdf2(
+      password,
+      salt,
+      PBKDF2_ITERATIONS,
+      KEK_BYTES,
+      "sha256",
+      (err, derivedKey) => {
+        if (err || !derivedKey) {
+          reject(err ?? new Error("pbkdf2 failed"));
+          return;
+        }
+        resolve(new Uint8Array(derivedKey));
+      },
+    );
+  });
+  onProgress?.(1);
+  return derived;
+}
+
+function macroTick(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+async function deriveKeyFromPasswordJs(
+  password: string,
+  saltBase64: string,
+  onProgress?: DeriveProgress,
+): Promise<Uint8Array> {
   const salt = base64ToBytes(saltBase64);
   const passwordBytes = utf8Encode(password);
 
-  // PBKDF2-HMAC-SHA256 com dkLen=32 = um único bloco T_1 (RFC 8018 §5.2).
   const block = new Uint8Array(salt.length + 4);
   block.set(salt);
   block[salt.length + 3] = 1;
@@ -47,15 +95,18 @@ export async function deriveKeyFromPassword(
   let u = hmac(sha256, passwordBytes, block);
   const result = new Uint8Array(u);
 
+  onProgress?.(0);
   let lastTick = Date.now();
   for (let i = 1; i < PBKDF2_ITERATIONS; i++) {
     u = hmac(sha256, passwordBytes, u);
     for (let j = 0; j < KEK_BYTES; j++) result[j] ^= u[j];
     if (Date.now() - lastTick >= TICK_MS) {
+      onProgress?.(i / PBKDF2_ITERATIONS);
       await macroTick();
       lastTick = Date.now();
     }
   }
+  onProgress?.(1);
 
   return result;
 }

@@ -33,6 +33,7 @@ import {
   restoreBackups as restoreBackupsImpl,
   setupBackupPassword as setupBackupPasswordImpl,
   unlockBackupWithPassword,
+  type CryptoProgress,
 } from "@/lib/keyBackup";
 import {
   showCryptoSuccessNotification,
@@ -117,6 +118,7 @@ interface AuthContextValue {
   needsPasswordRestore: boolean;
   hasBackupPassword: boolean;
   cryptoInProgress: boolean;
+  cryptoProgress: CryptoProgress | null;
   setupBackupPassword: (password: string) => void;
   changeBackupPassword: (oldPassword: string, newPassword: string) => void;
   disableBackupPassword: () => Promise<void>;
@@ -157,6 +159,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [hasBackupPassword, setHasBackupPassword] = useState(false);
   const [needsPasswordRestore, setNeedsPasswordRestore] = useState(false);
   const [cryptoInProgress, setCryptoInProgress] = useState(false);
+  const [cryptoProgress, setCryptoProgress] = useState<CryptoProgress | null>(null);
   const [restoreDismissed, setRestoreDismissed] = useState(false);
   const currentUserRoleRef = useRef<"adult" | "child" | null>(null);
 
@@ -607,18 +610,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     setCryptoInProgress(true);
-    void setupBackupPasswordImpl(uid, password)
+    setCryptoProgress({ phase: "deriving", percent: 0 });
+    void setupBackupPasswordImpl(uid, password, setCryptoProgress)
       .then(() => {
         if (auth.currentUser?.uid !== uid) return;
         setHasBackupPassword(true);
         setBackupUnlocked(true);
         setNeedsPasswordRestore(false);
         setCryptoInProgress(false);
+        setCryptoProgress(null);
         void showCryptoSuccessNotification();
       })
       .catch((e: unknown) => {
         if (auth.currentUser?.uid !== uid) return;
         setCryptoInProgress(false);
+        setCryptoProgress(null);
         void showCryptoErrorNotification(
           e instanceof Error ? e.message : "Falha ao salvar a senha.",
         );
@@ -632,10 +638,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     setCryptoInProgress(true);
-    void changeBackupPasswordImpl(uid, oldPassword, newPassword)
+    setCryptoProgress({ phase: "deriving", percent: 0 });
+    void changeBackupPasswordImpl(uid, oldPassword, newPassword, setCryptoProgress)
       .then((result) => {
         if (auth.currentUser?.uid !== uid) return;
         setCryptoInProgress(false);
+        setCryptoProgress(null);
         if (result.ok) {
           setHasBackupPassword(true);
           setBackupUnlocked(true);
@@ -650,6 +658,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .catch((e: unknown) => {
         if (auth.currentUser?.uid !== uid) return;
         setCryptoInProgress(false);
+        setCryptoProgress(null);
         void showCryptoErrorNotification(
           e instanceof Error ? e.message : "Falha ao alterar a senha.",
         );
@@ -854,6 +863,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         needsPasswordRestore: needsPasswordRestore && !restoreDismissed,
         hasBackupPassword,
         cryptoInProgress,
+        cryptoProgress,
         setupBackupPassword,
         changeBackupPassword,
         disableBackupPassword,

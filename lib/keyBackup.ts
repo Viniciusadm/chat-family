@@ -21,6 +21,15 @@ export type RestoreResult =
   | { ok: true; restoredChatIds: string[] }
   | { ok: false; reason: "no-settings" | "wrong-password" | "no-backups" };
 
+export type CryptoProgress =
+  | { phase: "deriving"; percent: number }
+  | { phase: "backing-up"; done: number; total: number }
+  | { phase: "restoring"; done: number; total: number };
+
+export type CryptoProgressCallback = (p: CryptoProgress) => void;
+
+const BACKUP_CONCURRENCY = 8;
+
 interface UnlockedState {
   uid: string;
   kek: Uint8Array;
@@ -51,25 +60,34 @@ export async function hasRemoteBackups(uid: string): Promise<boolean> {
   return (await countKeyBackups(uid)) > 0;
 }
 
-export async function setupBackupPassword(uid: string, password: string): Promise<void> {
+export async function setupBackupPassword(
+  uid: string,
+  password: string,
+  onProgress?: CryptoProgressCallback,
+): Promise<void> {
   if (await getPasswordSettings(uid)) {
     throw new Error("Password already configured. Use changeBackupPassword.");
   }
   const salt = generatePasswordSalt();
-  const kek = await deriveKeyFromPassword(password, salt);
+  const kek = await deriveKeyFromPassword(password, salt, (percent) =>
+    onProgress?.({ phase: "deriving", percent }),
+  );
   const verifier = makePasswordVerifier(kek);
   await writePasswordSettings(uid, { salt, verifier });
   unlocked = { uid, kek };
-  await backupAllLocalKeys(uid);
+  await backupAllLocalKeys(uid, onProgress);
 }
 
 export async function unlockBackupWithPassword(
   uid: string,
   password: string,
+  onProgress?: CryptoProgressCallback,
 ): Promise<{ ok: true } | { ok: false; reason: "no-settings" | "wrong-password" }> {
   const settings = await getPasswordSettings(uid);
   if (!settings) return { ok: false, reason: "no-settings" };
-  const kek = await deriveKeyFromPassword(password, settings.salt);
+  const kek = await deriveKeyFromPassword(password, settings.salt, (percent) =>
+    onProgress?.({ phase: "deriving", percent }),
+  );
   if (!checkPasswordVerifier(kek, settings.verifier)) {
     kek.fill(0);
     return { ok: false, reason: "wrong-password" };
@@ -82,22 +100,27 @@ export async function changeBackupPassword(
   uid: string,
   oldPassword: string,
   newPassword: string,
+  onProgress?: CryptoProgressCallback,
 ): Promise<{ ok: true } | { ok: false; reason: "no-settings" | "wrong-password" }> {
   const settings = await getPasswordSettings(uid);
   if (!settings) return { ok: false, reason: "no-settings" };
-  const oldKek = await deriveKeyFromPassword(oldPassword, settings.salt);
+  const oldKek = await deriveKeyFromPassword(oldPassword, settings.salt, (percent) =>
+    onProgress?.({ phase: "deriving", percent: percent / 2 }),
+  );
   if (!checkPasswordVerifier(oldKek, settings.verifier)) {
     oldKek.fill(0);
     return { ok: false, reason: "wrong-password" };
   }
   oldKek.fill(0);
   const newSalt = generatePasswordSalt();
-  const newKek = await deriveKeyFromPassword(newPassword, newSalt);
+  const newKek = await deriveKeyFromPassword(newPassword, newSalt, (percent) =>
+    onProgress?.({ phase: "deriving", percent: 0.5 + percent / 2 }),
+  );
   const newVerifier = makePasswordVerifier(newKek);
   await writePasswordSettings(uid, { salt: newSalt, verifier: newVerifier });
   unlocked = { uid, kek: newKek };
   await deleteAllKeyBackups(uid);
-  await backupAllLocalKeys(uid);
+  await backupAllLocalKeys(uid, onProgress);
   return { ok: true };
 }
 
@@ -110,10 +133,13 @@ export async function disableBackupPassword(uid: string): Promise<void> {
 export async function restoreBackups(
   uid: string,
   password: string,
+  onProgress?: CryptoProgressCallback,
 ): Promise<RestoreResult> {
   const settings = await getPasswordSettings(uid);
   if (!settings) return { ok: false, reason: "no-settings" };
-  const kek = await deriveKeyFromPassword(password, settings.salt);
+  const kek = await deriveKeyFromPassword(password, settings.salt, (percent) =>
+    onProgress?.({ phase: "deriving", percent }),
+  );
   if (!checkPasswordVerifier(kek, settings.verifier)) {
     kek.fill(0);
     return { ok: false, reason: "wrong-password" };
@@ -124,6 +150,9 @@ export async function restoreBackups(
     return { ok: false, reason: "no-backups" };
   }
   const restored: string[] = [];
+  let done = 0;
+  const total = backups.length;
+  onProgress?.({ phase: "restoring", done: 0, total });
   for (const { chatId, backup } of backups) {
     try {
       const conversationKey = decryptConversationKeyWithKek(
@@ -136,6 +165,8 @@ export async function restoreBackups(
     } catch {
       // Skip a single corrupt backup; do not abort the whole restore.
     }
+    done++;
+    onProgress?.({ phase: "restoring", done, total });
   }
   unlocked = { uid, kek };
   return { ok: true, restoredChatIds: restored };
@@ -155,17 +186,42 @@ export async function tryBackupConversationKey(
   }
 }
 
-async function backupAllLocalKeys(uid: string): Promise<void> {
+async function backupAllLocalKeys(
+  uid: string,
+  onProgress?: CryptoProgressCallback,
+): Promise<void> {
   if (!unlocked || unlocked.uid !== uid) return;
   const chatIds = await SecureKeyStore.listConversationKeyChatIds();
-  for (const chatId of chatIds) {
-    const key = await SecureKeyStore.getConversationKey(chatId);
-    if (!key) continue;
-    try {
-      const wrapped = encryptConversationKeyWithKek(unlocked.kek, key);
-      await writeKeyBackup(uid, chatId, wrapped);
-    } catch {
-      // Skip; user can re-trigger by toggling the password later.
-    }
+  const total = chatIds.length;
+  if (total === 0) return;
+  let done = 0;
+  onProgress?.({ phase: "backing-up", done: 0, total });
+
+  const queue = [...chatIds];
+  const workers: Promise<void>[] = [];
+  const limit = Math.min(BACKUP_CONCURRENCY, total);
+  const kek = unlocked.kek;
+  for (let i = 0; i < limit; i++) {
+    workers.push(
+      (async () => {
+        while (queue.length > 0) {
+          const chatId = queue.shift();
+          if (!chatId) break;
+          if (!unlocked || unlocked.uid !== uid) return;
+          try {
+            const key = await SecureKeyStore.getConversationKey(chatId);
+            if (key) {
+              const wrapped = encryptConversationKeyWithKek(kek, key);
+              await writeKeyBackup(uid, chatId, wrapped);
+            }
+          } catch {
+            // Skip; user can re-trigger by toggling the password later.
+          }
+          done++;
+          onProgress?.({ phase: "backing-up", done, total });
+        }
+      })(),
+    );
   }
+  await Promise.all(workers);
 }
