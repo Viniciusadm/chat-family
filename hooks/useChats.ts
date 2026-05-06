@@ -1,6 +1,7 @@
 import { useAuth } from "@/context/AuthContext";
 import { useConnectivity } from "@/hooks/useConnectivity";
 import { ChatRepository } from "@/lib/ChatRepository";
+import { decryptIncomingMessage } from "@/lib/encryptedMessages";
 import { db } from "@/lib/firebase";
 import {
   syncChatHistories,
@@ -109,6 +110,29 @@ export function useChats(): { chats: Chat[]; loading: boolean } {
                   unreadCount: data.unreadBy?.[memberId] ?? 0,
                   readUpTo: data.readUpTo,
                 };
+                if (data.lastMessageAt && data.lastMessageType) {
+                  const timestamp = data.lastMessageAt.toDate();
+                  if (data.lastMessageType === "text") {
+                    const text = await decryptIncomingMessage(chatId, {
+                      ciphertext: data.lastMessageCiphertext,
+                      iv: data.lastMessageIv,
+                      text: data.lastMessageText,
+                    });
+                    if (text != null) {
+                      chat.lastMessage = {
+                        text,
+                        type: "text",
+                        timestamp,
+                      };
+                    }
+                  } else {
+                    chat.lastMessage = {
+                      text: null,
+                      type: data.lastMessageType,
+                      timestamp,
+                    };
+                  }
+                }
                 if (!active) return;
                 await ChatRepository.upsertChat(chat);
                 if (!active) return;

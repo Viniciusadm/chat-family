@@ -147,19 +147,22 @@ export const ChatRepository = {
           name = excluded.name,
           unread_count = excluded.unread_count,
           last_message_text = CASE
-            WHEN excluded.last_message_at IS NULL
-              THEN chats.last_message_text
-            ELSE excluded.last_message_text
+            WHEN excluded.last_message_at IS NULL THEN chats.last_message_text
+            WHEN chats.last_message_at IS NULL THEN excluded.last_message_text
+            WHEN excluded.last_message_at > chats.last_message_at THEN excluded.last_message_text
+            ELSE chats.last_message_text
           END,
           last_message_type = CASE
-            WHEN excluded.last_message_at IS NULL
-              THEN chats.last_message_type
-            ELSE excluded.last_message_type
+            WHEN excluded.last_message_at IS NULL THEN chats.last_message_type
+            WHEN chats.last_message_at IS NULL THEN excluded.last_message_type
+            WHEN excluded.last_message_at > chats.last_message_at THEN excluded.last_message_type
+            ELSE chats.last_message_type
           END,
           last_message_at = CASE
-            WHEN excluded.last_message_at IS NULL
-              THEN chats.last_message_at
-            ELSE excluded.last_message_at
+            WHEN excluded.last_message_at IS NULL THEN chats.last_message_at
+            WHEN chats.last_message_at IS NULL THEN excluded.last_message_at
+            WHEN excluded.last_message_at > chats.last_message_at THEN excluded.last_message_at
+            ELSE chats.last_message_at
           END,
           read_up_to = excluded.read_up_to,
           updated_at = excluded.updated_at`,
