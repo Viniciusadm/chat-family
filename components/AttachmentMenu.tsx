@@ -3,6 +3,7 @@ import { useThemedStyles } from "@/theme/useThemedStyles";
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 interface AttachmentMenuProps {
   visible: boolean;
@@ -18,6 +19,7 @@ export function AttachmentMenu({
   onChooseCamera,
 }: AttachmentMenuProps) {
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = useThemedStyles((t) =>
     StyleSheet.create({
       backdrop: {
@@ -31,7 +33,7 @@ export function AttachmentMenu({
         borderTopRightRadius: 24,
         paddingHorizontal: 24,
         paddingTop: 24,
-        paddingBottom: 36,
+        paddingBottom: insets.bottom + 24,
         flexDirection: "row",
         gap: 24,
       },
@@ -62,6 +64,7 @@ export function AttachmentMenu({
       visible={visible}
       transparent
       animationType="fade"
+      statusBarTranslucent
       onRequestClose={onClose}
     >
       <Pressable style={styles.backdrop} onPress={onClose}>

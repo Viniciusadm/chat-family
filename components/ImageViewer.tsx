@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import React from "react";
 import { Modal, Pressable, StyleSheet, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 interface ImageViewerProps {
   uri: string | null;
@@ -13,6 +14,7 @@ interface ImageViewerProps {
 
 export function ImageViewer({ uri, visible, onClose }: ImageViewerProps) {
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = useThemedStyles((t) =>
     StyleSheet.create({
       root: {
@@ -23,7 +25,7 @@ export function ImageViewer({ uri, visible, onClose }: ImageViewerProps) {
       },
       header: {
         position: "absolute",
-        top: 48,
+        top: insets.top + 12,
         right: 20,
         zIndex: 2,
       },
@@ -46,6 +48,7 @@ export function ImageViewer({ uri, visible, onClose }: ImageViewerProps) {
       visible={visible}
       transparent
       animationType="fade"
+      statusBarTranslucent
       onRequestClose={onClose}
     >
       <Pressable style={styles.root} onPress={onClose}>

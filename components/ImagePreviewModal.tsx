@@ -11,6 +11,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 interface ImagePreviewModalProps {
   visible: boolean;
@@ -28,6 +29,7 @@ export function ImagePreviewModal({
   onConfirm,
 }: ImagePreviewModalProps) {
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = useThemedStyles((t) =>
     StyleSheet.create({
       root: {
@@ -35,7 +37,7 @@ export function ImagePreviewModal({
         backgroundColor: t.viewerBackdrop,
       },
       topBar: {
-        paddingTop: 48,
+        paddingTop: insets.top + 12,
         paddingHorizontal: 16,
         flexDirection: "row",
         alignItems: "center",
@@ -54,7 +56,8 @@ export function ImagePreviewModal({
       },
       bottomBar: {
         paddingHorizontal: 24,
-        paddingVertical: 24,
+        paddingTop: 24,
+        paddingBottom: insets.bottom + 24,
         flexDirection: "row",
         alignItems: "center",
         gap: 16,
@@ -84,6 +87,7 @@ export function ImagePreviewModal({
       visible={visible}
       animationType="slide"
       transparent={false}
+      statusBarTranslucent
       onRequestClose={onCancel}
     >
       <View style={styles.root}>
