@@ -128,6 +128,15 @@ async function migrate(db: SQLite.SQLiteDatabase) {
   await ensureColumn(db, "chats", "read_up_to", "TEXT");
   await ensureColumn(db, "app_sessions", "photo_url", "TEXT");
   await ensureColumn(db, "app_sessions", "photo_path", "TEXT");
+  await ensureColumn(db, "messages", "image_remote_url", "TEXT");
+  await ensureColumn(db, "messages", "image_thumbnail_url", "TEXT");
+  await ensureColumn(db, "messages", "local_image_uri", "TEXT");
+  await ensureColumn(db, "messages", "local_thumbnail_uri", "TEXT");
+  await ensureColumn(db, "messages", "image_width", "REAL");
+  await ensureColumn(db, "messages", "image_height", "REAL");
+  await ensureColumn(db, "messages", "image_file_size", "REAL");
+  await ensureColumn(db, "messages", "image_pending_source_uri", "TEXT");
+  await ensureColumn(db, "messages", "image_downloaded_at", "TEXT");
 }
 
 export async function getDatabase() {

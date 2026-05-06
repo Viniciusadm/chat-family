@@ -6,6 +6,8 @@ import {
 } from "@/lib/firestoreMessages";
 import { ensureReactionInFirestore } from "@/lib/firestoreReactions";
 import { AudioCacheRepository } from "@/lib/AudioCacheRepository";
+import { ImageCacheRepository } from "@/lib/ImageCacheRepository";
+import { uploadAndPersistImage } from "@/lib/imageUpload";
 import { db } from "@/lib/firebase";
 import { MessageRepository } from "@/lib/MessageRepository";
 import { ReactionRepository } from "@/lib/ReactionRepository";
@@ -69,6 +71,22 @@ export async function syncChatHistory(chatId: string, isOnline = true) {
             chatId,
             messageId: messageDoc.id,
             remoteUrl: data.audioUrl,
+          });
+        }
+        if (data.imageUrl) {
+          void ImageCacheRepository.downloadMessageImage({
+            chatId,
+            messageId: messageDoc.id,
+            remoteUrl: data.imageUrl,
+            variant: "full",
+          });
+        }
+        if (data.thumbnailUrl) {
+          void ImageCacheRepository.downloadMessageImage({
+            chatId,
+            messageId: messageDoc.id,
+            remoteUrl: data.thumbnailUrl,
+            variant: "thumb",
           });
         }
       }
@@ -135,6 +153,55 @@ export async function syncPendingTextMessages(
     }
   } finally {
     pendingSyncInFlight = false;
+  }
+}
+
+let pendingImageSyncInFlight = false;
+
+export async function syncPendingImageMessages(
+  currentUser: AppUser,
+  tenantId: string,
+  isOnline = true
+) {
+  if (!isOnline) return;
+  if (pendingImageSyncInFlight) return;
+  pendingImageSyncInFlight = true;
+
+  try {
+    const messages = await MessageRepository.getPendingImageMessages();
+    for (const message of messages) {
+      if (message.senderId !== currentUser.id || message.type !== "image") {
+        continue;
+      }
+      const sourceUri =
+        message.imagePendingSourceUri ?? message.imageLocalUri ?? null;
+      if (!sourceUri) continue;
+      const thumbUri = message.imageThumbnailLocalUri ?? sourceUri;
+
+      try {
+        if (message.status === "failed") {
+          await MessageRepository.updateStatus(message.id, "loading");
+        }
+        await uploadAndPersistImage({
+          chatId: message.chatId,
+          messageId: message.id,
+          tenantId,
+          senderId: currentUser.id,
+          fullUri: sourceUri,
+          thumbUri,
+          imageWidth: message.imageWidth ?? 0,
+          imageHeight: message.imageHeight ?? 0,
+          imageFileSize: message.imageFileSize ?? 0,
+          replyTo: message.replyTo ?? null,
+        });
+      } catch {
+        await MessageRepository.updateStatus(message.id, "failed").catch(
+          () => {}
+        );
+      }
+    }
+  } finally {
+    pendingImageSyncInFlight = false;
   }
 }
 

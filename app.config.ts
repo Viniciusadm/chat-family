@@ -99,6 +99,25 @@ export default (): ExpoConfig => {
       ],
       "expo-sqlite",
       "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          photosPermission:
+            "Permitir acesso às fotos para enviar imagens no chat.",
+          cameraPermission:
+            "Permitir acesso à câmera para tirar fotos no chat.",
+        },
+      ],
+      [
+        "expo-media-library",
+        {
+          photosPermission:
+            "Permitir salvar as imagens do chat na galeria do aparelho.",
+          savePhotosPermission:
+            "Permitir salvar as imagens do chat na galeria do aparelho.",
+          isAccessMediaLocationEnabled: false,
+        },
+      ],
     ],
     experiments: {
       typedRoutes: true,

@@ -10,6 +10,7 @@ import { useConnectivity } from "@/hooks/useConnectivity";
 import { useMemberProfiles } from "@/hooks/useMemberProfiles";
 import { useMessages } from "@/hooks/useMessages";
 import { useReactions } from "@/hooks/useReactions";
+import { useSendMessage } from "@/hooks/useSendMessage";
 import { getChatDisplayName } from "@/lib/chatDisplayName";
 import { createReplySnapshot } from "@/lib/messageReply";
 import { colors } from "@/theme/colors";
@@ -126,6 +127,8 @@ export default function ChatScreen() {
   const hideBadgeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingScrollIndexRef = useRef<number | null>(null);
+
+  const { retryImageMessage } = useSendMessage(chatId);
 
   const [activeDayLabel, setActiveDayLabel] = useState<string>("");
   const [activeAudioMessageId, setActiveAudioMessageId] = useState<string | null>(null);
@@ -548,6 +551,7 @@ export default function ChatScreen() {
                 onReactionPress={handleReactionPress}
                 onReactionChipPress={handleReactionChipPress(item.message.id)}
                 onReply={handleReplySelect}
+                onRetryImage={retryImageMessage}
                 highlighted={highlightedMessageId === item.message.id}
                 replyAvailable={
                   !item.message.replyTo || messagesById.has(item.message.replyTo.id)

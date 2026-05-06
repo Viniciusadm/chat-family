@@ -77,7 +77,7 @@ export interface ChatDoc {
   lastMessageCiphertext: string | null;
   lastMessageIv: string | null;
   lastMessageAt: Timestamp | null;
-  lastMessageType: "text" | "audio" | null;
+  lastMessageType: "text" | "audio" | "image" | null;
   createdAt: Timestamp;
   updatedAt: Timestamp;
   readUpTo?: Record<string, Timestamp>;
@@ -90,6 +90,11 @@ export interface MessageDoc {
   text: string | null;
   audioUrl: string | null;
   audioDuration: number | null;
+  imageUrl?: string | null;
+  thumbnailUrl?: string | null;
+  imageWidth?: number | null;
+  imageHeight?: number | null;
+  imageFileSize?: number | null;
   ciphertext?: string | null;
   iv?: string | null;
   encVersion?: number;
@@ -110,9 +115,9 @@ export interface ReactionDoc {
 }
 
 export type UserRole = "adult" | "child";
-export type MessageType = "text" | "audio";
-export type MessageReplyType = MessageType | "image";
-export type MessageStatus = "loading" | "sent";
+export type MessageType = "text" | "audio" | "image";
+export type MessageReplyType = MessageType;
+export type MessageStatus = "loading" | "sent" | "failed";
 
 export interface MessageReplySnapshot {
   id: string;
@@ -155,7 +160,7 @@ export interface Chat {
   readUpTo?: Record<string, Timestamp>;
   lastMessage?: {
     text: string | null;
-    type: "text" | "audio" | null;
+    type: "text" | "audio" | "image" | null;
     timestamp: Date;
   };
 }
@@ -170,6 +175,15 @@ export interface Message {
   audioRemoteUrl?: string;
   audioLocalUri?: string;
   audioDuration?: number;
+  imageUrl?: string;
+  imageRemoteUrl?: string;
+  imageLocalUri?: string;
+  imageThumbnailUrl?: string;
+  imageThumbnailLocalUri?: string;
+  imageWidth?: number;
+  imageHeight?: number;
+  imageFileSize?: number;
+  imagePendingSourceUri?: string;
   timestamp: Date;
   createdAtMs: number;
   status?: MessageStatus;

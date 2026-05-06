@@ -1,9 +1,15 @@
 import { useAuth } from "@/context/AuthContext";
 import { useConnectivity } from "@/hooks/useConnectivity";
 import { AudioCacheRepository } from "@/lib/AudioCacheRepository";
+import { ImageCacheRepository } from "@/lib/ImageCacheRepository";
+import { ImageGalleryRepository } from "@/lib/ImageGalleryRepository";
 import { db } from "@/lib/firebase";
 import { MessageRepository } from "@/lib/MessageRepository";
-import { syncChatHistory, syncPendingTextMessages } from "@/lib/offlineSync";
+import {
+  syncChatHistory,
+  syncPendingImageMessages,
+  syncPendingTextMessages,
+} from "@/lib/offlineSync";
 import type { Message, MessageDoc } from "@/types/chat";
 import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
 import { useCallback, useEffect, useState } from "react";
@@ -61,6 +67,54 @@ export function useMessages(chatId: string): { messages: Message[]; loading: boo
     [loadLocalMessages]
   );
 
+  const refreshLocalImageCache = useCallback(
+    async (activeChatId: string, active: () => boolean, download: boolean) => {
+      const messages = await MessageRepository.getLocalMessages(activeChatId);
+      let changed = false;
+
+      for (const message of messages) {
+        if (message.type !== "image") continue;
+        if (!message.imageRemoteUrl) continue;
+
+        const cachedFull = await ImageCacheRepository.ensureMessageImageCache({
+          chatId: activeChatId,
+          messageId: message.id,
+          remoteUrl: message.imageRemoteUrl,
+          localUri: message.imageLocalUri,
+          variant: "full",
+          download,
+        });
+
+        if (message.imageThumbnailUrl) {
+          await ImageCacheRepository.ensureMessageImageCache({
+            chatId: activeChatId,
+            messageId: message.id,
+            remoteUrl: message.imageThumbnailUrl,
+            localUri: message.imageThumbnailLocalUri,
+            variant: "thumb",
+            download,
+          });
+        }
+
+        if (!active()) return;
+        if (cachedFull && !message.imageLocalUri) {
+          changed = true;
+          if (currentUser && message.senderId !== currentUser.id) {
+            void ImageGalleryRepository.saveToGallery({
+              messageId: message.id,
+              fileUri: cachedFull,
+            });
+          }
+        }
+      }
+
+      if (changed) {
+        await loadLocalMessages(activeChatId, active);
+      }
+    },
+    [loadLocalMessages, currentUser]
+  );
+
   useEffect(() => {
     if (!chatId) {
       setState({ chatId: "", messages: [], loading: false });
@@ -83,9 +137,11 @@ export function useMessages(chatId: string): { messages: Message[]; loading: boo
       });
 
       void refreshLocalAudioCache(chatId, isActive, isOnline);
+      void refreshLocalImageCache(chatId, isActive, isOnline);
 
       if (currentUser && tenantId && firebaseUser) {
         void syncPendingTextMessages(currentUser, tenantId, isOnline);
+        void syncPendingImageMessages(currentUser, tenantId, isOnline);
         void syncChatHistory(chatId, isOnline);
       }
 
@@ -113,6 +169,22 @@ export function useMessages(chatId: string): { messages: Message[]; loading: boo
                 remoteUrl: data.audioUrl,
               });
             }
+            if (data.imageUrl) {
+              void ImageCacheRepository.downloadMessageImage({
+                chatId,
+                messageId: d.id,
+                remoteUrl: data.imageUrl,
+                variant: "full",
+              });
+            }
+            if (data.thumbnailUrl) {
+              void ImageCacheRepository.downloadMessageImage({
+                chatId,
+                messageId: d.id,
+                remoteUrl: data.thumbnailUrl,
+                variant: "thumb",
+              });
+            }
           }
           await loadLocalMessages(chatId, isActive);
         })();
@@ -137,6 +209,7 @@ export function useMessages(chatId: string): { messages: Message[]; loading: boo
     isOnline,
     loadLocalMessages,
     refreshLocalAudioCache,
+    refreshLocalImageCache,
     tenantId,
   ]);
 

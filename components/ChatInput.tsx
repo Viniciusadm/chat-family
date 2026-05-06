@@ -8,6 +8,7 @@ import {
   setAudioModeAsync,
   useAudioRecorder,
 } from "expo-audio";
+import * as ImagePicker from "expo-image-picker";
 import {
   forwardRef,
   useCallback,
@@ -17,6 +18,7 @@ import {
   useState,
 } from "react";
 import {
+  Alert,
   Pressable,
   StyleSheet,
   Text,
@@ -29,6 +31,8 @@ import Animated, {
   interpolate,
   useAnimatedStyle,
 } from "react-native-reanimated";
+import { AttachmentMenu } from "./AttachmentMenu";
+import { ImagePreviewModal } from "./ImagePreviewModal";
 import { ReplyPreview } from "./ReplyPreview";
 
 interface ChatInputProps {
@@ -49,7 +53,7 @@ function ChatInput({
   onCancelReply,
   onSend,
 }, ref) {
-  const { sendText, sendAudio, isSending } = useSendMessage(chatId);
+  const { sendText, sendAudio, sendImage, isSending } = useSendMessage(chatId);
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const insets = useSafeAreaInsets();
   const { progress } = useReanimatedKeyboardAnimation();
@@ -64,6 +68,13 @@ function ChatInput({
   const [text, setText] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [attachmentMenuVisible, setAttachmentMenuVisible] = useState(false);
+  const [pendingImage, setPendingImage] = useState<{
+    uri: string;
+    width: number;
+    height: number;
+  } | null>(null);
+  const [imageSending, setImageSending] = useState(false);
   const inputRef = useRef<TextInput>(null);
   const recordingActiveRef = useRef(false);
   const recordSessionRef = useRef(0);
@@ -158,6 +169,64 @@ function ChatInput({
     }
   };
 
+  const openGallery = useCallback(async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert("", "Permita acesso às fotos para enviar imagens.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: false,
+      quality: 1,
+      exif: false,
+    });
+    if (result.canceled) return;
+    const asset = result.assets[0];
+    if (!asset) return;
+    setPendingImage({
+      uri: asset.uri,
+      width: asset.width ?? 0,
+      height: asset.height ?? 0,
+    });
+  }, []);
+
+  const openCamera = useCallback(async () => {
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert("", "Permita acesso à câmera para tirar fotos.");
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ["images"],
+      quality: 1,
+      exif: false,
+    });
+    if (result.canceled) return;
+    const asset = result.assets[0];
+    if (!asset) return;
+    setPendingImage({
+      uri: asset.uri,
+      width: asset.width ?? 0,
+      height: asset.height ?? 0,
+    });
+  }, []);
+
+  const confirmSendImage = useCallback(async () => {
+    if (!pendingImage || imageSending) return;
+    const selectedReply = replyTo;
+    const payload = pendingImage;
+    setImageSending(true);
+    try {
+      onSend?.();
+      onCancelReply?.();
+      setPendingImage(null);
+      await sendImage(payload, { replyTo: selectedReply });
+    } finally {
+      setImageSending(false);
+    }
+  }, [pendingImage, imageSending, replyTo, onCancelReply, onSend, sendImage]);
+
   const stopRecordingAndSend = async () => {
     recordSessionRef.current += 1;
     const wasRecording = recordingActiveRef.current;
@@ -191,6 +260,22 @@ function ChatInput({
         <ReplyPreview reply={replyTo} onCancel={onCancelReply} />
       ) : null}
       <View style={styles.row}>
+        <Pressable
+          onPress={() => setAttachmentMenuVisible(true)}
+          disabled={isSending || isRecording}
+          hitSlop={6}
+          style={({ pressed }) => [
+            styles.attachBtn,
+            pressed && styles.pressed,
+            (isSending || isRecording) && styles.disabled,
+          ]}
+        >
+          <Ionicons
+            name="add"
+            size={26}
+            color={colors.mutedForeground}
+          />
+        </Pressable>
         <View style={styles.inputShell}>
           <TextInput
             ref={inputRef}
@@ -251,6 +336,19 @@ function ChatInput({
           </View>
         )}
       </View>
+      <AttachmentMenu
+        visible={attachmentMenuVisible}
+        onClose={() => setAttachmentMenuVisible(false)}
+        onChooseGallery={() => void openGallery()}
+        onChooseCamera={() => void openCamera()}
+      />
+      <ImagePreviewModal
+        visible={pendingImage != null}
+        uri={pendingImage?.uri ?? null}
+        sending={imageSending}
+        onCancel={() => setPendingImage(null)}
+        onConfirm={() => void confirmSendImage()}
+      />
     </Animated.View>
   );
 });
@@ -289,6 +387,13 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 22,
     backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  attachBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
   },

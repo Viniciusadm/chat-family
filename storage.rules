@@ -32,5 +32,9 @@ service firebase.storage {
     match /audios/{allPaths=**} {
       allow read, write: if signedIn();
     }
+
+    match /images/{allPaths=**} {
+      allow read, write: if signedIn();
+    }
   }
 }

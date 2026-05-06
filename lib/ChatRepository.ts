@@ -79,7 +79,9 @@ function rowToChat(row: ChatRow): Chat {
     chat.lastMessage = {
       text: row.last_message_text,
       type:
-        row.last_message_type === "audio" || row.last_message_type === "text"
+        row.last_message_type === "audio" ||
+        row.last_message_type === "text" ||
+        row.last_message_type === "image"
           ? row.last_message_type
           : null,
       timestamp: new Date(row.last_message_at),
@@ -215,7 +217,11 @@ export const ChatRepository = {
 
   async updateLastMessage(
     chatId: string,
-    lastMessage: { text: string | null; type: "text" | "audio"; timestamp: Date },
+    lastMessage: {
+      text: string | null;
+      type: "text" | "audio" | "image";
+      timestamp: Date;
+    },
     options: { notify?: boolean } = {}
   ) {
     await withExclusiveWrite(async (tx) => {

@@ -131,7 +131,9 @@ export default function ChatListScreen() {
                         <Text style={styles.preview} numberOfLines={1}>
                           {chat.lastMessage.type === "audio"
                             ? "Áudio"
-                            : (chat.lastMessage.text ?? "")}
+                            : chat.lastMessage.type === "image"
+                              ? "Foto"
+                              : (chat.lastMessage.text ?? "")}
                         </Text>
                       ) : (
                         <View style={styles.previewSpacer} />

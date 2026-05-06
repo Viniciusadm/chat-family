@@ -26,6 +26,15 @@ type MessageRow = {
   reply_to_sender_name: string | null;
   reply_to_type: string | null;
   reply_to_preview: string | null;
+  image_remote_url: string | null;
+  image_thumbnail_url: string | null;
+  local_image_uri: string | null;
+  local_thumbnail_uri: string | null;
+  image_width: number | null;
+  image_height: number | null;
+  image_file_size: number | null;
+  image_pending_source_uri: string | null;
+  image_downloaded_at: string | null;
 };
 
 type MessageSyncRow = {
@@ -46,6 +55,15 @@ export type LocalMessageInput = {
   audioDownloadedAt?: Date | null;
   audioDuration?: number | null;
   replyTo?: MessageReplySnapshot | null;
+  imageRemoteUrl?: string | null;
+  imageThumbnailUrl?: string | null;
+  localImageUri?: string | null;
+  localThumbnailUri?: string | null;
+  imageWidth?: number | null;
+  imageHeight?: number | null;
+  imageFileSize?: number | null;
+  imagePendingSourceUri?: string | null;
+  imageDownloadedAt?: Date | null;
 };
 
 type Listener = () => void;
@@ -74,9 +92,17 @@ function rowReplyTo(row: MessageRow): MessageReplySnapshot | undefined {
 }
 
 function rowToMessage(row: MessageRow): Message {
-  const type: MessageType = row.type === "audio" ? "audio" : "text";
+  const type: MessageType =
+    row.type === "audio" ? "audio" : row.type === "image" ? "image" : "text";
   const timestamp = new Date(row.created_at);
-  const decryptionFailed = type === "text" && row.status === "sent" && row.body == null;
+  const decryptionFailed =
+    type === "text" && row.status === "sent" && row.body == null;
+  const status: MessageStatus =
+    row.status === "loading"
+      ? "loading"
+      : row.status === "failed"
+        ? "failed"
+        : "sent";
 
   return {
     id: row.id,
@@ -84,15 +110,46 @@ function rowToMessage(row: MessageRow): Message {
     senderId: row.sender_id,
     type,
     content: type === "text" ? row.body ?? "" : "",
-    audioUrl: type === "audio" ? row.local_audio_uri ?? row.body ?? undefined : undefined,
+    audioUrl:
+      type === "audio" ? row.local_audio_uri ?? row.body ?? undefined : undefined,
     audioRemoteUrl: type === "audio" ? row.body ?? undefined : undefined,
     audioLocalUri: type === "audio" ? row.local_audio_uri ?? undefined : undefined,
-    audioDuration: type === "audio" && typeof row.audio_duration === "number"
-      ? row.audio_duration
-      : undefined,
+    audioDuration:
+      type === "audio" && typeof row.audio_duration === "number"
+        ? row.audio_duration
+        : undefined,
+    imageUrl:
+      type === "image"
+        ? row.local_image_uri ??
+          row.image_remote_url ??
+          row.image_pending_source_uri ??
+          undefined
+        : undefined,
+    imageRemoteUrl:
+      type === "image" ? row.image_remote_url ?? undefined : undefined,
+    imageLocalUri:
+      type === "image" ? row.local_image_uri ?? undefined : undefined,
+    imageThumbnailUrl:
+      type === "image" ? row.image_thumbnail_url ?? undefined : undefined,
+    imageThumbnailLocalUri:
+      type === "image" ? row.local_thumbnail_uri ?? undefined : undefined,
+    imageWidth:
+      type === "image" && typeof row.image_width === "number"
+        ? row.image_width
+        : undefined,
+    imageHeight:
+      type === "image" && typeof row.image_height === "number"
+        ? row.image_height
+        : undefined,
+    imageFileSize:
+      type === "image" && typeof row.image_file_size === "number"
+        ? row.image_file_size
+        : undefined,
+    imagePendingSourceUri:
+      type === "image" ? row.image_pending_source_uri ?? undefined : undefined,
     timestamp,
     createdAtMs: timestamp.getTime(),
-    status: row.status === "loading" ? "loading" : "sent",
+    status,
     replyTo: rowReplyTo(row),
     decryptionFailed: decryptionFailed || undefined,
   };
@@ -118,6 +175,17 @@ function inputParams(message: LocalMessageInput) {
     $replyToSenderName: message.replyTo?.senderName ?? null,
     $replyToType: message.replyTo?.type ?? null,
     $replyToPreview: message.replyTo?.preview ?? null,
+    $imageRemoteUrl: message.imageRemoteUrl ?? null,
+    $imageThumbnailUrl: message.imageThumbnailUrl ?? null,
+    $localImageUri: message.localImageUri ?? null,
+    $localThumbnailUri: message.localThumbnailUri ?? null,
+    $imageWidth: message.imageWidth ?? null,
+    $imageHeight: message.imageHeight ?? null,
+    $imageFileSize: message.imageFileSize ?? null,
+    $imagePendingSourceUri: message.imagePendingSourceUri ?? null,
+    $imageDownloadedAt: message.imageDownloadedAt
+      ? message.imageDownloadedAt.toISOString()
+      : null,
   };
 }
 
@@ -174,7 +242,16 @@ export const MessageRepository = {
           reply_to_sender_id,
           reply_to_sender_name,
           reply_to_type,
-          reply_to_preview
+          reply_to_preview,
+          image_remote_url,
+          image_thumbnail_url,
+          local_image_uri,
+          local_thumbnail_uri,
+          image_width,
+          image_height,
+          image_file_size,
+          image_pending_source_uri,
+          image_downloaded_at
         ) VALUES (
           $id,
           $conversationId,
@@ -191,7 +268,16 @@ export const MessageRepository = {
           $replyToSenderId,
           $replyToSenderName,
           $replyToType,
-          $replyToPreview
+          $replyToPreview,
+          $imageRemoteUrl,
+          $imageThumbnailUrl,
+          $localImageUri,
+          $localThumbnailUri,
+          $imageWidth,
+          $imageHeight,
+          $imageFileSize,
+          $imagePendingSourceUri,
+          $imageDownloadedAt
         )
         ON CONFLICT(id) DO UPDATE SET
           conversation_id = excluded.conversation_id,
@@ -229,6 +315,36 @@ export const MessageRepository = {
           reply_to_preview = COALESCE(
             excluded.reply_to_preview,
             messages.reply_to_preview
+          ),
+          image_remote_url = COALESCE(
+            excluded.image_remote_url,
+            messages.image_remote_url
+          ),
+          image_thumbnail_url = COALESCE(
+            excluded.image_thumbnail_url,
+            messages.image_thumbnail_url
+          ),
+          local_image_uri = COALESCE(
+            excluded.local_image_uri,
+            messages.local_image_uri
+          ),
+          local_thumbnail_uri = COALESCE(
+            excluded.local_thumbnail_uri,
+            messages.local_thumbnail_uri
+          ),
+          image_width = COALESCE(excluded.image_width, messages.image_width),
+          image_height = COALESCE(excluded.image_height, messages.image_height),
+          image_file_size = COALESCE(
+            excluded.image_file_size,
+            messages.image_file_size
+          ),
+          image_pending_source_uri = COALESCE(
+            excluded.image_pending_source_uri,
+            messages.image_pending_source_uri
+          ),
+          image_downloaded_at = COALESCE(
+            excluded.image_downloaded_at,
+            messages.image_downloaded_at
           )`,
         inputParams(message)
       );
@@ -298,6 +414,73 @@ export const MessageRepository = {
     }
   },
 
+  async updateLocalImageUri(
+    id: string,
+    variant: "full" | "thumb",
+    localUri: string
+  ) {
+    const column = variant === "thumb" ? "local_thumbnail_uri" : "local_image_uri";
+    let conversationId: string | undefined;
+    await withExclusiveWrite(async (tx) => {
+      const existing = await tx.getFirstAsync<Pick<MessageRow, "conversation_id">>(
+        "SELECT conversation_id FROM messages WHERE id = ?",
+        [id]
+      );
+      conversationId = existing?.conversation_id;
+      await tx.runAsync(
+        `UPDATE messages
+         SET ${column} = ?, image_downloaded_at = ?
+         WHERE id = ?`,
+        [localUri, new Date().toISOString(), id]
+      );
+    });
+    if (conversationId) emit(conversationId);
+  },
+
+  async updateImageRemoteUrls(
+    id: string,
+    urls: { remote: string; thumbnail: string }
+  ) {
+    let conversationId: string | undefined;
+    await withExclusiveWrite(async (tx) => {
+      const existing = await tx.getFirstAsync<Pick<MessageRow, "conversation_id">>(
+        "SELECT conversation_id FROM messages WHERE id = ?",
+        [id]
+      );
+      conversationId = existing?.conversation_id;
+      await tx.runAsync(
+        `UPDATE messages
+         SET image_remote_url = ?, image_thumbnail_url = ?
+         WHERE id = ?`,
+        [urls.remote, urls.thumbnail, id]
+      );
+    });
+    if (conversationId) emit(conversationId);
+  },
+
+  async getPendingImageMessages(): Promise<Message[]> {
+    const db = await getDatabase();
+    const rows = await db.getAllAsync<MessageRow>(
+      `SELECT *
+       FROM messages
+       WHERE status IN ('loading', 'failed')
+         AND type = 'image'
+       ORDER BY created_at ASC`
+    );
+    return rows.map(rowToMessage);
+  },
+
+  async getConversationIdsWithPendingImageMessages(): Promise<string[]> {
+    const db = await getDatabase();
+    const rows = await db.getAllAsync<Pick<MessageRow, "conversation_id">>(
+      `SELECT DISTINCT conversation_id
+       FROM messages
+       WHERE status IN ('loading', 'failed')
+         AND type = 'image'`
+    );
+    return rows.map((row) => row.conversation_id);
+  },
+
   async upsertFirestoreMessage(
     conversationId: string,
     id: string,
@@ -305,29 +488,45 @@ export const MessageRepository = {
     options: { notify?: boolean } = {}
   ) {
     const isAudio = data.audioUrl != null;
+    const isImage = !isAudio && data.imageUrl != null;
     const createdAt = data.createdAt ? data.createdAt.toDate() : new Date();
 
     let body: string | null;
+    let type: MessageType;
     if (isAudio) {
       body = data.audioUrl ?? null;
+      type = "audio";
+    } else if (isImage) {
+      body = null;
+      type = "image";
     } else if (data.ciphertext && data.iv) {
       body = await decryptIncomingMessage(conversationId, data);
+      type = "text";
     } else {
       body = data.text ?? null;
+      type = "text";
     }
 
-    await this.insertLocalMessage({
-      id,
-      conversationId,
-      senderId: data.senderId,
-      type: isAudio ? "audio" : "text",
-      body,
-      status: "sent",
-      createdAt,
-      syncedAt: new Date(),
-      audioDuration: isAudio ? data.audioDuration ?? null : null,
-      replyTo: data.replyTo ?? null,
-    }, options);
+    await this.insertLocalMessage(
+      {
+        id,
+        conversationId,
+        senderId: data.senderId,
+        type,
+        body,
+        status: "sent",
+        createdAt,
+        syncedAt: new Date(),
+        audioDuration: isAudio ? data.audioDuration ?? null : null,
+        imageRemoteUrl: isImage ? data.imageUrl ?? null : null,
+        imageThumbnailUrl: isImage ? data.thumbnailUrl ?? null : null,
+        imageWidth: isImage ? data.imageWidth ?? null : null,
+        imageHeight: isImage ? data.imageHeight ?? null : null,
+        imageFileSize: isImage ? data.imageFileSize ?? null : null,
+        replyTo: data.replyTo ?? null,
+      },
+      options
+    );
   },
 
   async syncWithFirestore(

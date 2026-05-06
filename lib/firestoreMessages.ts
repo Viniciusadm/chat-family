@@ -11,7 +11,8 @@ import {
 
 export type LastMessagePreview =
   | { type: "text"; ciphertext: string; iv: string }
-  | { type: "audio" };
+  | { type: "audio" }
+  | { type: "image" };
 
 export async function updateChatAfterOutgoingMessage(
   chatId: string,
@@ -102,6 +103,49 @@ export async function ensureAudioMessageInFirestore({
     text: null,
     audioUrl,
     audioDuration,
+    replyTo: replyTo ?? null,
+    createdAt: serverTimestamp(),
+  });
+}
+
+export async function ensureImageMessageInFirestore({
+  chatId,
+  messageId,
+  tenantId,
+  senderId,
+  imageUrl,
+  thumbnailUrl,
+  imageWidth,
+  imageHeight,
+  imageFileSize,
+  replyTo,
+}: {
+  chatId: string;
+  messageId: string;
+  tenantId: string;
+  senderId: string;
+  imageUrl: string;
+  thumbnailUrl: string;
+  imageWidth: number | null;
+  imageHeight: number | null;
+  imageFileSize: number | null;
+  replyTo?: MessageReplySnapshot | null;
+}) {
+  const messageRef = doc(db, "chats", chatId, "messages", messageId);
+  const existing = await getDoc(messageRef);
+  if (existing.exists()) return;
+
+  await setDoc(messageRef, {
+    tenantId,
+    senderId,
+    text: null,
+    audioUrl: null,
+    audioDuration: null,
+    imageUrl,
+    thumbnailUrl,
+    imageWidth,
+    imageHeight,
+    imageFileSize,
     replyTo: replyTo ?? null,
     createdAt: serverTimestamp(),
   });

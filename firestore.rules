@@ -174,7 +174,8 @@ service cloud.firestore {
         (
           request.resource.data.keys().hasAll(['ciphertext', 'iv', 'encVersion']) ||
           request.resource.data.keys().hasAny(['text']) ||
-          request.resource.data.keys().hasAny(['audioUrl'])
+          request.resource.data.keys().hasAny(['audioUrl']) ||
+          request.resource.data.keys().hasAny(['imageUrl'])
         );
       allow update: if false;
       allow delete: if request.auth != null &&

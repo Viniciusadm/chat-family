@@ -10,9 +10,13 @@ import {
   updateChatAfterOutgoingMessage,
 } from "@/lib/firestoreMessages";
 import { storage } from "@/lib/firebase";
+import { ImageCacheRepository } from "@/lib/ImageCacheRepository";
+import { ImageGalleryRepository } from "@/lib/ImageGalleryRepository";
+import { processImageForUpload } from "@/lib/ImageProcessor";
+import { uploadAndPersistImage } from "@/lib/imageUpload";
 import { MessageRepository } from "@/lib/MessageRepository";
 import { randomUuid } from "@/lib/randomUuid";
-import type { MessageReplySnapshot } from "@/types/chat";
+import type { Message, MessageReplySnapshot } from "@/types/chat";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { useState } from "react";
 
@@ -145,5 +149,111 @@ export function useSendMessage(chatId: string) {
     }
   };
 
-  return { sendText, sendAudio, isSending };
+  const sendImage = async (
+    source: { uri: string; width: number; height: number },
+    options?: { replyTo?: MessageReplySnapshot | null }
+  ) => {
+    if (!currentUser || !tenantId) return;
+    setIsSending(true);
+    const messageId = randomUuid();
+    const createdAt = new Date();
+
+    try {
+      const processed = await processImageForUpload(
+        source.uri,
+        source.width,
+        source.height
+      );
+
+      const localFullUri = await ImageCacheRepository.copyLocalSource({
+        chatId,
+        messageId,
+        sourceUri: processed.full.uri,
+        variant: "full",
+      });
+      const localThumbUri = await ImageCacheRepository.copyLocalSource({
+        chatId,
+        messageId,
+        sourceUri: processed.thumbnail.uri,
+        variant: "thumb",
+      });
+
+      await MessageRepository.insertLocalMessage({
+        id: messageId,
+        conversationId: chatId,
+        senderId: currentUser.id,
+        body: null,
+        type: "image",
+        status: "loading",
+        createdAt,
+        localImageUri: localFullUri,
+        localThumbnailUri: localThumbUri,
+        imageWidth: processed.full.width,
+        imageHeight: processed.full.height,
+        imageFileSize: processed.full.fileSize,
+        imagePendingSourceUri: localFullUri ?? processed.full.uri,
+        replyTo: options?.replyTo ?? null,
+      });
+
+      await ChatRepository.updateLastMessage(chatId, {
+        text: null,
+        type: "image",
+        timestamp: createdAt,
+      });
+
+      if (localFullUri) {
+        void ImageGalleryRepository.saveToGallery({
+          messageId,
+          fileUri: localFullUri,
+        });
+      }
+
+      if (!isOnline || !firebaseUser) return;
+
+      await uploadAndPersistImage({
+        chatId,
+        messageId,
+        tenantId,
+        senderId: currentUser.id,
+        fullUri: processed.full.uri,
+        thumbUri: processed.thumbnail.uri,
+        imageWidth: processed.full.width,
+        imageHeight: processed.full.height,
+        imageFileSize: processed.full.fileSize,
+        replyTo: options?.replyTo ?? null,
+      });
+    } catch {
+      await MessageRepository.updateStatus(messageId, "failed").catch(() => {});
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const retryImageMessage = async (message: Message) => {
+    if (!currentUser || !tenantId || !firebaseUser || !isOnline) return;
+    if (message.type !== "image") return;
+    const sourceUri = message.imagePendingSourceUri ?? message.imageLocalUri;
+    if (!sourceUri) return;
+    const thumbUri = message.imageThumbnailLocalUri ?? sourceUri;
+
+    await MessageRepository.updateStatus(message.id, "loading");
+    try {
+      await uploadAndPersistImage({
+        chatId,
+        messageId: message.id,
+        tenantId,
+        senderId: currentUser.id,
+        fullUri: sourceUri,
+        thumbUri,
+        imageWidth: message.imageWidth ?? 0,
+        imageHeight: message.imageHeight ?? 0,
+        imageFileSize: message.imageFileSize ?? 0,
+        replyTo: message.replyTo ?? null,
+      });
+    } catch {
+      await MessageRepository.updateStatus(message.id, "failed").catch(() => {});
+    }
+  };
+
+  return { sendText, sendAudio, sendImage, retryImageMessage, isSending };
 }

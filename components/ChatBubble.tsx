@@ -2,7 +2,7 @@ import { ReactionBubble } from "@/components/ReactionBubble";
 import type { Message, Reaction } from "@/types/chat";
 import { colors } from "@/theme/colors";
 import { MaterialIcons } from "@expo/vector-icons";
-import React, { useMemo, useRef } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import {
   Animated,
   PanResponder,
@@ -12,6 +12,8 @@ import {
   View,
 } from "react-native";
 import { AudioBubble } from "./AudioBubble";
+import { ImageBubble } from "./ImageBubble";
+import { ImageViewer } from "./ImageViewer";
 import { ProfileAvatar } from "./ProfileAvatar";
 import { QuotedReply } from "./QuotedReply";
 
@@ -35,6 +37,7 @@ interface ChatBubbleProps {
   onSenderPress?: () => void;
   onReply?: (message: Message) => void;
   onQuotedReplyPress?: () => void;
+  onRetryImage?: (message: Message) => void;
   replyAvailable?: boolean;
   highlighted?: boolean;
 }
@@ -46,7 +49,7 @@ function formatTime(date: Date) {
   });
 }
 
-export function ChatBubble({
+function ChatBubbleImpl({
   message,
   isSelf,
   isOnline,
@@ -66,6 +69,7 @@ export function ChatBubble({
   onSenderPress,
   onReply,
   onQuotedReplyPress,
+  onRetryImage,
   replyAvailable = true,
   highlighted = false,
 }: ChatBubbleProps) {
@@ -76,6 +80,14 @@ export function ChatBubble({
       : undefined;
   const audioUnavailableOffline =
     message.type === "audio" && !message.audioLocalUri && !isOnline;
+  const isImage = message.type === "image";
+  const fullImageUri = isImage
+    ? message.imageLocalUri ??
+      message.imageRemoteUrl ??
+      message.imageUrl ??
+      null
+    : null;
+  const [imageViewerOpen, setImageViewerOpen] = useState(false);
   const bubbleRef = useRef<View>(null);
   const swipeX = useRef(new Animated.Value(0)).current;
   const panResponder = useMemo(
@@ -139,6 +151,7 @@ export function ChatBubble({
           style={({ pressed }) => [
             styles.bubble,
             isSelf ? styles.bubbleSelf : styles.bubbleOther,
+            isImage ? styles.bubbleImage : null,
             highlighted ? styles.bubbleHighlighted : null,
             pressed ? styles.bubblePressed : null,
           ]}
@@ -160,7 +173,20 @@ export function ChatBubble({
               onPress={onQuotedReplyPress}
             />
           ) : null}
-          {message.type === "audio" && audioUnavailableOffline ? (
+          {isImage ? (
+            <ImageBubble
+              message={message}
+              isSelf={isSelf}
+              onPress={() => {
+                if (fullImageUri) setImageViewerOpen(true);
+              }}
+              onRetry={
+                message.status === "failed"
+                  ? () => onRetryImage?.(message)
+                  : undefined
+              }
+            />
+          ) : message.type === "audio" && audioUnavailableOffline ? (
             <Text
               style={[
                 styles.text,
@@ -237,9 +263,18 @@ export function ChatBubble({
           </View>
         ) : null}
       </Animated.View>
+      {isImage ? (
+        <ImageViewer
+          uri={fullImageUri}
+          visible={imageViewerOpen}
+          onClose={() => setImageViewerOpen(false)}
+        />
+      ) : null}
     </View>
   );
 }
+
+export const ChatBubble = React.memo(ChatBubbleImpl);
 
 const styles = StyleSheet.create({
   wrap: {
@@ -293,6 +328,10 @@ const styles = StyleSheet.create({
   bubbleOther: {
     backgroundColor: colors.bubbleOther,
     borderBottomLeftRadius: 6,
+  },
+  bubbleImage: {
+    paddingHorizontal: 4,
+    paddingVertical: 4,
   },
   bubblePressed: {
     opacity: 0.85,

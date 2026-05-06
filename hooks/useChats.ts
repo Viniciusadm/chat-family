@@ -3,7 +3,11 @@ import { useConnectivity } from "@/hooks/useConnectivity";
 import { ChatRepository } from "@/lib/ChatRepository";
 import { decryptIncomingMessage } from "@/lib/encryptedMessages";
 import { db } from "@/lib/firebase";
-import { syncChatHistories, syncPendingTextMessages } from "@/lib/offlineSync";
+import {
+  syncChatHistories,
+  syncPendingImageMessages,
+  syncPendingTextMessages,
+} from "@/lib/offlineSync";
 import type { Chat, ChatDoc } from "@/types/chat";
 import { collection, doc, onSnapshot } from "firebase/firestore";
 import { useCallback, useEffect, useState } from "react";
@@ -87,6 +91,7 @@ export function useChats(): { chats: Chat[]; loading: boolean } {
           setLoading(false);
           syncChatHistories(arr.map((chat) => chat.id), isOnline);
           void syncPendingTextMessages(currentUser, tenantId, isOnline);
+          void syncPendingImageMessages(currentUser, tenantId, isOnline);
         };
 
         for (const chatId of ids) {
