@@ -7,7 +7,10 @@ import { useAuth } from "@/context/AuthContext";
 import { useChats } from "@/hooks/useChats";
 import { useMemberProfiles } from "@/hooks/useMemberProfiles";
 import { useMessageSearch } from "@/hooks/useMessageSearch";
-import { getChatDisplayName } from "@/lib/chatDisplayName";
+import {
+  getChatDisplayName,
+  isOtherParticipantDeleted,
+} from "@/lib/chatDisplayName";
 import { useTheme } from "@/theme/ThemeContext";
 import { useThemedStyles } from "@/theme/useThemedStyles";
 import { Ionicons } from "@expo/vector-icons";
@@ -118,6 +121,22 @@ export default function ChatListScreen() {
         fontSize: 12,
         fontWeight: "700",
         color: t.primaryForeground,
+      },
+      deletedBadge: {
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 10,
+        backgroundColor: t.muted,
+      },
+      deletedBadgeText: {
+        fontSize: 11,
+        fontWeight: "600",
+        color: t.mutedForeground,
+        textTransform: "uppercase",
+        letterSpacing: 0.4,
+      },
+      rowDeleted: {
+        opacity: 0.7,
       },
       empty: {
         flex: 1,
@@ -296,6 +315,11 @@ export default function ChatListScreen() {
               currentUser?.id,
               memberProfiles
             );
+            const isDeleted = isOtherParticipantDeleted(
+              chat,
+              currentUser?.id,
+              memberProfiles
+            );
             const avatarPhotoUrl = chat.isGroup
               ? chat.photoUrl ?? undefined
               : otherProfile?.photoUrl ?? undefined;
@@ -309,6 +333,7 @@ export default function ChatListScreen() {
                 style={({ pressed }) => [
                   styles.row,
                   pressed && styles.rowPressed,
+                  isDeleted && styles.rowDeleted,
                 ]}
               >
                 <ProfileAvatar
@@ -322,6 +347,11 @@ export default function ChatListScreen() {
                     <Text style={styles.chatName} numberOfLines={1}>
                       {displayName}
                     </Text>
+                    {isDeleted ? (
+                      <View style={styles.deletedBadge}>
+                        <Text style={styles.deletedBadgeText}>Excluído</Text>
+                      </View>
+                    ) : null}
                     {chat.lastMessage && (
                       <Text style={styles.time}>
                         {formatTime(chat.lastMessage.timestamp)}

@@ -415,11 +415,13 @@ export function useAdminData() {
   const deleteChildMember = async (memberId: string, deleteMessages: boolean) => {
     if (!canMutate) throw new Error("Esta ação precisa de conexão.");
 
-    const directChats = chats.filter(
-      (c) => !c.isGroup && c.participants.includes(memberId),
-    );
-    for (const c of directChats) {
-      await deleteChat(c.id);
+    if (deleteMessages) {
+      const directChats = chats.filter(
+        (c) => !c.isGroup && c.participants.includes(memberId),
+      );
+      for (const c of directChats) {
+        await deleteChat(c.id);
+      }
     }
 
     const fn = httpsCallable(functions, "deleteChildMember");

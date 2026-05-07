@@ -16,7 +16,10 @@ import {
   useSendMessage,
 } from "@/hooks/useSendMessage";
 import * as Clipboard from "expo-clipboard";
-import { getChatDisplayName } from "@/lib/chatDisplayName";
+import {
+  getChatDisplayName,
+  isOtherParticipantDeleted,
+} from "@/lib/chatDisplayName";
 import { createReplySnapshot } from "@/lib/messageReply";
 import { useTheme } from "@/theme/ThemeContext";
 import { useThemedStyles } from "@/theme/useThemedStyles";
@@ -177,6 +180,23 @@ export default function ChatScreen() {
       jumpToLatestButtonPressed: {
         opacity: 0.85,
       },
+      readOnlyBanner: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 8,
+        paddingVertical: 14,
+        paddingHorizontal: 16,
+        backgroundColor: t.muted,
+        borderTopWidth: StyleSheet.hairlineWidth,
+        borderTopColor: t.border,
+      },
+      readOnlyBannerText: {
+        flexShrink: 1,
+        fontSize: 13,
+        color: t.mutedForeground,
+        textAlign: "center",
+      },
     })
   );
   const currentUserId = currentUser?.id;
@@ -191,6 +211,12 @@ export default function ChatScreen() {
   );
   const chat = chats.find((c) => c.id === chatId);
   const chatTitle = getChatDisplayName(chat, currentUserId, memberProfiles);
+  const isOtherDeleted = isOtherParticipantDeleted(
+    chat,
+    currentUserId,
+    memberProfiles
+  );
+  const headerTitle = isOtherDeleted ? `${chatTitle} · Excluído` : chatTitle;
   const participants = chat?.participants ?? [];
   const { readUpTo } = useChatReadReceipts(
     chatId ?? "",
@@ -587,13 +613,20 @@ export default function ChatScreen() {
   }, []);
 
   const handleRemoveOwnReaction = useCallback(() => {
+    if (isOtherDeleted) return;
     if (!reactionsDialogMessageId || !currentUserId) return;
     const msgReactions = reactions[reactionsDialogMessageId] ?? [];
     const own = msgReactions.find((r) => r.userId === currentUserId);
     if (own) {
       void reactToMessage(reactionsDialogMessageId, own.emoji);
     }
-  }, [reactionsDialogMessageId, currentUserId, reactions, reactToMessage]);
+  }, [
+    isOtherDeleted,
+    reactionsDialogMessageId,
+    currentUserId,
+    reactions,
+    reactToMessage,
+  ]);
 
   const memberNames = useMemo(() => {
     const names: Record<string, string> = {};
@@ -615,7 +648,7 @@ export default function ChatScreen() {
     <View style={{ flex: 1 }}>
       <KeyboardAvoidingView behavior="padding" style={styles.screen}>
       <AppHeader
-        title={chatTitle}
+        title={headerTitle}
         onBack={() => router.back()}
         leading={(() => {
           const otherId =
@@ -737,10 +770,14 @@ export default function ChatScreen() {
                 )}
                 reactions={item.message.reactions}
                 currentUserId={currentUserId}
-                onReactionPress={handleReactionPress}
-                onReactionChipPress={handleReactionChipPress(item.message.id)}
-                onReply={handleReplySelect}
-                onRetryImage={retryImageMessage}
+                onReactionPress={isOtherDeleted ? undefined : handleReactionPress}
+                onReactionChipPress={
+                  isOtherDeleted
+                    ? undefined
+                    : handleReactionChipPress(item.message.id)
+                }
+                onReply={isOtherDeleted ? undefined : handleReplySelect}
+                onRetryImage={isOtherDeleted ? undefined : retryImageMessage}
                 highlighted={highlightedMessageId === item.message.id}
                 replyAvailable={
                   !item.message.replyTo || messagesById.has(item.message.replyTo.id)
@@ -790,17 +827,30 @@ export default function ChatScreen() {
           </Pressable>
         ) : null}
       </View>
-      <ChatInput
-        ref={inputRef}
-        chatId={chatId}
-        replyTo={replyTo}
-        onCancelReply={clearReply}
-        onSend={jumpToLatestMessages}
-        editingMessage={editingMessage}
-        onCancelEdit={clearEdit}
-      />
+      {isOtherDeleted ? (
+        <View style={styles.readOnlyBanner}>
+          <Ionicons
+            name="lock-closed-outline"
+            size={16}
+            color={theme.mutedForeground}
+          />
+          <Text style={styles.readOnlyBannerText}>
+            Este usuário foi excluído. As mensagens são apenas leitura.
+          </Text>
+        </View>
+      ) : (
+        <ChatInput
+          ref={inputRef}
+          chatId={chatId}
+          replyTo={replyTo}
+          onCancelReply={clearReply}
+          onSend={jumpToLatestMessages}
+          editingMessage={editingMessage}
+          onCancelEdit={clearEdit}
+        />
+      )}
     </KeyboardAvoidingView>
-      {reactionTarget ? (() => {
+      {reactionTarget && !isOtherDeleted ? (() => {
         const targetMessage = messagesById.get(reactionTarget.messageId);
         const isOwn =
           targetMessage != null && targetMessage.senderId === currentUserId;

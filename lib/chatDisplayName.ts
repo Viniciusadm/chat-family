@@ -18,3 +18,15 @@ export function getChatDisplayName(
 
   return memberProfiles[otherParticipantId]?.name ?? chat.name;
 }
+
+export function isOtherParticipantDeleted(
+  chat: Chat | null | undefined,
+  currentUserId: string | undefined,
+  memberProfiles: Record<string, NamedProfile>
+): boolean {
+  if (!chat || chat.isGroup || !currentUserId) return false;
+  if (chat.participants.length !== 2) return false;
+  const otherId = chat.participants.find((id) => id !== currentUserId);
+  if (!otherId) return false;
+  return !(otherId in memberProfiles);
+}
