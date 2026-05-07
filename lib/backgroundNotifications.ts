@@ -19,6 +19,8 @@ type BackgroundData = {
   senderId?: unknown;
   tenantId?: unknown;
   type?: unknown;
+  ciphertext?: unknown;
+  iv?: unknown;
 };
 
 function readPayload(input: unknown): BackgroundData {
@@ -60,6 +62,13 @@ async function scheduleFallback(chatId: string, senderName: string) {
   });
 }
 
+const MAX_BODY_LENGTH = 120;
+
+function truncateBody(text: string): string {
+  if (text.length <= MAX_BODY_LENGTH) return text;
+  return text.slice(0, MAX_BODY_LENGTH) + "...";
+}
+
 TaskManager.defineTask(BACKGROUND_NOTIFICATION_TASK, async ({ data, error }) => {
   if (error) return;
   try {
@@ -70,32 +79,55 @@ TaskManager.defineTask(BACKGROUND_NOTIFICATION_TASK, async ({ data, error }) => 
     if (!chatId || !messageId) return;
 
     const senderName = await resolveSenderName(senderId);
+    const payloadType = typeof payload.type === "string" ? payload.type : "";
 
-    const msgSnap = await getDoc(doc(db, "chats", chatId, "messages", messageId));
-    if (!msgSnap.exists()) {
-      await scheduleFallback(chatId, senderName);
-      return;
-    }
-    const msg = msgSnap.data() as {
-      ciphertext?: string;
-      iv?: string;
-      text?: string | null;
-      audioUrl?: string | null;
-    };
-    if (msg.audioUrl) {
+    if (payloadType === "audio") {
       await scheduleNotification(senderName, "Áudio", chatId);
       return;
     }
-    const plaintext = await decryptIncomingMessage(chatId, {
-      ciphertext: msg.ciphertext ?? null,
-      iv: msg.iv ?? null,
-      text: msg.text ?? null,
-    });
-    if (plaintext == null) {
+
+    let plaintext: string | null = null;
+
+    const payloadCiphertext = typeof payload.ciphertext === "string" ? payload.ciphertext : null;
+    const payloadIv = typeof payload.iv === "string" ? payload.iv : null;
+
+    if (payloadCiphertext && payloadIv) {
+      plaintext = await decryptIncomingMessage(chatId, {
+        ciphertext: payloadCiphertext,
+        iv: payloadIv,
+        text: null,
+      });
+    }
+
+    if (plaintext === null) {
+      const msgSnap = await getDoc(doc(db, "chats", chatId, "messages", messageId));
+      if (!msgSnap.exists()) {
+        await scheduleFallback(chatId, senderName);
+        return;
+      }
+      const msg = msgSnap.data() as {
+        ciphertext?: string;
+        iv?: string;
+        text?: string | null;
+        audioUrl?: string | null;
+      };
+      if (msg.audioUrl) {
+        await scheduleNotification(senderName, "Áudio", chatId);
+        return;
+      }
+      plaintext = await decryptIncomingMessage(chatId, {
+        ciphertext: msg.ciphertext ?? null,
+        iv: msg.iv ?? null,
+        text: msg.text ?? null,
+      });
+    }
+
+    if (plaintext === null) {
       await scheduleFallback(chatId, senderName);
       return;
     }
-    await scheduleNotification(senderName, plaintext, chatId);
+
+    await scheduleNotification(senderName, truncateBody(plaintext), chatId);
   } catch {
     // Silent — without a notification block, no user-visible failure.
   }

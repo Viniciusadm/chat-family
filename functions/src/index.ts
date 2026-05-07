@@ -584,6 +584,7 @@ export const onChatMessageCreated = onDocumentCreated(
       senderId?: string;
       audioUrl?: string | null;
       ciphertext?: string | null;
+      iv?: string | null;
     };
 
     const tenantId = msg.tenantId;
@@ -614,6 +615,15 @@ export const onChatMessageCreated = onDocumentCreated(
 
     const messageType: "text" | "audio" = msg.audioUrl ? "audio" : "text";
 
+    const ciphertext = typeof msg.ciphertext === "string" ? msg.ciphertext : null;
+    const iv = typeof msg.iv === "string" ? msg.iv : null;
+    const MAX_PAYLOAD_CIPHERTEXT_BYTES = 3072;
+    const includeCiphertext =
+      messageType === "text" &&
+      ciphertext !== null &&
+      iv !== null &&
+      ciphertext.length + iv.length <= MAX_PAYLOAD_CIPHERTEXT_BYTES;
+
     type PushRequest = {
       to: string[];
       data: {
@@ -622,6 +632,8 @@ export const onChatMessageCreated = onDocumentCreated(
         messageId: string;
         senderId: string;
         type: "text" | "audio";
+        ciphertext?: string;
+        iv?: string;
       };
       channelId: string;
       priority: "high";
@@ -660,6 +672,7 @@ export const onChatMessageCreated = onDocumentCreated(
             messageId,
             senderId: senderMemberId,
             type: messageType,
+            ...(includeCiphertext ? { ciphertext, iv } : {}),
           },
           channelId: "default",
           priority: "high",
