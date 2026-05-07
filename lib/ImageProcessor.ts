@@ -1,14 +1,14 @@
 import * as FileSystem from "expo-file-system/legacy";
 import * as ImageManipulator from "expo-image-manipulator";
 
-const MAX_FULL_DIMENSION = 1600;
-const MAX_THUMB_DIMENSION = 320;
-const FULL_QUALITY = 0.82;
-const THUMB_QUALITY = 0.7;
+const MAX_DIMENSION = 1600;
+const QUALITY = 0.82;
 
 export interface ProcessedImage {
-  full: { uri: string; width: number; height: number; fileSize: number };
-  thumbnail: { uri: string; width: number; height: number; fileSize: number };
+  uri: string;
+  width: number;
+  height: number;
+  fileSize: number;
 }
 
 function pickResize(width: number, height: number, max: number) {
@@ -27,41 +27,19 @@ export async function processImageForUpload(
   sourceWidth: number,
   sourceHeight: number
 ): Promise<ProcessedImage> {
-  const fullResize = pickResize(sourceWidth, sourceHeight, MAX_FULL_DIMENSION);
-  const fullResult = await ImageManipulator.manipulateAsync(
+  const resize = pickResize(sourceWidth, sourceHeight, MAX_DIMENSION);
+  const result = await ImageManipulator.manipulateAsync(
     sourceUri,
-    fullResize ? [{ resize: fullResize }] : [],
-    { compress: FULL_QUALITY, format: ImageManipulator.SaveFormat.JPEG }
+    resize ? [{ resize }] : [],
+    { compress: QUALITY, format: ImageManipulator.SaveFormat.JPEG }
   );
 
-  const thumbResize = pickResize(
-    fullResult.width,
-    fullResult.height,
-    MAX_THUMB_DIMENSION
-  );
-  const thumbResult = await ImageManipulator.manipulateAsync(
-    fullResult.uri,
-    thumbResize ? [{ resize: thumbResize }] : [],
-    { compress: THUMB_QUALITY, format: ImageManipulator.SaveFormat.JPEG }
-  );
-
-  const [fullSize, thumbSize] = await Promise.all([
-    fileSize(fullResult.uri),
-    fileSize(thumbResult.uri),
-  ]);
+  const size = await fileSize(result.uri);
 
   return {
-    full: {
-      uri: fullResult.uri,
-      width: fullResult.width,
-      height: fullResult.height,
-      fileSize: fullSize,
-    },
-    thumbnail: {
-      uri: thumbResult.uri,
-      width: thumbResult.width,
-      height: thumbResult.height,
-      fileSize: thumbSize,
-    },
+    uri: result.uri,
+    width: result.width,
+    height: result.height,
+    fileSize: size,
   };
 }

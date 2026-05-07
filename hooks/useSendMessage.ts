@@ -170,17 +170,10 @@ export function useSendMessage(chatId: string) {
         source.height
       );
 
-      const localFullUri = await ImageCacheRepository.copyLocalSource({
+      const localUri = await ImageCacheRepository.copyLocalSource({
         chatId,
         messageId,
-        sourceUri: processed.full.uri,
-        variant: "full",
-      });
-      const localThumbUri = await ImageCacheRepository.copyLocalSource({
-        chatId,
-        messageId,
-        sourceUri: processed.thumbnail.uri,
-        variant: "thumb",
+        sourceUri: processed.uri,
       });
 
       await MessageRepository.insertLocalMessage({
@@ -191,12 +184,11 @@ export function useSendMessage(chatId: string) {
         type: "image",
         status: "loading",
         createdAt,
-        localImageUri: localFullUri,
-        localThumbnailUri: localThumbUri,
-        imageWidth: processed.full.width,
-        imageHeight: processed.full.height,
-        imageFileSize: processed.full.fileSize,
-        imagePendingSourceUri: localFullUri ?? processed.full.uri,
+        localImageUri: localUri,
+        imageWidth: processed.width,
+        imageHeight: processed.height,
+        imageFileSize: processed.fileSize,
+        imagePendingSourceUri: localUri ?? processed.uri,
         replyTo: options?.replyTo ?? null,
       });
 
@@ -206,10 +198,10 @@ export function useSendMessage(chatId: string) {
         timestamp: createdAt,
       });
 
-      if (localFullUri) {
+      if (localUri) {
         void ImageGalleryRepository.saveToGallery({
           messageId,
-          fileUri: localFullUri,
+          fileUri: localUri,
         });
       }
 
@@ -220,11 +212,10 @@ export function useSendMessage(chatId: string) {
         messageId,
         tenantId,
         senderId: currentUser.id,
-        fullUri: processed.full.uri,
-        thumbUri: processed.thumbnail.uri,
-        imageWidth: processed.full.width,
-        imageHeight: processed.full.height,
-        imageFileSize: processed.full.fileSize,
+        imageUri: processed.uri,
+        imageWidth: processed.width,
+        imageHeight: processed.height,
+        imageFileSize: processed.fileSize,
         replyTo: options?.replyTo ?? null,
       });
     } catch {
@@ -239,7 +230,6 @@ export function useSendMessage(chatId: string) {
     if (message.type !== "image") return;
     const sourceUri = message.imagePendingSourceUri ?? message.imageLocalUri;
     if (!sourceUri) return;
-    const thumbUri = message.imageThumbnailLocalUri ?? sourceUri;
 
     await MessageRepository.updateStatus(message.id, "loading");
     try {
@@ -248,8 +238,7 @@ export function useSendMessage(chatId: string) {
         messageId: message.id,
         tenantId,
         senderId: currentUser.id,
-        fullUri: sourceUri,
-        thumbUri,
+        imageUri: sourceUri,
         imageWidth: message.imageWidth ?? 0,
         imageHeight: message.imageHeight ?? 0,
         imageFileSize: message.imageFileSize ?? 0,

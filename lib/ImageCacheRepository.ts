@@ -34,13 +34,11 @@ async function getUsableFileUri(
 async function expectedFileUri(
   chatId: string,
   messageId: string,
-  remoteUrl: string,
-  variant: "full" | "thumb"
+  remoteUrl: string
 ): Promise<string | null> {
   const dir = await ensureChatDir(chatId);
   if (!dir) return null;
-  const suffix = variant === "thumb" ? "_thumb" : "";
-  return `${dir}/${encodeURIComponent(messageId)}${suffix}.${extensionFromUrl(remoteUrl)}`;
+  return `${dir}/${encodeURIComponent(messageId)}.${extensionFromUrl(remoteUrl)}`;
 }
 
 export const ImageCacheRepository = {
@@ -48,14 +46,12 @@ export const ImageCacheRepository = {
     chatId,
     messageId,
     sourceUri,
-    variant,
   }: {
     chatId: string;
     messageId: string;
     sourceUri: string;
-    variant: "full" | "thumb";
   }): Promise<string | null> {
-    const dest = await expectedFileUri(chatId, messageId, sourceUri, variant);
+    const dest = await expectedFileUri(chatId, messageId, sourceUri);
     if (!dest) return null;
     await FileSystem.copyAsync({ from: sourceUri, to: dest }).catch(() => {});
     return getUsableFileUri(dest);
@@ -66,14 +62,12 @@ export const ImageCacheRepository = {
     messageId,
     remoteUrl,
     localUri,
-    variant,
     download,
   }: {
     chatId: string;
     messageId: string;
     remoteUrl: string;
     localUri?: string | null;
-    variant: "full" | "thumb";
     download: boolean;
   }): Promise<string | null> {
     if (!remoteUrl || !FileSystem.documentDirectory) return null;
@@ -81,41 +75,39 @@ export const ImageCacheRepository = {
     const usableLocalUri = await getUsableFileUri(localUri);
     if (usableLocalUri) return usableLocalUri;
 
-    const fileUri = await expectedFileUri(chatId, messageId, remoteUrl, variant);
+    const fileUri = await expectedFileUri(chatId, messageId, remoteUrl);
     const usableExpected = await getUsableFileUri(fileUri);
     if (usableExpected) {
-      await MessageRepository.updateLocalImageUri(messageId, variant, usableExpected);
+      await MessageRepository.updateLocalImageUri(messageId, usableExpected);
       return usableExpected;
     }
 
     if (!download) return null;
-    return this.downloadMessageImage({ chatId, messageId, remoteUrl, variant });
+    return this.downloadMessageImage({ chatId, messageId, remoteUrl });
   },
 
   async downloadMessageImage({
     chatId,
     messageId,
     remoteUrl,
-    variant,
   }: {
     chatId: string;
     messageId: string;
     remoteUrl: string;
-    variant: "full" | "thumb";
   }): Promise<string | null> {
     if (!remoteUrl || !FileSystem.documentDirectory) return null;
 
-    const downloadKey = `${chatId}:${messageId}:${variant}`;
+    const downloadKey = `${chatId}:${messageId}`;
     if (inFlightDownloads.has(downloadKey)) return null;
     inFlightDownloads.add(downloadKey);
 
     try {
-      const fileUri = await expectedFileUri(chatId, messageId, remoteUrl, variant);
+      const fileUri = await expectedFileUri(chatId, messageId, remoteUrl);
       if (!fileUri) return null;
 
       const existing = await getUsableFileUri(fileUri);
       if (existing) {
-        await MessageRepository.updateLocalImageUri(messageId, variant, existing);
+        await MessageRepository.updateLocalImageUri(messageId, existing);
         return existing;
       }
 
@@ -125,7 +117,7 @@ export const ImageCacheRepository = {
       const info = await FileSystem.getInfoAsync(result.uri);
       if (!info.exists || info.size <= 0) return null;
 
-      await MessageRepository.updateLocalImageUri(messageId, variant, result.uri);
+      await MessageRepository.updateLocalImageUri(messageId, result.uri);
       return result.uri;
     } catch {
       return null;

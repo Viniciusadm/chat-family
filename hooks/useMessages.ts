@@ -83,20 +83,8 @@ export function useMessages(chatId: string): { messages: Message[]; loading: boo
           messageId: message.id,
           remoteUrl: message.imageRemoteUrl,
           localUri: message.imageLocalUri,
-          variant: "full",
           download,
         });
-
-        if (message.imageThumbnailUrl) {
-          await ImageCacheRepository.ensureMessageImageCache({
-            chatId: activeChatId,
-            messageId: message.id,
-            remoteUrl: message.imageThumbnailUrl,
-            localUri: message.imageThumbnailLocalUri,
-            variant: "thumb",
-            download,
-          });
-        }
 
         if (!active()) return;
         if (cachedFull && !message.imageLocalUri) {
@@ -179,15 +167,6 @@ export function useMessages(chatId: string): { messages: Message[]; loading: boo
                 chatId,
                 messageId: d.id,
                 remoteUrl: data.imageUrl,
-                variant: "full",
-              });
-            }
-            if (data.thumbnailUrl) {
-              void ImageCacheRepository.downloadMessageImage({
-                chatId,
-                messageId: d.id,
-                remoteUrl: data.thumbnailUrl,
-                variant: "thumb",
               });
             }
           }

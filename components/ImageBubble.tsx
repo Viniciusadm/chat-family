@@ -68,8 +68,6 @@ function ImageBubbleImpl({ message, onPress, onLongPress, onRetry }: ImageBubble
   const height = MAX_BUBBLE_WIDTH / aspect;
 
   const source =
-    message.imageThumbnailLocalUri ??
-    message.imageThumbnailUrl ??
     message.imageLocalUri ??
     message.imageRemoteUrl ??
     message.imageUrl;

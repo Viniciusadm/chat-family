@@ -12,36 +12,22 @@ export async function uploadAndPersistImage(args: {
   messageId: string;
   tenantId: string;
   senderId: string;
-  fullUri: string;
-  thumbUri: string;
+  imageUri: string;
   imageWidth: number;
   imageHeight: number;
   imageFileSize: number;
   replyTo: MessageReplySnapshot | null;
 }) {
-  const fullRef = ref(
+  const imageRef = ref(
     storage,
     `images/${args.tenantId}/${args.chatId}/${args.messageId}.jpg`
   );
-  const thumbRef = ref(
-    storage,
-    `images/${args.tenantId}/${args.chatId}/${args.messageId}_thumb.jpg`
-  );
 
-  const [fullBlob, thumbBlob] = await Promise.all([
-    fetch(args.fullUri).then((r) => r.blob()),
-    fetch(args.thumbUri).then((r) => r.blob()),
-  ]);
+  const blob = await fetch(args.imageUri).then((r) => r.blob());
 
-  await Promise.all([
-    uploadBytes(fullRef, fullBlob, { contentType: "image/jpeg" }),
-    uploadBytes(thumbRef, thumbBlob, { contentType: "image/jpeg" }),
-  ]);
+  await uploadBytes(imageRef, blob, { contentType: "image/jpeg" });
 
-  const [imageUrl, thumbnailUrl] = await Promise.all([
-    getDownloadURL(fullRef),
-    getDownloadURL(thumbRef),
-  ]);
+  const imageUrl = await getDownloadURL(imageRef);
 
   await ensureImageMessageInFirestore({
     chatId: args.chatId,
@@ -49,7 +35,6 @@ export async function uploadAndPersistImage(args: {
     tenantId: args.tenantId,
     senderId: args.senderId,
     imageUrl,
-    thumbnailUrl,
     imageWidth: args.imageWidth || null,
     imageHeight: args.imageHeight || null,
     imageFileSize: args.imageFileSize || null,
@@ -58,7 +43,6 @@ export async function uploadAndPersistImage(args: {
 
   await MessageRepository.updateImageRemoteUrls(args.messageId, {
     remote: imageUrl,
-    thumbnail: thumbnailUrl,
   });
   await MessageRepository.updateStatus(args.messageId, "sent");
   await updateChatAfterOutgoingMessage(args.chatId, args.senderId, {

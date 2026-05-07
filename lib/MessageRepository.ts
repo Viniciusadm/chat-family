@@ -28,9 +28,7 @@ type MessageRow = {
   reply_to_type: string | null;
   reply_to_preview: string | null;
   image_remote_url: string | null;
-  image_thumbnail_url: string | null;
   local_image_uri: string | null;
-  local_thumbnail_uri: string | null;
   image_width: number | null;
   image_height: number | null;
   image_file_size: number | null;
@@ -65,9 +63,7 @@ export type LocalMessageInput = {
   audioDuration?: number | null;
   replyTo?: MessageReplySnapshot | null;
   imageRemoteUrl?: string | null;
-  imageThumbnailUrl?: string | null;
   localImageUri?: string | null;
-  localThumbnailUri?: string | null;
   imageWidth?: number | null;
   imageHeight?: number | null;
   imageFileSize?: number | null;
@@ -150,10 +146,6 @@ function rowToMessage(row: MessageRow): Message {
       type === "image" ? row.image_remote_url ?? undefined : undefined,
     imageLocalUri:
       type === "image" ? row.local_image_uri ?? undefined : undefined,
-    imageThumbnailUrl:
-      type === "image" ? row.image_thumbnail_url ?? undefined : undefined,
-    imageThumbnailLocalUri:
-      type === "image" ? row.local_thumbnail_uri ?? undefined : undefined,
     imageWidth:
       type === "image" && typeof row.image_width === "number"
         ? row.image_width
@@ -202,9 +194,7 @@ function inputParams(message: LocalMessageInput) {
     $replyToType: message.replyTo?.type ?? null,
     $replyToPreview: message.replyTo?.preview ?? null,
     $imageRemoteUrl: message.imageRemoteUrl ?? null,
-    $imageThumbnailUrl: message.imageThumbnailUrl ?? null,
     $localImageUri: message.localImageUri ?? null,
-    $localThumbnailUri: message.localThumbnailUri ?? null,
     $imageWidth: message.imageWidth ?? null,
     $imageHeight: message.imageHeight ?? null,
     $imageFileSize: message.imageFileSize ?? null,
@@ -318,9 +308,7 @@ export const MessageRepository = {
           reply_to_type,
           reply_to_preview,
           image_remote_url,
-          image_thumbnail_url,
           local_image_uri,
-          local_thumbnail_uri,
           image_width,
           image_height,
           image_file_size,
@@ -348,9 +336,7 @@ export const MessageRepository = {
           $replyToType,
           $replyToPreview,
           $imageRemoteUrl,
-          $imageThumbnailUrl,
           $localImageUri,
-          $localThumbnailUri,
           $imageWidth,
           $imageHeight,
           $imageFileSize,
@@ -421,17 +407,9 @@ export const MessageRepository = {
             excluded.image_remote_url,
             messages.image_remote_url
           ),
-          image_thumbnail_url = COALESCE(
-            excluded.image_thumbnail_url,
-            messages.image_thumbnail_url
-          ),
           local_image_uri = COALESCE(
             excluded.local_image_uri,
             messages.local_image_uri
-          ),
-          local_thumbnail_uri = COALESCE(
-            excluded.local_thumbnail_uri,
-            messages.local_thumbnail_uri
           ),
           image_width = COALESCE(excluded.image_width, messages.image_width),
           image_height = COALESCE(excluded.image_height, messages.image_height),
@@ -517,10 +495,8 @@ export const MessageRepository = {
 
   async updateLocalImageUri(
     id: string,
-    variant: "full" | "thumb",
     localUri: string
   ) {
-    const column = variant === "thumb" ? "local_thumbnail_uri" : "local_image_uri";
     let conversationId: string | undefined;
     await withExclusiveWrite(async (tx) => {
       const existing = await tx.getFirstAsync<Pick<MessageRow, "conversation_id">>(
@@ -530,7 +506,7 @@ export const MessageRepository = {
       conversationId = existing?.conversation_id;
       await tx.runAsync(
         `UPDATE messages
-         SET ${column} = ?, image_downloaded_at = ?
+         SET local_image_uri = ?, image_downloaded_at = ?
          WHERE id = ?`,
         [localUri, new Date().toISOString(), id]
       );
@@ -540,7 +516,7 @@ export const MessageRepository = {
 
   async updateImageRemoteUrls(
     id: string,
-    urls: { remote: string; thumbnail: string }
+    urls: { remote: string }
   ) {
     let conversationId: string | undefined;
     await withExclusiveWrite(async (tx) => {
@@ -551,9 +527,9 @@ export const MessageRepository = {
       conversationId = existing?.conversation_id;
       await tx.runAsync(
         `UPDATE messages
-         SET image_remote_url = ?, image_thumbnail_url = ?
+         SET image_remote_url = ?
          WHERE id = ?`,
-        [urls.remote, urls.thumbnail, id]
+        [urls.remote, id]
       );
     });
     if (conversationId) emit(conversationId);
@@ -623,7 +599,6 @@ export const MessageRepository = {
         syncedAt: new Date(),
         audioDuration: isAudio ? data.audioDuration ?? null : null,
         imageRemoteUrl: isImage ? data.imageUrl ?? null : null,
-        imageThumbnailUrl: isImage ? data.thumbnailUrl ?? null : null,
         imageWidth: isImage ? data.imageWidth ?? null : null,
         imageHeight: isImage ? data.imageHeight ?? null : null,
         imageFileSize: isImage ? data.imageFileSize ?? null : null,

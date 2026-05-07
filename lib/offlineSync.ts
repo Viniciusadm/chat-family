@@ -81,15 +81,6 @@ export async function syncChatHistory(chatId: string, isOnline = true) {
             chatId,
             messageId: messageDoc.id,
             remoteUrl: data.imageUrl,
-            variant: "full",
-          });
-        }
-        if (data.thumbnailUrl) {
-          void ImageCacheRepository.downloadMessageImage({
-            chatId,
-            messageId: messageDoc.id,
-            remoteUrl: data.thumbnailUrl,
-            variant: "thumb",
           });
         }
       }
@@ -180,7 +171,6 @@ export async function syncPendingImageMessages(
       const sourceUri =
         message.imagePendingSourceUri ?? message.imageLocalUri ?? null;
       if (!sourceUri) continue;
-      const thumbUri = message.imageThumbnailLocalUri ?? sourceUri;
 
       try {
         if (message.status === "failed") {
@@ -191,8 +181,7 @@ export async function syncPendingImageMessages(
           messageId: message.id,
           tenantId,
           senderId: currentUser.id,
-          fullUri: sourceUri,
-          thumbUri,
+          imageUri: sourceUri,
           imageWidth: message.imageWidth ?? 0,
           imageHeight: message.imageHeight ?? 0,
           imageFileSize: message.imageFileSize ?? 0,

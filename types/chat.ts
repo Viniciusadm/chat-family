@@ -187,8 +187,6 @@ export interface Message {
   imageUrl?: string;
   imageRemoteUrl?: string;
   imageLocalUri?: string;
-  imageThumbnailUrl?: string;
-  imageThumbnailLocalUri?: string;
   imageWidth?: number;
   imageHeight?: number;
   imageFileSize?: number;

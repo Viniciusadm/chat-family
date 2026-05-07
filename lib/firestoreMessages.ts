@@ -152,7 +152,6 @@ export async function ensureImageMessageInFirestore({
   tenantId,
   senderId,
   imageUrl,
-  thumbnailUrl,
   imageWidth,
   imageHeight,
   imageFileSize,
@@ -163,7 +162,6 @@ export async function ensureImageMessageInFirestore({
   tenantId: string;
   senderId: string;
   imageUrl: string;
-  thumbnailUrl: string;
   imageWidth: number | null;
   imageHeight: number | null;
   imageFileSize: number | null;
@@ -180,7 +178,6 @@ export async function ensureImageMessageInFirestore({
     audioUrl: null,
     audioDuration: null,
     imageUrl,
-    thumbnailUrl,
     imageWidth,
     imageHeight,
     imageFileSize,

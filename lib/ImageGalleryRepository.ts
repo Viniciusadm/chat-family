@@ -1,6 +1,6 @@
 import * as MediaLibrary from "expo-media-library";
 
-const ALBUM_NAME = "Chat Family";
+const ALBUM_NAME = "ChatFamily";
 const inFlightSaves = new Set<string>();
 
 async function ensurePermission(): Promise<boolean> {
@@ -17,8 +17,8 @@ async function ensurePermission(): Promise<boolean> {
 
 export const ImageGalleryRepository = {
   /**
-   * Salva o arquivo local no álbum público "Chat Family".
-   * Android: /Pictures/Chat Family/. iOS: álbum "Chat Family" no app Fotos.
+   * Salva o arquivo local no álbum público "ChatFamily".
+   * Android: /Pictures/ChatFamily/. iOS: álbum "ChatFamily" no app Fotos.
    * Permissão negada ou erro: retorna silenciosamente.
    */
   async saveToGallery({
