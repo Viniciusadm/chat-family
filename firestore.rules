@@ -153,8 +153,17 @@ service cloud.firestore {
         request.resource.data.keys().hasAll([
           'tenantId', 'participants', 'isGroup', 'name',
           'createdAt', 'updatedAt'
-        ]);
-      allow update, delete: if request.auth != null &&
+        ]) &&
+        (request.resource.data.isGroup == false ||
+          (request.resource.data.name is string &&
+            request.resource.data.name.size() > 0));
+      allow update: if request.auth != null &&
+        resource.data.tenantId == userTenant() &&
+        (memberId() in resource.data.participants || isTenantAdult()) &&
+        (request.resource.data.isGroup == false ||
+          (request.resource.data.name is string &&
+            request.resource.data.name.size() > 0));
+      allow delete: if request.auth != null &&
         resource.data.tenantId == userTenant() &&
         (memberId() in resource.data.participants || isTenantAdult());
     }

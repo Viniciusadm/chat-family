@@ -27,10 +27,14 @@ export function useChats(): { chats: Chat[]; loading: boolean } {
       }
       const localChats = await ChatRepository.getLocalChats(tenantId);
       if (!active()) return;
-      setChats(localChats);
+      const memberId = currentUser?.id;
+      const filtered = memberId
+        ? localChats.filter((c) => c.participants.includes(memberId))
+        : localChats;
+      setChats(filtered);
       setLoading(false);
     },
-    [tenantId]
+    [tenantId, currentUser?.id]
   );
 
   useEffect(() => {
@@ -101,6 +105,12 @@ export function useChats(): { chats: Chat[]; loading: boolean } {
                   return;
                 }
                 const data = snap.data() as ChatDoc;
+                if (!data.participants?.includes(memberId)) {
+                  await ChatRepository.deleteChat(chatId);
+                  if (!active) return;
+                  emit();
+                  return;
+                }
                 const chat: Chat = {
                   id: snap.id,
                   tenantId: data.tenantId,

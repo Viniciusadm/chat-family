@@ -352,11 +352,15 @@ export function useAdminData() {
     if (participantIds.length < 3) {
       throw new Error("Grupos precisam de pelo menos 3 participantes.");
     }
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      throw new Error("Informe um nome para o grupo.");
+    }
     const chatRef = await addDoc(collection(db, "chats"), {
       tenantId: effectiveTenantId,
       participants: participantIds,
       isGroup: true,
-      name,
+      name: trimmedName,
       photoUrl: null,
       photoPath: null,
       lastMessageText: null,
@@ -383,8 +387,12 @@ export function useAdminData() {
     if (participantIds.length < 3) {
       throw new Error("Grupos precisam de pelo menos 3 participantes.");
     }
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      throw new Error("Informe um nome para o grupo.");
+    }
     await updateDoc(doc(db, "chats", chatId), {
-      name,
+      name: trimmedName,
       participants: participantIds,
       isGroup: true,
       updatedAt: serverTimestamp(),

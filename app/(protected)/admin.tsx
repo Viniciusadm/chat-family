@@ -418,20 +418,12 @@ export default function AdminScreen() {
     );
   };
 
-  const defaultChatName = (participantIds: string[]) => {
-    if (participantIds.length === 2) return "";
-
-    return participantIds
-      .map((id) => members.find((m) => m.id === id)?.name)
-      .filter(Boolean)
-      .join(", ");
-  };
-
   const handleCreateChat = async () => {
     if (selectedParticipants.length < 3 || creatingChat) return;
+    const name = chatName.trim();
+    if (!name) return;
     setCreatingChat(true);
     try {
-      const name = chatName.trim() || defaultChatName(selectedParticipants);
       await createChat(name, selectedParticipants);
       setChatName("");
       setSelectedParticipants([]);
@@ -449,7 +441,8 @@ export default function AdminScreen() {
 
   const handleUpdateChat = async () => {
     if (!editingChatId || editChatParticipants.length < 3) return;
-    const name = editChatName.trim() || defaultChatName(editChatParticipants);
+    const name = editChatName.trim();
+    if (!name) return;
     await updateChat(editingChatId, name, editChatParticipants);
     setEditingChatId(null);
   };
@@ -859,7 +852,7 @@ export default function AdminScreen() {
             <Text style={styles.modalTitle}>Criar conversa</Text>
             <TextInput
               style={styles.input}
-              placeholder="Nome do grupo (opcional)"
+              placeholder="Nome do grupo"
               placeholderTextColor={theme.inputPlaceholder}
               value={chatName}
               onChangeText={setChatName}
@@ -903,11 +896,17 @@ export default function AdminScreen() {
               </Pressable>
               <Pressable
                 onPress={() => void handleCreateChat()}
-                disabled={selectedParticipants.length < 3 || creatingChat}
+                disabled={
+                  selectedParticipants.length < 3 ||
+                  creatingChat ||
+                  !chatName.trim()
+                }
                 style={[
                   styles.modalPrimary,
                   styles.modalPrimaryRow,
-                  (selectedParticipants.length < 3 || creatingChat) &&
+                  (selectedParticipants.length < 3 ||
+                    creatingChat ||
+                    !chatName.trim()) &&
                     styles.btnDisabled,
                 ]}
               >
@@ -993,7 +992,7 @@ export default function AdminScreen() {
             })()}
             <TextInput
               style={styles.input}
-              placeholder="Nome do grupo (opcional)"
+              placeholder="Nome do grupo"
               placeholderTextColor={theme.inputPlaceholder}
               value={editChatName}
               onChangeText={setEditChatName}
@@ -1034,10 +1033,13 @@ export default function AdminScreen() {
               </Pressable>
               <Pressable
                 onPress={() => void handleUpdateChat()}
-                disabled={editChatParticipants.length < 3}
+                disabled={
+                  editChatParticipants.length < 3 || !editChatName.trim()
+                }
                 style={[
                   styles.modalPrimary,
-                  editChatParticipants.length < 3 && styles.btnDisabled,
+                  (editChatParticipants.length < 3 || !editChatName.trim()) &&
+                    styles.btnDisabled,
                 ]}
               >
                 <Text style={styles.primaryText}>Salvar</Text>

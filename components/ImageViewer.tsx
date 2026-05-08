@@ -181,6 +181,12 @@ export function ImageViewer({ uri, visible, onClose }: ImageViewerProps) {
         justifyContent: "center",
         backgroundColor: t.overlayLight,
       },
+      imageWrap: {
+        width: "100%",
+        height: "100%",
+        alignItems: "center",
+        justifyContent: "center",
+      },
       image: {
         width: "100%",
         height: "82%",
@@ -205,13 +211,16 @@ export function ImageViewer({ uri, visible, onClose }: ImageViewerProps) {
         {uri ? (
           <Animated.View
             {...panResponder.panHandlers}
-            style={{
-              transform: [
-                { translateX },
-                { translateY },
-                { scale },
-              ],
-            }}
+            style={[
+              styles.imageWrap,
+              {
+                transform: [
+                  { translateX },
+                  { translateY },
+                  { scale },
+                ],
+              },
+            ]}
           >
             <Image
               source={{ uri }}
