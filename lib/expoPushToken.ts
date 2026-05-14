@@ -15,9 +15,10 @@ export async function fetchExpoPushToken(): Promise<string | null> {
     return null;
   }
   if (Platform.OS === "android") {
-    await Notifications.setNotificationChannelAsync("default", {
-      name: "default",
-      importance: Notifications.AndroidImportance.DEFAULT,
+    await Notifications.setNotificationChannelAsync("messages-v2", {
+      name: "Mensagens",
+      importance: Notifications.AndroidImportance.HIGH,
+      groupId: "messages",
     });
   }
   const { status: existing } = await Notifications.getPermissionsAsync();

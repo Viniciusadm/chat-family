@@ -1,4 +1,8 @@
 import * as Notifications from "expo-notifications";
+import { Platform } from "react-native";
+
+const ANDROID_TRIGGER =
+  Platform.OS === "android" ? ({ channelId: "messages-v2" } as const) : null;
 
 export async function showCryptoSuccessNotification(): Promise<void> {
   try {
@@ -7,7 +11,7 @@ export async function showCryptoSuccessNotification(): Promise<void> {
         title: "Senha configurada",
         body: "Suas chaves estão protegidas e salvas com backup.",
       },
-      trigger: null,
+      trigger: ANDROID_TRIGGER,
     });
   } catch {
     // Notificações são best-effort; falha silenciosa é intencional.
@@ -21,7 +25,7 @@ export async function showCryptoErrorNotification(reason: string): Promise<void>
         title: "Erro ao configurar senha",
         body: reason,
       },
-      trigger: null,
+      trigger: ANDROID_TRIGGER,
     });
   } catch {
     // Notificações são best-effort; falha silenciosa é intencional.

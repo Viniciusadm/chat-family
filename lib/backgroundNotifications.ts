@@ -44,10 +44,13 @@ async function resolveSenderName(memberId: string): Promise<string> {
   }
 }
 
+const ANDROID_TRIGGER =
+  Platform.OS === "android" ? ({ channelId: "messages-v2" } as const) : null;
+
 async function scheduleNotification(title: string, body: string, chatId: string) {
   await Notifications.scheduleNotificationAsync({
     content: { title, body, data: { chatId } },
-    trigger: null,
+    trigger: ANDROID_TRIGGER,
   });
 }
 
@@ -58,8 +61,22 @@ async function scheduleFallback(chatId: string, senderName: string) {
       body: "Nova mensagem",
       data: { chatId },
     },
-    trigger: null,
+    trigger: ANDROID_TRIGGER,
   });
+}
+
+async function scheduleDebug(label: string) {
+  try {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: "[debug] bg-task",
+        body: label,
+      },
+      trigger: ANDROID_TRIGGER,
+    });
+  } catch {
+    // best-effort
+  }
 }
 
 const MAX_BODY_LENGTH = 120;
@@ -70,19 +87,30 @@ function truncateBody(text: string): string {
 }
 
 TaskManager.defineTask(BACKGROUND_NOTIFICATION_TASK, async ({ data, error }) => {
-  if (error) return;
+  if (error) {
+    await scheduleDebug(`taskError=${String(error)}`);
+    return;
+  }
+  const trace: string[] = [];
   try {
     const payload = readPayload(data);
     const chatId = typeof payload.chatId === "string" ? payload.chatId : "";
     const messageId = typeof payload.messageId === "string" ? payload.messageId : "";
     const senderId = typeof payload.senderId === "string" ? payload.senderId : "";
-    if (!chatId || !messageId) return;
+    trace.push(`chat=${chatId ? "y" : "n"}`);
+    trace.push(`msg=${messageId ? "y" : "n"}`);
+    if (!chatId || !messageId) {
+      await scheduleDebug(trace.join(" "));
+      return;
+    }
 
     const senderName = await resolveSenderName(senderId);
     const payloadType = typeof payload.type === "string" ? payload.type : "";
+    trace.push(`type=${payloadType || "text"}`);
 
     if (payloadType === "audio") {
       await scheduleNotification(senderName, "Áudio", chatId);
+      await scheduleDebug(trace.join(" ") + " path=audio");
       return;
     }
 
@@ -90,6 +118,7 @@ TaskManager.defineTask(BACKGROUND_NOTIFICATION_TASK, async ({ data, error }) => 
 
     const payloadCiphertext = typeof payload.ciphertext === "string" ? payload.ciphertext : null;
     const payloadIv = typeof payload.iv === "string" ? payload.iv : null;
+    trace.push(`payloadCt=${payloadCiphertext ? "y" : "n"}`);
 
     if (payloadCiphertext && payloadIv) {
       plaintext = await decryptIncomingMessage(chatId, {
@@ -97,12 +126,15 @@ TaskManager.defineTask(BACKGROUND_NOTIFICATION_TASK, async ({ data, error }) => 
         iv: payloadIv,
         text: null,
       });
+      trace.push(`pt1=${plaintext === null ? "null" : `len${plaintext.length}`}`);
     }
 
     if (plaintext === null) {
       const msgSnap = await getDoc(doc(db, "chats", chatId, "messages", messageId));
       if (!msgSnap.exists()) {
+        trace.push("snap=missing");
         await scheduleFallback(chatId, senderName);
+        await scheduleDebug(trace.join(" "));
         return;
       }
       const msg = msgSnap.data() as {
@@ -113,6 +145,7 @@ TaskManager.defineTask(BACKGROUND_NOTIFICATION_TASK, async ({ data, error }) => 
       };
       if (msg.audioUrl) {
         await scheduleNotification(senderName, "Áudio", chatId);
+        await scheduleDebug(trace.join(" ") + " path=audioFs");
         return;
       }
       plaintext = await decryptIncomingMessage(chatId, {
@@ -120,16 +153,19 @@ TaskManager.defineTask(BACKGROUND_NOTIFICATION_TASK, async ({ data, error }) => 
         iv: msg.iv ?? null,
         text: msg.text ?? null,
       });
+      trace.push(`pt2=${plaintext === null ? "null" : `len${plaintext.length}`}`);
     }
 
-    if (plaintext === null) {
+    if (plaintext === null || plaintext.trim().length === 0) {
       await scheduleFallback(chatId, senderName);
+      await scheduleDebug(trace.join(" ") + " path=fallback");
       return;
     }
 
     await scheduleNotification(senderName, truncateBody(plaintext), chatId);
-  } catch {
-    // Silent — without a notification block, no user-visible failure.
+    await scheduleDebug(trace.join(" ") + " path=ok");
+  } catch (e) {
+    await scheduleDebug(trace.join(" ") + ` throw=${e instanceof Error ? e.message : String(e)}`);
   }
 });
 

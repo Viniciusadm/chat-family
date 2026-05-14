@@ -674,7 +674,7 @@ export const onChatMessageCreated = onDocumentCreated(
             type: messageType,
             ...(includeCiphertext ? { ciphertext, iv } : {}),
           },
-          channelId: "default",
+          channelId: "messages-v2",
           priority: "high",
           _contentAvailable: true,
         });
