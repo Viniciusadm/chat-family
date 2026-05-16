@@ -39,7 +39,7 @@ function unreadBadgeLabel(count: number) {
 export default function ChatListScreen() {
   const router = useRouter();
   const { chats, loading } = useChats();
-  const { currentUser, firebaseUser } = useAuth();
+  const { currentUser } = useAuth();
   const memberProfiles = useMemberProfiles();
   const search = useMessageSearch();
   const chatById = useMemo(
@@ -190,9 +190,7 @@ export default function ChatListScreen() {
       },
     })
   );
-  const canAccessAdmin =
-    currentUser?.role === "adult" &&
-    (firebaseUser == null || !firebaseUser.isAnonymous);
+  const canAccessAdmin = currentUser?.role === "adult";
 
   return (
     <ScreenContainer style={styles.screen} edges={["bottom"]}>

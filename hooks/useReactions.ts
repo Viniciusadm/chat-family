@@ -1,18 +1,9 @@
 import { useAuth } from "@/context/AuthContext";
 import { useConnectivity } from "@/hooks/useConnectivity";
-import { db } from "@/lib/firebase";
-import {
-  ensureReactionInFirestore,
-  removeReactionFromFirestore,
-} from "@/lib/firestoreReactions";
 import { ReactionRepository } from "@/lib/ReactionRepository";
-import type { Reaction, ReactionDoc } from "@/types/chat";
-import {
-  collection,
-  onSnapshot,
-  orderBy,
-  query,
-} from "firebase/firestore";
+import { listReactions, removeReaction, upsertReaction } from "@/src/api/chats";
+import { realtimeClient } from "@/src/api/realtime";
+import type { Reaction } from "@/types/chat";
 import { useCallback, useEffect, useState } from "react";
 
 type ReactionAction =
@@ -20,10 +11,9 @@ type ReactionAction =
   | { type: "remove"; messageId: string; userId: string };
 
 export function useReactions(chatId: string) {
-  const { currentUser, firebaseUser } = useAuth();
+  const { currentUser } = useAuth();
   const { isOnline } = useConnectivity();
   const [reactions, setReactions] = useState<Record<string, Reaction[]>>({});
-
   const currentUserId = currentUser?.id;
 
   const loadLocalReactions = useCallback(
@@ -35,77 +25,60 @@ export function useReactions(chatId: string) {
     []
   );
 
+  const refreshRemoteReactions = useCallback(
+    async (activeChatId: string, active: () => boolean) => {
+      if (!isOnline) return;
+      const rows = await listReactions(activeChatId);
+      for (const row of rows) {
+        await ReactionRepository.upsertRemoteReaction(
+          row.message_id,
+          row.member_id,
+          row.emoji,
+          activeChatId
+        );
+      }
+      await loadLocalReactions(activeChatId, active);
+    },
+    [isOnline, loadLocalReactions]
+  );
+
   const executeReaction = useCallback(
     async (action: ReactionAction) => {
       if (!currentUserId) return;
-
       const { messageId, userId } = action;
-
       if (action.type === "add") {
-        await ReactionRepository.saveReaction(
-          messageId,
-          userId,
-          action.emoji,
-          "loading",
-          chatId
-        );
-
-        if (isOnline && firebaseUser) {
+        await ReactionRepository.saveReaction(messageId, userId, action.emoji, "loading", chatId);
+        if (isOnline) {
           try {
-            await ensureReactionInFirestore({
-              chatId,
-              messageId,
-              userId,
-              emoji: action.emoji,
-            });
+            await upsertReaction(chatId, messageId, action.emoji);
             await ReactionRepository.updateStatus(messageId, userId, "sent");
           } catch {
             await ReactionRepository.updateStatus(messageId, userId, "loading");
           }
         }
       } else {
-        await ReactionRepository.removeReaction(
-          messageId,
-          userId,
-          chatId
-        );
-
-        if (isOnline && firebaseUser) {
-          try {
-            await removeReactionFromFirestore({ chatId, messageId, userId });
-          } catch {
-            // Silently fail; local is already removed
-          }
+        await ReactionRepository.removeReaction(messageId, userId, chatId);
+        if (isOnline) {
+          await removeReaction(chatId, messageId).catch(() => {});
         }
       }
     },
-    [chatId, currentUserId, firebaseUser, isOnline]
+    [chatId, currentUserId, isOnline]
   );
 
   const reactToMessage = useCallback(
     async (messageId: string, emoji: string) => {
       if (!currentUserId) return;
-
       const messageReactions = reactions[messageId] ?? [];
-      const existing = messageReactions.find(
-        (r) => r.userId === currentUserId
-      );
-
+      const existing = messageReactions.find((r) => r.userId === currentUserId);
       if (existing?.emoji === emoji) {
         await executeReaction({ type: "remove", messageId, userId: currentUserId });
         return;
       }
-
       if (existing) {
         await executeReaction({ type: "remove", messageId, userId: currentUserId });
       }
-
-      await executeReaction({
-        type: "add",
-        messageId,
-        userId: currentUserId,
-        emoji,
-      });
+      await executeReaction({ type: "add", messageId, userId: currentUserId, emoji });
     },
     [currentUserId, reactions, executeReaction]
   );
@@ -115,61 +88,24 @@ export function useReactions(chatId: string) {
       setReactions({});
       return;
     }
-
     let active = true;
-    let unsubFirestore: (() => void) | undefined;
-    let unsubLocal: (() => void) | undefined;
-
     const isActive = () => active;
-
-    void (async () => {
-      await loadLocalReactions(chatId, isActive);
-      if (!active) return;
-
-      unsubLocal = ReactionRepository.subscribe(chatId, () => {
-        void loadLocalReactions(chatId, isActive);
-      });
-
-      if (!firebaseUser || !isOnline) return;
-
-      const q = query(
-        collection(db, "chats", chatId, "reactions"),
-        orderBy("updatedAt", "asc")
-      );
-
-      unsubFirestore = onSnapshot(
-        q,
-        (snap) => {
-          void (async () => {
-            for (const d of snap.docs) {
-              const data = d.data() as ReactionDoc;
-              await ReactionRepository.upsertFirestoreReaction(
-                data.messageId,
-                data.userId,
-                data.emoji,
-                chatId
-              );
-            }
-
-            if (snap.docChanges().length > 0) {
-              await loadLocalReactions(chatId, isActive);
-            }
-          })();
-        },
-        () => {
-          if (active) {
-            void loadLocalReactions(chatId, isActive);
-          }
-        }
-      );
-    })();
-
+    void loadLocalReactions(chatId, isActive);
+    void refreshRemoteReactions(chatId, isActive);
+    const unsubLocal = ReactionRepository.subscribe(chatId, () => {
+      void loadLocalReactions(chatId, isActive);
+    });
+    const unsubRealtime = realtimeClient.subscribe((event) => {
+      if (event.chat_id === chatId && event.type.startsWith("reaction.")) {
+        void refreshRemoteReactions(chatId, isActive);
+      }
+    });
     return () => {
       active = false;
-      unsubLocal?.();
-      unsubFirestore?.();
+      unsubLocal();
+      unsubRealtime();
     };
-  }, [chatId, firebaseUser, isOnline, loadLocalReactions]);
+  }, [chatId, loadLocalReactions, refreshRemoteReactions]);
 
   return { reactions, reactToMessage };
 }

@@ -1,9 +1,9 @@
 import { useAuth } from "@/context/AuthContext";
 import { useConnectivity } from "@/hooks/useConnectivity";
 import { AdminRepository } from "@/lib/AdminRepository";
-import { db } from "@/lib/firebase";
-import type { AppMember, MemberDoc } from "@/types/chat";
-import { collection, onSnapshot, query, where } from "firebase/firestore";
+import { listMembers } from "@/src/api/members";
+import { realtimeClient } from "@/src/api/realtime";
+import type { AppMember } from "@/types/chat";
 import { useCallback, useEffect, useState } from "react";
 
 export type MemberProfile = {
@@ -28,7 +28,7 @@ function membersToProfiles(members: AppMember[]): Record<string, MemberProfile> 
 }
 
 export function useMemberProfiles() {
-  const { tenantId, currentUser, firebaseUser } = useAuth();
+  const { tenantId, currentUser } = useAuth();
   const { isOnline } = useConnectivity();
   const [profiles, setProfiles] = useState<Record<string, MemberProfile>>({});
   const effectiveTenantId = tenantId ?? currentUser?.tenantId ?? null;
@@ -74,48 +74,31 @@ export function useMemberProfiles() {
       void loadLocalProfiles(() => active);
     });
 
-    if (!isOnline || !firebaseUser) {
-      return () => {
-        active = false;
-        unsubLocal();
-      };
-    }
-
-    const q = query(
-      collection(db, "members"),
-      where("tenantId", "==", effectiveTenantId)
-    );
-
-    const unsubRemote = onSnapshot(
-      q,
-      (snap) => {
-        const members = snap.docs.map((d): AppMember => {
-          const data = d.data() as MemberDoc;
-          return {
-            id: d.id,
-            tenantId: data.tenantId,
-            name: data.name,
-            role: data.role,
-            loginCode: data.loginCode,
-            photoUrl: data.photoUrl ?? null,
-            photoPath: data.photoPath ?? null,
-          };
-        });
-        void AdminRepository.replaceMembers(effectiveTenantId, members);
-      }
-    );
+    const refreshRemote = async () => {
+      if (!isOnline) return;
+      const rows = await listMembers();
+      const members = rows.map((data): AppMember => ({
+        id: data.id,
+        tenantId: effectiveTenantId,
+        name: data.name,
+        role: data.role,
+        loginCode: data.login_code ?? null,
+        photoUrl: data.photo_url ?? null,
+        photoPath: data.photo_path ?? null,
+      }));
+      await AdminRepository.replaceMembers(effectiveTenantId, members);
+    };
+    void refreshRemote();
+    const unsubRemote = realtimeClient.subscribe((event) => {
+      if (event.type === "member.updated") void refreshRemote();
+    });
 
     return () => {
       active = false;
       unsubLocal();
       unsubRemote();
     };
-  }, [
-    effectiveTenantId,
-    firebaseUser,
-    isOnline,
-    loadLocalProfiles,
-  ]);
+  }, [effectiveTenantId, isOnline, loadLocalProfiles]);
 
   return profiles;
 }

@@ -35,7 +35,7 @@ function formatTime(date: Date) {
 
 export default function AdminScreen() {
   const router = useRouter();
-  const { currentUser, firebaseUser, logout } = useAuth();
+  const { currentUser, logout } = useAuth();
   const { theme } = useTheme();
   const styles = useThemedStyles((t) =>
     StyleSheet.create({
@@ -366,7 +366,7 @@ export default function AdminScreen() {
     setDeletingChild(false);
   }, [canMutate]);
 
-  if (currentUser?.role !== "adult" || firebaseUser?.isAnonymous) {
+  if (currentUser?.role !== "adult") {
     return <Redirect href="/" />;
   }
 

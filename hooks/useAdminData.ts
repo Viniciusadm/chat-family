@@ -2,80 +2,62 @@ import { useAuth } from "@/context/AuthContext";
 import { useConnectivity } from "@/hooks/useConnectivity";
 import { AdminRepository } from "@/lib/AdminRepository";
 import { ChatRepository } from "@/lib/ChatRepository";
+import { ensureConversationKey } from "@/lib/conversationKeys";
+import { distributeAllOwnedKeysToDevice, distributeConversationKey } from "@/lib/keyDistribution";
+import { uploadChatPhoto } from "@/src/api/media";
 import {
-  ensureConversationKey,
-} from "@/lib/conversationKeys";
+  approveDevice as approveDeviceApi,
+  deleteDevice,
+  listPendingDevices,
+} from "@/src/api/devices";
 import {
-  distributeAllOwnedKeysToDevice,
-  distributeConversationKey,
-} from "@/lib/keyDistribution";
-import { db, functions, storage } from "@/lib/firebase";
-import { clearChatPhoto, setChatPhoto, uploadGroupPhoto } from "@/lib/groupPhoto";
-import { httpsCallable } from "firebase/functions";
-import { randomUuid } from "@/lib/randomUuid";
-import type {
-  AppMember,
-  Chat,
-  ChatDoc,
-  Device,
-  DeviceDoc,
-  MemberDoc,
-  MessageDoc,
-  UserDoc,
-  UserRole,
-} from "@/types/chat";
+  createChat as createChatApi,
+  clearChatPhoto,
+  deleteChat as deleteChatApi,
+  listChats,
+  updateChat as updateChatApi,
+  type ChatDto,
+} from "@/src/api/chats";
 import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  getDoc,
-  getDocs,
-  onSnapshot,
-  query,
-  serverTimestamp,
-  setDoc,
-  updateDoc,
-  where,
-  writeBatch,
-} from "firebase/firestore";
-import { deleteObject, ref } from "firebase/storage";
+  createMember,
+  deleteMember,
+  listMembers,
+} from "@/src/api/members";
+import { realtimeClient } from "@/src/api/realtime";
+import { timestampFromIso } from "@/lib/localTimestamp";
+import type { AppMember, Chat, Device, UserRole } from "@/types/chat";
 import { useCallback, useEffect, useState } from "react";
 
-function newLoginCode(): string {
-  return randomUuid().replace(/-/g, "").slice(0, 10).toUpperCase();
-}
-
-async function readTenantIdForUid(uid: string): Promise<string | null> {
-  const userSnap = await getDoc(doc(db, "users", uid));
-  if (!userSnap.exists()) return null;
-  const t = (userSnap.data() as UserDoc).tenantId;
-  return typeof t === "string" && t.length > 0 ? t : null;
+function chatFromDto(data: ChatDto, currentMemberId: string): Chat {
+  return {
+    id: data.id,
+    tenantId: data.tenant_id,
+    participants: data.participant_ids ?? [],
+    isGroup: data.is_group,
+    name: data.name,
+    photoUrl: data.photo_url ?? null,
+    photoPath: data.photo_path ?? null,
+    unreadCount: data.unread_by?.[currentMemberId] ?? 0,
+    readUpTo: Object.fromEntries(
+      Object.entries(data.read_up_to ?? {})
+        .map(([memberId, value]) => [memberId, timestampFromIso(value)])
+        .filter((entry): entry is [string, NonNullable<Chat["readUpTo"]>[string]] => entry[1] != null)
+    ),
+    lastMessage: data.last_message_at && data.last_message_type
+      ? {
+          text: null,
+          type: data.last_message_type,
+          timestamp: new Date(data.last_message_at),
+        }
+      : undefined,
+  };
 }
 
 export function useAdminData() {
-  const { tenantId, currentUser, firebaseUser } = useAuth();
+  const { tenantId, currentUser } = useAuth();
   const { isOnline } = useConnectivity();
-  const [resolvedTenantId, setResolvedTenantId] = useState<string | null>(null);
-
-  useEffect(() => {
-    const uid = firebaseUser?.uid;
-    if (!uid || !isOnline) {
-      setResolvedTenantId(null);
-      return;
-    }
-    setResolvedTenantId(null);
-    let cancelled = false;
-    readTenantIdForUid(uid).then((t) => {
-      if (!cancelled) setResolvedTenantId(t);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [firebaseUser?.uid, isOnline]);
-
-  const effectiveTenantId = tenantId ?? currentUser?.tenantId ?? resolvedTenantId ?? null;
-  const canMutate = isOnline && firebaseUser != null && !firebaseUser.isAnonymous;
+  const effectiveTenantId = tenantId ?? currentUser?.tenantId ?? null;
+  const canMutate = isOnline && currentUser?.role === "adult";
   const [members, setMembers] = useState<AppMember[]>([]);
   const [sessionUserNames, setSessionUserNames] = useState<Record<string, string>>({});
   const [pendingDevices, setPendingDevices] = useState<Device[]>([]);
@@ -92,7 +74,6 @@ export function useAdminData() {
         setLoading(false);
         return;
       }
-
       const [localMembers, localSessionUserNames, localPendingDevices, localChats] =
         await Promise.all([
           AdminRepository.getMembers(effectiveTenantId),
@@ -100,7 +81,6 @@ export function useAdminData() {
           AdminRepository.getPendingDevices(effectiveTenantId),
           ChatRepository.getLocalChats(effectiveTenantId),
         ]);
-
       if (!active()) return;
       setMembers(localMembers);
       setSessionUserNames(localSessionUserNames);
@@ -111,348 +91,170 @@ export function useAdminData() {
     [effectiveTenantId]
   );
 
+  const refreshRemote = useCallback(
+    async (active: () => boolean) => {
+      if (!effectiveTenantId || !currentUser || !isOnline) return;
+      const [memberRows, deviceRows, chatRows] = await Promise.all([
+        listMembers(),
+        listPendingDevices().catch(() => []),
+        listChats(),
+      ]);
+      const nextMembers = memberRows.map((m): AppMember => ({
+        id: m.id,
+        tenantId: effectiveTenantId,
+        name: m.name,
+        role: m.role,
+        loginCode: m.login_code ?? null,
+        photoUrl: m.photo_url ?? null,
+        photoPath: m.photo_path ?? null,
+      }));
+      const nextDevices = deviceRows.map((d): Device => ({
+        id: d.id,
+        tenantId: effectiveTenantId,
+        userId: d.user_id,
+        memberId: d.member_id ?? null,
+        approved: false,
+        pushToken: "",
+        publicKey: d.public_key ?? null,
+        createdAt: d.created_at ? new Date(d.created_at) : new Date(),
+      }));
+      const nextChats = chatRows.map((chat) => chatFromDto(chat, currentUser.id));
+      await Promise.all([
+        AdminRepository.replaceMembers(effectiveTenantId, nextMembers),
+        AdminRepository.replaceSessionUserNames(
+          effectiveTenantId,
+          Object.fromEntries(nextMembers.map((m) => [m.id, m.name])),
+        ),
+        AdminRepository.replacePendingDevices(effectiveTenantId, nextDevices),
+        ChatRepository.replaceTenantChats(effectiveTenantId, nextChats),
+      ]);
+      await loadLocalData(active);
+    },
+    [currentUser, effectiveTenantId, isOnline, loadLocalData]
+  );
+
   useEffect(() => {
     if (!effectiveTenantId) {
-      setMembers([]);
-      setSessionUserNames({});
-      setPendingDevices([]);
-      setChats([]);
       setLoading(false);
       return;
     }
-
     let active = true;
-    const unsubs: (() => void)[] = [];
     setLoading(true);
     void loadLocalData(() => active);
-
-    const emitLocal = () => {
-      void loadLocalData(() => active);
-    };
-    unsubs.push(AdminRepository.subscribe(emitLocal));
-    unsubs.push(ChatRepository.subscribe(emitLocal));
-
-    if (!isOnline || !firebaseUser) {
-      return () => {
-        active = false;
-        unsubs.forEach((unsub) => unsub());
-      };
-    }
-
-    const unsubMembers = onSnapshot(
-      query(collection(db, "members"), where("tenantId", "==", effectiveTenantId)),
-      (snap) => {
-        const nextMembers = snap.docs.map((d) => {
-            const data = d.data() as MemberDoc;
-            return {
-              id: d.id,
-              tenantId: data.tenantId,
-              name: data.name,
-              role: data.role,
-              loginCode: data.loginCode,
-              photoUrl: data.photoUrl ?? null,
-              photoPath: data.photoPath ?? null,
-            };
-          });
-        void AdminRepository.replaceMembers(effectiveTenantId, nextMembers);
-      },
-      () => setLoading(false)
-    );
-
-    const unsubSessionUsers = onSnapshot(
-      query(collection(db, "users"), where("tenantId", "==", effectiveTenantId)),
-      (snap) => {
-        const map: Record<string, string> = {};
-        snap.docs.forEach((d) => {
-          const data = d.data() as UserDoc;
-          map[d.id] = data.name;
-        });
-        void AdminRepository.replaceSessionUserNames(effectiveTenantId, map);
-      },
-      () => setLoading(false)
-    );
-
-    const unsubDevices = onSnapshot(
-      query(
-        collection(db, "devices"),
-        where("tenantId", "==", effectiveTenantId),
-        where("approved", "==", false)
-      ),
-      (snap) => {
-        const nextDevices = snap.docs.map((d) => {
-            const data = d.data() as DeviceDoc;
-            return {
-              id: d.id,
-              tenantId: data.tenantId,
-              userId: data.userId,
-              approved: data.approved,
-              pushToken: data.pushToken,
-              createdAt: data.createdAt ? data.createdAt.toDate() : new Date(),
-            };
-          });
-        void AdminRepository.replacePendingDevices(effectiveTenantId, nextDevices);
-      },
-      () => setLoading(false)
-    );
-
-    const unsubChats = onSnapshot(
-      query(collection(db, "chats"), where("tenantId", "==", effectiveTenantId)),
-      (snap) => {
-        const nextChats = snap.docs.map((d) => {
-            const data = d.data() as ChatDoc;
-            const chat: Chat = {
-              id: d.id,
-              tenantId: data.tenantId,
-              participants: data.participants,
-              isGroup: data.isGroup,
-              name: data.name,
-              photoUrl: data.photoUrl ?? null,
-              photoPath: data.photoPath ?? null,
-              unreadCount: 0,
-            };
-            if (data.lastMessageAt) {
-              chat.lastMessage = {
-                text: data.lastMessageText,
-                type: data.lastMessageType,
-                timestamp: data.lastMessageAt.toDate(),
-              };
-            }
-            return chat;
-          });
-        void ChatRepository.replaceTenantChats(effectiveTenantId, nextChats);
-      },
-      () => setLoading(false)
-    );
-    unsubs.push(unsubMembers, unsubSessionUsers, unsubDevices, unsubChats);
-
+    void refreshRemote(() => active);
+    const unsubAdmin = AdminRepository.subscribe(() => void loadLocalData(() => active));
+    const unsubChats = ChatRepository.subscribe(() => void loadLocalData(() => active));
+    const unsubRealtime = realtimeClient.subscribe((event) => {
+      if (
+        event.type.startsWith("member.") ||
+        event.type.startsWith("device.") ||
+        event.type.startsWith("chat.")
+      ) {
+        void refreshRemote(() => active);
+      }
+    });
     return () => {
       active = false;
-      unsubs.forEach((unsub) => unsub());
+      unsubAdmin();
+      unsubChats();
+      unsubRealtime();
     };
-  }, [effectiveTenantId, firebaseUser, isOnline, loadLocalData]);
+  }, [effectiveTenantId, loadLocalData, refreshRemote]);
 
   const addUser = async (name: string, role: UserRole) => {
-    if (!canMutate) throw new Error("Esta ação precisa de conexão.");
-    const uid = firebaseUser?.uid;
-    let tid = effectiveTenantId;
-    if (!tid && uid) {
-      tid = await readTenantIdForUid(uid);
-    }
-    if (!tid) {
-      throw new Error("Não foi possível identificar a família. Saia e entre de novo.");
-    }
-    const loginCode = newLoginCode();
-    const memberRef = await addDoc(collection(db, "members"), {
-      tenantId: tid,
-      name,
-      role,
-      loginCode,
-      photoUrl: null,
-      photoPath: null,
-      createdAt: serverTimestamp(),
-    });
-    const newMemberId = memberRef.id;
-
-    const otherMembers = members.filter((m) => m.id !== newMemberId);
-    const newChatRefs = otherMembers.map((other) => ({
-      ref: doc(collection(db, "chats")),
-      otherId: other.id,
-    }));
-
-    const batch = writeBatch(db);
-    for (const { ref: chatRef, otherId } of newChatRefs) {
-      batch.set(chatRef, {
-        tenantId: tid,
-        participants: [newMemberId, otherId],
-        isGroup: false,
-        name: "",
-        photoUrl: null,
-        photoPath: null,
-        lastMessageText: null,
-        lastMessageCiphertext: null,
-        lastMessageIv: null,
-        lastMessageAt: null,
-        lastMessageType: null,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-    }
-
-    await Promise.all([
-      setDoc(doc(db, "loginCodes", loginCode), {
-        memberId: newMemberId,
-        tenantId: tid,
-        name,
-        role,
-      }),
-      newChatRefs.length > 0 ? batch.commit() : Promise.resolve(),
-    ]);
-
-    if (currentUser && newChatRefs.length > 0) {
-      const tidLocal = tid;
-      const wrappedBy = currentUser.id;
-      await Promise.all(
-        newChatRefs.map(({ ref: chatRef }) => ensureConversationKey(chatRef.id)),
-      );
-      for (const { ref: chatRef, otherId } of newChatRefs) {
-        void distributeConversationKey(
-          chatRef.id,
-          [newMemberId, otherId],
-          tidLocal,
-          wrappedBy,
-        ).catch(() => {});
+    if (!canMutate || !effectiveTenantId) throw new Error("Esta ação precisa de conexão.");
+    const created = await createMember({ name, role });
+    await refreshRemote(() => true);
+    const newChats = await ChatRepository.getLocalChats(effectiveTenantId);
+    const directChats = newChats.filter((chat) => chat.participants.includes(created.id));
+    await Promise.all(directChats.map((chat) => ensureConversationKey(chat.id)));
+    for (const chat of directChats) {
+      if (currentUser) {
+        void distributeConversationKey(chat.id, chat.participants, effectiveTenantId, currentUser.id);
       }
     }
   };
 
-  const approveDevice = async (deviceIdParam: string) => {
-    if (!canMutate) throw new Error("Esta ação precisa de conexão.");
-    if (!effectiveTenantId || !currentUser) {
-      throw new Error("Estado de sessão inválido.");
+  const approveDevice = async (deviceId: string) => {
+    if (!canMutate || !currentUser) throw new Error("Esta ação precisa de conexão.");
+    const device = pendingDevices.find((item) => item.id === deviceId);
+    if (device?.publicKey) {
+      const chatIds = chats
+        .filter((chat) => device.memberId && chat.participants.includes(device.memberId))
+        .map((chat) => chat.id);
+      await distributeAllOwnedKeysToDevice(deviceId, device.publicKey, chatIds, currentUser.id);
     }
-
-    const devSnap = await getDoc(doc(db, "devices", deviceIdParam));
-    if (!devSnap.exists()) throw new Error("Dispositivo não encontrado.");
-    const devData = devSnap.data() as DeviceDoc;
-    const userSnap = await getDoc(doc(db, "users", devData.userId));
-    if (!userSnap.exists()) throw new Error("Usuário do dispositivo não encontrado.");
-    const userData = userSnap.data() as UserDoc;
-    const targetMemberId = userData.memberId ?? devData.userId;
-    const targetPublicKey = devData.publicKey;
-    if (!targetPublicKey) throw new Error("Dispositivo sem chave pública.");
-
-    const chatsSnap = await getDocs(
-      query(
-        collection(db, "chats"),
-        where("tenantId", "==", effectiveTenantId),
-        where("participants", "array-contains", targetMemberId),
-      ),
-    );
-    const chatIds = chatsSnap.docs.map((d) => d.id);
-
-    await distributeAllOwnedKeysToDevice(
-      deviceIdParam,
-      targetPublicKey,
-      chatIds,
-      currentUser.id,
-    );
-
-    const fn = httpsCallable(functions, "approveDevice");
-    await fn({ deviceId: deviceIdParam });
+    await approveDeviceApi(deviceId);
+    await refreshRemote(() => true);
   };
 
-  const rejectDevice = async (deviceIdParam: string) => {
+  const rejectDevice = async (deviceId: string) => {
     if (!canMutate) throw new Error("Esta ação precisa de conexão.");
-    await deleteDoc(doc(db, "devices", deviceIdParam));
+    await deleteDevice(deviceId);
+    await refreshRemote(() => true);
   };
 
   const createChat = async (name: string, participantIds: string[]) => {
-    if (!canMutate) throw new Error("Esta ação precisa de conexão.");
-    if (!effectiveTenantId) return;
-    if (participantIds.length < 3) {
-      throw new Error("Grupos precisam de pelo menos 3 participantes.");
-    }
+    if (!canMutate || !effectiveTenantId) throw new Error("Esta ação precisa de conexão.");
+    if (participantIds.length < 3) throw new Error("Grupos precisam de pelo menos 3 participantes.");
     const trimmedName = name.trim();
-    if (!trimmedName) {
-      throw new Error("Informe um nome para o grupo.");
-    }
-    const chatRef = await addDoc(collection(db, "chats"), {
-      tenantId: effectiveTenantId,
-      participants: participantIds,
-      isGroup: true,
+    if (!trimmedName) throw new Error("Informe um nome para o grupo.");
+    const created = await createChatApi({
       name: trimmedName,
-      photoUrl: null,
-      photoPath: null,
-      lastMessageText: null,
-      lastMessageCiphertext: null,
-      lastMessageIv: null,
-      lastMessageAt: null,
-      lastMessageType: null,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
+      is_group: true,
+      participant_ids: participantIds,
     });
-    await ensureConversationKey(chatRef.id);
+    await ensureConversationKey(created.id);
     if (currentUser) {
-      void distributeConversationKey(
-        chatRef.id,
-        participantIds,
-        effectiveTenantId,
-        currentUser.id,
-      ).catch(() => {});
+      void distributeConversationKey(created.id, participantIds, effectiveTenantId, currentUser.id);
     }
+    await refreshRemote(() => true);
   };
 
   const updateChat = async (chatId: string, name: string, participantIds: string[]) => {
     if (!canMutate) throw new Error("Esta ação precisa de conexão.");
-    if (participantIds.length < 3) {
-      throw new Error("Grupos precisam de pelo menos 3 participantes.");
-    }
+    if (participantIds.length < 3) throw new Error("Grupos precisam de pelo menos 3 participantes.");
     const trimmedName = name.trim();
-    if (!trimmedName) {
-      throw new Error("Informe um nome para o grupo.");
-    }
-    await updateDoc(doc(db, "chats", chatId), {
+    if (!trimmedName) throw new Error("Informe um nome para o grupo.");
+    await updateChatApi(chatId, {
       name: trimmedName,
-      participants: participantIds,
-      isGroup: true,
-      updatedAt: serverTimestamp(),
+      is_group: true,
+      participant_ids: participantIds,
     });
+    await refreshRemote(() => true);
   };
 
   const deleteChat = async (chatId: string) => {
     if (!canMutate) throw new Error("Esta ação precisa de conexão.");
-    const msgsRef = collection(db, "chats", chatId, "messages");
-    const snap = await getDocs(msgsRef);
-    for (const d of snap.docs) {
-      const data = d.data() as MessageDoc;
-      if (data.audioUrl) {
-        try {
-          await deleteObject(ref(storage, data.audioUrl));
-        } catch {}
-      }
-    }
-    const docs = snap.docs;
-    for (let i = 0; i < docs.length; i += 500) {
-      const batch = writeBatch(db);
-      docs.slice(i, i + 500).forEach((x) => batch.delete(x.ref));
-      await batch.commit();
-    }
-    await deleteDoc(doc(db, "chats", chatId));
+    await deleteChatApi(chatId);
+    await ChatRepository.deleteChat(chatId);
   };
 
   const deleteChildMember = async (memberId: string, deleteMessages: boolean) => {
     if (!canMutate) throw new Error("Esta ação precisa de conexão.");
-
     if (deleteMessages) {
-      const directChats = chats.filter(
-        (c) => !c.isGroup && c.participants.includes(memberId),
-      );
-      for (const c of directChats) {
-        await deleteChat(c.id);
-      }
+      const directChats = chats.filter((c) => !c.isGroup && c.participants.includes(memberId));
+      for (const chat of directChats) await deleteChat(chat.id);
     }
-
-    const fn = httpsCallable(functions, "deleteChildMember");
-    await fn({ memberId, deleteMessages });
+    await deleteMember(memberId);
+    await refreshRemote(() => true);
   };
 
   const updateChatPhoto = async (chatId: string, localUri: string) => {
     if (!canMutate) throw new Error("Esta ação precisa de conexão.");
-    if (!effectiveTenantId) throw new Error("Sem tenant.");
-    const existing = chats.find((c) => c.id === chatId);
-    const previousPath = existing?.photoPath ?? null;
-    const uploaded = await uploadGroupPhoto({
-      tenantId: effectiveTenantId,
-      chatId,
-      localUri,
+    const uploaded = await uploadChatPhoto(chatId, {
+      uri: localUri,
+      name: `${chatId}.jpg`,
+      type: "image/jpeg",
     });
-    await setChatPhoto(chatId, uploaded, previousPath);
+    void uploaded;
+    await refreshRemote(() => true);
   };
 
   const removeChatPhoto = async (chatId: string) => {
     if (!canMutate) throw new Error("Esta ação precisa de conexão.");
-    const existing = chats.find((c) => c.id === chatId);
-    await clearChatPhoto(chatId, existing?.photoPath ?? null);
+    await clearChatPhoto(chatId);
+    await refreshRemote(() => true);
   };
 
   return {

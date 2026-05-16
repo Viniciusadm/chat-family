@@ -1,9 +1,9 @@
-import type { Timestamp } from "firebase/firestore";
+import type { LocalTimestamp } from "@/lib/localTimestamp";
 
 export interface TenantDoc {
   name: string;
   ownerId: string;
-  createdAt: Timestamp;
+  createdAt: string;
 }
 
 export interface MemberDoc {
@@ -11,7 +11,7 @@ export interface MemberDoc {
   name: string;
   role: "adult" | "child";
   loginCode: string | null;
-  createdAt: Timestamp;
+  createdAt: string;
   photoUrl?: string | null;
   photoPath?: string | null;
 }
@@ -32,7 +32,7 @@ export interface KeyBackupDoc {
   ciphertext: string;
   iv: string;
   encVersion: number;
-  createdAt: Timestamp;
+  createdAt: string;
 }
 
 export interface UserDoc {
@@ -40,8 +40,8 @@ export interface UserDoc {
   tenantId: string;
   name: string;
   role: "adult" | "child";
-  createdAt: Timestamp;
-  chatIndexBuiltAt?: Timestamp;
+  createdAt: string;
+  chatIndexBuiltAt?: string;
   photoUrl?: string | null;
   photoPath?: string | null;
   passwordSalt?: string;
@@ -55,9 +55,9 @@ export interface DeviceDoc {
   active?: boolean;
   pushToken: string;
   publicKey?: string;
-  createdAt: Timestamp;
-  lastActiveAt?: Timestamp;
-  sessionAt?: Timestamp;
+  createdAt: string;
+  lastActiveAt?: string;
+  sessionAt?: string;
 }
 
 export interface KeyShareDoc {
@@ -65,7 +65,7 @@ export interface KeyShareDoc {
   iv: string;
   ciphertext: string;
   wrappedBy: string;
-  createdAt: Timestamp;
+  createdAt: string;
 }
 
 export interface ChatDoc {
@@ -78,11 +78,11 @@ export interface ChatDoc {
   lastMessageText: string | null;
   lastMessageCiphertext: string | null;
   lastMessageIv: string | null;
-  lastMessageAt: Timestamp | null;
+  lastMessageAt: string | null;
   lastMessageType: "text" | "audio" | "image" | null;
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
-  readUpTo?: Record<string, Timestamp>;
+  createdAt: string;
+  updatedAt: string;
+  readUpTo?: Record<string, LocalTimestamp>;
   unreadBy?: Record<string, number>;
 }
 
@@ -101,10 +101,10 @@ export interface MessageDoc {
   iv?: string | null;
   encVersion?: number;
   replyTo?: MessageReplySnapshot | null;
-  createdAt: Timestamp;
-  editedAt?: Timestamp | null;
+  createdAt: string;
+  editedAt?: string | null;
   isDeleted?: boolean;
-  deletedAt?: Timestamp | null;
+  deletedAt?: string | null;
 }
 
 export interface Reaction {
@@ -116,7 +116,7 @@ export interface ReactionDoc {
   messageId: string;
   userId: string;
   emoji: string;
-  updatedAt: Timestamp;
+  updatedAt: string;
 }
 
 export type UserRole = "adult" | "child";
@@ -149,9 +149,11 @@ export interface Device {
   id: string;
   tenantId: string;
   userId: string;
+  memberId?: string | null;
   approved: boolean;
   active?: boolean;
   pushToken: string;
+  publicKey?: string | null;
   createdAt: Date;
 }
 
@@ -164,7 +166,7 @@ export interface Chat {
   photoUrl?: string | null;
   photoPath?: string | null;
   unreadCount: number;
-  readUpTo?: Record<string, Timestamp>;
+  readUpTo?: Record<string, LocalTimestamp>;
   lastMessage?: {
     text: string | null;
     type: "text" | "audio" | "image" | null;

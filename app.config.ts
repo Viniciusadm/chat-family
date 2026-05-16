@@ -1,50 +1,8 @@
-import fs from "node:fs";
-import path from "path";
 import type { ExpoConfig } from "expo/config";
-import type { FirebaseOptions } from "firebase/app";
 
 const ANDROID_PACKAGE = "com.archieapps.chatapp";
 
-function firebaseOptionsFromGoogleServices(packageName: string): FirebaseOptions {
-  const filePath = path.join(__dirname, "google-services.json");
-  const raw = JSON.parse(fs.readFileSync(filePath, "utf8")) as {
-    project_info?: {
-      project_number?: string | number;
-      project_id?: string;
-      storage_bucket?: string;
-    };
-    client?: Array<{
-      client_info?: {
-        mobilesdk_app_id?: string;
-        android_client_info?: { package_name?: string };
-      };
-      api_key?: Array<{ current_key?: string }>;
-    }>;
-  };
-  const client = raw.client?.find(
-    (c) => c.client_info?.android_client_info?.package_name === packageName,
-  );
-  const pi = raw.project_info;
-  const apiKey = client?.api_key?.[0]?.current_key;
-  const appId = client?.client_info?.mobilesdk_app_id;
-  const projectId = pi?.project_id;
-  const storageBucket = pi?.storage_bucket;
-  const projectNumber = pi?.project_number;
-  if (!apiKey || !appId || !projectId || !storageBucket || projectNumber == null) {
-    throw new Error("google-services.json: missing fields for Firebase config");
-  }
-  return {
-    apiKey,
-    authDomain: `${projectId}.firebaseapp.com`,
-    projectId,
-    storageBucket,
-    messagingSenderId: String(projectNumber),
-    appId,
-  };
-}
-
 export default (): ExpoConfig => {
-  const firebase = firebaseOptionsFromGoogleServices(ANDROID_PACKAGE);
   return {
     name: "Chat Family",
     slug: "chat",
@@ -69,7 +27,6 @@ export default (): ExpoConfig => {
       edgeToEdgeEnabled: true,
       softwareKeyboardLayoutMode: "resize",
       predictiveBackGestureEnabled: false,
-      googleServicesFile: path.join(__dirname, "google-services.json"),
     },
     web: {
       output: "static",
@@ -130,7 +87,6 @@ export default (): ExpoConfig => {
       eas: {
         projectId: "3c81d144-9377-4842-962f-ce4c62ec61d2",
       },
-      firebase,
     },
     owner: "viniciusadm",
   };

@@ -43,7 +43,7 @@ async function migrate(db: SQLite.SQLiteDatabase) {
     );
 
     CREATE TABLE IF NOT EXISTS app_sessions (
-      firebase_uid TEXT PRIMARY KEY,
+      auth_user_id TEXT PRIMARY KEY,
       member_id TEXT NOT NULL,
       tenant_id TEXT NOT NULL,
       name TEXT NOT NULL,
@@ -80,8 +80,10 @@ async function migrate(db: SQLite.SQLiteDatabase) {
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL,
       user_id TEXT NOT NULL,
+      member_id TEXT,
       approved INTEGER NOT NULL,
       push_token TEXT NOT NULL,
+      public_key TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -128,6 +130,7 @@ async function migrate(db: SQLite.SQLiteDatabase) {
   await ensureColumn(db, "chats", "read_up_to", "TEXT");
   await ensureColumn(db, "chats", "photo_url", "TEXT");
   await ensureColumn(db, "chats", "photo_path", "TEXT");
+  await ensureColumn(db, "app_sessions", "auth_user_id", "TEXT");
   await ensureColumn(db, "app_sessions", "photo_url", "TEXT");
   await ensureColumn(db, "app_sessions", "photo_path", "TEXT");
   await ensureColumn(db, "messages", "image_remote_url", "TEXT");
@@ -147,6 +150,8 @@ async function migrate(db: SQLite.SQLiteDatabase) {
   await ensureColumn(db, "messages", "original_body", "TEXT");
   await ensureColumn(db, "messages", "updated_at", "TEXT");
   await ensureColumn(db, "messages", "edit_attempts", "INTEGER NOT NULL DEFAULT 0");
+  await ensureColumn(db, "admin_pending_devices", "member_id", "TEXT");
+  await ensureColumn(db, "admin_pending_devices", "public_key", "TEXT");
 
   await db.execAsync(`
     CREATE INDEX IF NOT EXISTS idx_messages_pending_op

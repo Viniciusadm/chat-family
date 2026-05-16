@@ -107,7 +107,7 @@ export const ReactionRepository = {
     });
   },
 
-  async upsertFirestoreReaction(
+  async upsertRemoteReaction(
     messageId: string,
     userId: string,
     emoji: string,

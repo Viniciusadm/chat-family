@@ -2,31 +2,17 @@ import { ChatRepository } from "@/lib/ChatRepository";
 import { ensureConversationKey } from "@/lib/conversationKeys";
 import { encryptMessageText } from "@/lib/encryptedMessages";
 import {
-  ensureTextMessageInFirestore,
-  softDeleteMessageInFirestore,
-  updateChatAfterOutgoingMessage,
-  updateTextMessageInFirestore,
-} from "@/lib/firestoreMessages";
-import { ensureReactionInFirestore } from "@/lib/firestoreReactions";
+  ensureTextMessageRemote,
+  softDeleteMessageRemote,
+  updateTextMessageRemote,
+} from "@/lib/remoteMessages";
 import { AudioCacheRepository } from "@/lib/AudioCacheRepository";
 import { ImageCacheRepository } from "@/lib/ImageCacheRepository";
 import { uploadAndPersistImage } from "@/lib/imageUpload";
-import { db } from "@/lib/firebase";
 import { MessageRepository } from "@/lib/MessageRepository";
 import { ReactionRepository } from "@/lib/ReactionRepository";
-import type { AppUser, MessageDoc } from "@/types/chat";
-import {
-  collection,
-  getDocs,
-  limit,
-  orderBy,
-  query,
-  Timestamp,
-  type QueryConstraint,
-  startAfter,
-  type QueryDocumentSnapshot,
-  where,
-} from "firebase/firestore";
+import { listMessages, upsertReaction } from "@/src/api/chats";
+import type { AppUser } from "@/types/chat";
 
 const MESSAGE_PAGE_SIZE = 100;
 const inFlightHistorySyncs = new Set<string>();
@@ -40,55 +26,44 @@ export async function syncChatHistory(chatId: string, isOnline = true) {
   try {
     const syncState = await MessageRepository.getMessageSyncState(chatId);
     let newestMessageAt = syncState.newestMessageAt;
-    let cursor: QueryDocumentSnapshot | null = null;
 
     while (true) {
-      const constraints: QueryConstraint[] = [
-        ...(syncState.historySyncedAt && syncState.newestMessageAt
-          ? [where("createdAt", ">", Timestamp.fromDate(syncState.newestMessageAt))]
-          : []),
-        orderBy("createdAt", "asc"),
-        ...(cursor ? [startAfter(cursor)] : []),
-        limit(MESSAGE_PAGE_SIZE),
-      ];
-      const snap = await getDocs(
-        query(collection(db, "chats", chatId, "messages"), ...constraints)
-      );
+      const rows = await listMessages(chatId, {
+        after: syncState.historySyncedAt && newestMessageAt ? newestMessageAt.toISOString() : undefined,
+        limit: MESSAGE_PAGE_SIZE,
+      });
+      if (rows.length === 0) break;
 
-      if (snap.empty) break;
-
-      for (const messageDoc of snap.docs) {
-        const data = messageDoc.data() as MessageDoc;
-        const createdAt = data.createdAt?.toDate();
+      for (const data of rows) {
+        const createdAt = data.created_at ? new Date(data.created_at) : null;
         if (createdAt && (!newestMessageAt || createdAt > newestMessageAt)) {
           newestMessageAt = createdAt;
         }
-        await MessageRepository.upsertFirestoreMessage(
+        await MessageRepository.upsertRemoteMessage(
           chatId,
-          messageDoc.id,
+          data.id,
           data,
           { notify: false }
         );
-        if (data.audioUrl) {
+        if (data.audio_url) {
           void AudioCacheRepository.downloadMessageAudio({
             chatId,
-            messageId: messageDoc.id,
-            remoteUrl: data.audioUrl,
+            messageId: data.id,
+            remoteUrl: data.audio_url,
           });
         }
-        if (data.imageUrl) {
+        if (data.image_url) {
           void ImageCacheRepository.downloadMessageImage({
             chatId,
-            messageId: messageDoc.id,
-            remoteUrl: data.imageUrl,
+            messageId: data.id,
+            remoteUrl: data.image_url,
           });
         }
       }
 
       MessageRepository.emit(chatId);
 
-      if (snap.docs.length < MESSAGE_PAGE_SIZE) break;
-      cursor = snap.docs[snap.docs.length - 1];
+      if (rows.length < MESSAGE_PAGE_SIZE) break;
     }
 
     await MessageRepository.saveMessageSyncState(chatId, newestMessageAt);
@@ -127,7 +102,7 @@ export async function syncPendingTextMessages(
         await ensureConversationKey(message.chatId);
         const enc = await encryptMessageText(message.chatId, message.content);
         if (!enc) continue;
-        await ensureTextMessageInFirestore({
+        await ensureTextMessageRemote({
           chatId: message.chatId,
           messageId: message.id,
           tenantId,
@@ -135,11 +110,6 @@ export async function syncPendingTextMessages(
           ciphertext: enc.ciphertext,
           iv: enc.iv,
           replyTo: message.replyTo ?? null,
-        });
-        await updateChatAfterOutgoingMessage(message.chatId, currentUser.id, {
-          type: "text",
-          ciphertext: enc.ciphertext,
-          iv: enc.iv,
         });
         await MessageRepository.updateStatus(message.id, "sent");
       } catch {
@@ -214,7 +184,7 @@ export async function syncPendingOps(
       if (message.senderId !== currentUser.id) continue;
       try {
         if (message.pendingOp === "delete") {
-          await softDeleteMessageInFirestore({
+          await softDeleteMessageRemote({
             chatId: message.chatId,
             messageId: message.id,
           });
@@ -223,7 +193,7 @@ export async function syncPendingOps(
           await ensureConversationKey(message.chatId);
           const enc = await encryptMessageText(message.chatId, message.content);
           if (!enc) continue;
-          await updateTextMessageInFirestore({
+          await updateTextMessageRemote({
             chatId: message.chatId,
             messageId: message.id,
             ciphertext: enc.ciphertext,
@@ -253,12 +223,7 @@ export async function syncPendingReactions(
     if (reaction.userId !== currentUser.id) continue;
 
     try {
-      await ensureReactionInFirestore({
-        chatId: reaction.chatId,
-        messageId: reaction.messageId,
-        userId: reaction.userId,
-        emoji: reaction.emoji,
-      });
+      await upsertReaction(reaction.chatId, reaction.messageId, reaction.emoji);
       await ReactionRepository.updateStatus(reaction.messageId, reaction.userId, "sent");
     } catch {
       // Leave pending for retry.

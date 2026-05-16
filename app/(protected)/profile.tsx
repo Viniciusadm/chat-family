@@ -6,16 +6,13 @@ import { ThemePicker } from "@/components/ThemePicker";
 import { useAuth } from "@/context/AuthContext";
 import { useConnectivity } from "@/hooks/useConnectivity";
 import { useMemberProfiles } from "@/hooks/useMemberProfiles";
-import { db, storage } from "@/lib/firebase";
-import { randomUuid } from "@/lib/randomUuid";
+import { uploadProfilePhoto, deleteProfilePhoto } from "@/src/api/media";
 import { useTheme } from "@/theme/ThemeContext";
 import { useThemedStyles } from "@/theme/useThemedStyles";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { deleteObject, getDownloadURL, ref, uploadBytes } from "firebase/storage";
-import { doc, updateDoc } from "firebase/firestore";
 import { useState } from "react";
 import {
   ActivityIndicator,
@@ -31,15 +28,10 @@ function roleLabel(role: string) {
   return role === "adult" ? "Adulto" : "Criança";
 }
 
-async function blobFromUri(uri: string) {
-  const response = await fetch(uri);
-  return response.blob();
-}
-
 export default function ProfileScreen() {
   const router = useRouter();
   const { memberId } = useLocalSearchParams<{ memberId?: string }>();
-  const { currentUser, firebaseUser, setCurrentUserPhoto } = useAuth();
+  const { currentUser, setCurrentUserPhoto } = useAuth();
   const { isOnline } = useConnectivity();
   const memberProfiles = useMemberProfiles();
   const [saving, setSaving] = useState(false);
@@ -163,8 +155,7 @@ export default function ProfileScreen() {
 
   const isOwnProfile = !memberId || memberId === currentUser.id;
   const viewedProfile = isOwnProfile ? currentUser : memberProfiles[memberId];
-  const canMutatePhoto =
-    isOwnProfile && isOnline && firebaseUser != null && !firebaseUser.isAnonymous;
+  const canMutatePhoto = isOwnProfile && isOnline;
 
   if (!viewedProfile) {
     return (
@@ -176,28 +167,6 @@ export default function ProfileScreen() {
       </ScreenContainer>
     );
   }
-
-  const updatePhotoDocs = async (photoUrl: string | null, photoPath: string | null) => {
-    if (!firebaseUser) throw new Error("Esta ação precisa de conexão.");
-    await Promise.all([
-      updateDoc(doc(db, "members", currentUser.id), {
-        photoUrl,
-        photoPath,
-      }),
-      updateDoc(doc(db, "users", firebaseUser.uid), {
-        photoUrl,
-        photoPath,
-      }),
-    ]);
-    await setCurrentUserPhoto(photoUrl, photoPath);
-  };
-
-  const deletePreviousPhoto = async (path?: string | null) => {
-    if (!path) return;
-    try {
-      await deleteObject(ref(storage, path));
-    } catch {}
-  };
 
   const choosePhoto = async () => {
     if (saving || !canMutatePhoto) return;
@@ -223,22 +192,14 @@ export default function ProfileScreen() {
     }
 
     setSaving(true);
-    let uploadedPath: string | null = null;
     try {
-      const blob = await blobFromUri(asset.uri);
-      uploadedPath = `profilePhotos/${currentUser.tenantId}/${currentUser.id}/${randomUuid()}.jpg`;
-      const storageRef = ref(storage, uploadedPath);
-      await uploadBytes(storageRef, blob, {
-        contentType: asset.mimeType ?? "image/jpeg",
+      const uploaded = await uploadProfilePhoto({
+        uri: asset.uri,
+        name: "profile.jpg",
+        type: asset.mimeType ?? "image/jpeg",
       });
-      const photoUrl = await getDownloadURL(storageRef);
-      const previousPath = currentUser.photoPath ?? null;
-      await updatePhotoDocs(photoUrl, uploadedPath);
-      await deletePreviousPhoto(previousPath);
+      await setCurrentUserPhoto(uploaded.url, uploaded.path ?? null);
     } catch (e) {
-      if (uploadedPath) {
-        await deletePreviousPhoto(uploadedPath);
-      }
       Alert.alert(
         "",
         e instanceof Error ? e.message : "Não foi possível salvar a foto."
@@ -253,8 +214,9 @@ export default function ProfileScreen() {
     setSaving(true);
     const previousPath = currentUser.photoPath ?? null;
     try {
-      await updatePhotoDocs(null, null);
-      await deletePreviousPhoto(previousPath);
+      void previousPath;
+      await deleteProfilePhoto();
+      await setCurrentUserPhoto(null, null);
     } catch (e) {
       Alert.alert(
         "",

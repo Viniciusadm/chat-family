@@ -4,8 +4,6 @@ import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/theme/ThemeContext";
 import { useThemedStyles } from "@/theme/useThemedStyles";
 import { Ionicons } from "@expo/vector-icons";
-import { auth } from "@/lib/firebase";
-import { fetchSignInMethodsForEmail, signOut } from "firebase/auth";
 import { Redirect, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
@@ -38,7 +36,6 @@ function registerErrorMessage(e: unknown): string {
 export default function LoginScreen() {
   const router = useRouter();
   const {
-    firebaseUser,
     currentUser,
     deviceApproved,
     loading,
@@ -46,6 +43,7 @@ export default function LoginScreen() {
     needsPushToken,
     pushTokenError,
     retryDeviceRegistration,
+    logout,
     loginWithEmail,
     registerWithEmail,
     loginWithChildCode,
@@ -281,12 +279,11 @@ export default function LoginScreen() {
     if (loading || !sessionReady || needsPushToken) return;
     if (deviceApproved === false) {
       router.replace("/aguardando");
-    } else if ((firebaseUser || currentUser) && deviceApproved === true) {
+    } else if (currentUser && deviceApproved === true) {
       router.replace("/");
     }
   }, [
     loading,
-    firebaseUser,
     currentUser,
     deviceApproved,
     sessionReady,
@@ -302,7 +299,7 @@ export default function LoginScreen() {
     );
   }
 
-  if (firebaseUser && sessionReady && needsPushToken) {
+  if (currentUser && sessionReady && needsPushToken) {
     return (
       <ScreenContainer style={styles.pushGate} edges={["top", "bottom"]}>
         <Text style={styles.pushGateTitle}>Notificações necessárias</Text>
@@ -327,7 +324,7 @@ export default function LoginScreen() {
         >
           <Text style={styles.secondaryBtnText}>Tentar novamente</Text>
         </Pressable>
-        <Pressable style={styles.textLink} onPress={() => signOut(auth)}>
+        <Pressable style={styles.textLink} onPress={() => logout()}>
           <Text style={styles.textLinkLabel}>Sair</Text>
         </Pressable>
       </ScreenContainer>
@@ -342,11 +339,11 @@ export default function LoginScreen() {
     );
   }
 
-  if ((firebaseUser || currentUser) && deviceApproved === true) {
+  if (currentUser && deviceApproved === true) {
     return <Redirect href="/" />;
   }
 
-  if (firebaseUser && deviceApproved === false) {
+  if (currentUser && deviceApproved === false) {
     return <Redirect href="/aguardando" />;
   }
 
@@ -373,13 +370,6 @@ export default function LoginScreen() {
     setError("");
     setBusy(true);
     try {
-      const methods = await fetchSignInMethodsForEmail(auth, email.trim());
-      if (methods.length > 0) {
-        setError(
-          "Este e-mail já possui uma conta. Faça login ou use outro e-mail."
-        );
-        return;
-      }
       await registerWithEmail(email.trim(), password.trim(), name.trim());
     } catch (e: unknown) {
       setError(registerErrorMessage(e));

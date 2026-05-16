@@ -2,19 +2,53 @@ import { useAuth } from "@/context/AuthContext";
 import { useConnectivity } from "@/hooks/useConnectivity";
 import { ChatRepository } from "@/lib/ChatRepository";
 import { decryptIncomingMessage } from "@/lib/encryptedMessages";
-import { db } from "@/lib/firebase";
+import { timestampFromIso } from "@/lib/localTimestamp";
 import {
   syncChatHistories,
   syncPendingImageMessages,
   syncPendingOps,
   syncPendingTextMessages,
 } from "@/lib/offlineSync";
-import type { Chat, ChatDoc } from "@/types/chat";
-import { collection, doc, onSnapshot } from "firebase/firestore";
+import { listChats, type ChatDto } from "@/src/api/chats";
+import { realtimeClient } from "@/src/api/realtime";
+import type { Chat } from "@/types/chat";
 import { useCallback, useEffect, useState } from "react";
 
+async function dtoToChat(data: ChatDto, currentMemberId: string): Promise<Chat> {
+  const chat: Chat = {
+    id: data.id,
+    tenantId: data.tenant_id,
+    participants: data.participant_ids ?? [],
+    isGroup: data.is_group,
+    name: data.name,
+    photoUrl: data.photo_url ?? null,
+    photoPath: data.photo_path ?? null,
+    unreadCount: data.unread_by?.[currentMemberId] ?? 0,
+    readUpTo: Object.fromEntries(
+      Object.entries(data.read_up_to ?? {})
+        .map(([memberId, value]) => [memberId, timestampFromIso(value)])
+        .filter((entry): entry is [string, NonNullable<Chat["readUpTo"]>[string]] => entry[1] != null)
+    ),
+  };
+  if (data.last_message_at && data.last_message_type) {
+    const timestamp = new Date(data.last_message_at);
+    if (data.last_message_type === "text") {
+      const text = await decryptIncomingMessage(data.id, {
+        ciphertext: data.last_message_ciphertext,
+        iv: data.last_message_iv,
+      });
+      if (text != null) {
+        chat.lastMessage = { text, type: "text", timestamp };
+      }
+    } else {
+      chat.lastMessage = { text: null, type: data.last_message_type, timestamp };
+    }
+  }
+  return chat;
+}
+
 export function useChats(): { chats: Chat[]; loading: boolean } {
-  const { currentUser, tenantId, firebaseUser } = useAuth();
+  const { currentUser, tenantId } = useAuth();
   const { isOnline } = useConnectivity();
   const [chats, setChats] = useState<Chat[]>([]);
   const [loading, setLoading] = useState(true);
@@ -28,13 +62,28 @@ export function useChats(): { chats: Chat[]; loading: boolean } {
       const localChats = await ChatRepository.getLocalChats(tenantId);
       if (!active()) return;
       const memberId = currentUser?.id;
-      const filtered = memberId
-        ? localChats.filter((c) => c.participants.includes(memberId))
-        : localChats;
-      setChats(filtered);
+      setChats(memberId ? localChats.filter((c) => c.participants.includes(memberId)) : localChats);
       setLoading(false);
     },
     [tenantId, currentUser?.id]
+  );
+
+  const refreshRemoteChats = useCallback(
+    async (active: () => boolean) => {
+      if (!currentUser || !tenantId || !isOnline) return;
+      const remote = await listChats();
+      const next = await Promise.all(remote.map((chat) => dtoToChat(chat, currentUser.id)));
+      for (const chat of next) {
+        await ChatRepository.upsertChat(chat, { notify: false });
+      }
+      if (!active()) return;
+      syncChatHistories(next.map((chat) => chat.id), isOnline);
+      await syncPendingTextMessages(currentUser, tenantId, isOnline);
+      await syncPendingImageMessages(currentUser, tenantId, isOnline);
+      await syncPendingOps(currentUser, isOnline);
+      await loadLocalChats(active);
+    },
+    [currentUser, isOnline, loadLocalChats, tenantId]
   );
 
   useEffect(() => {
@@ -45,134 +94,22 @@ export function useChats(): { chats: Chat[]; loading: boolean } {
     }
 
     let active = true;
-    const memberId = currentUser.id;
-    const unsubs: (() => void)[] = [];
     void loadLocalChats(() => active);
-
-    const emitLocal = () => {
+    const unsubLocal = ChatRepository.subscribe(() => {
       void loadLocalChats(() => active);
-    };
-    const unsubLocal = ChatRepository.subscribe(emitLocal);
-    if (!isOnline) {
-      return () => {
-        active = false;
-        unsubLocal();
-      };
-    }
-
-    if (!firebaseUser) {
-      return () => {
-        active = false;
-        unsubLocal();
-      };
-    }
-
-    const uid = firebaseUser.uid;
-    const listCol = collection(db, "users", uid, "chatList");
-
-    const unsubList = onSnapshot(
-      listCol,
-      (listSnap) => {
-        unsubs.forEach((u) => u());
-        unsubs.length = 0;
-
-        const ids = listSnap.docs.map((d) => d.id);
-        if (ids.length === 0) {
-          setLoading(false);
-          syncChatHistories([], isOnline);
-          return;
-        }
-
-        const emit = () => {
-          setLoading(false);
-          syncChatHistories(ids, isOnline);
-          void (async () => {
-            await syncPendingTextMessages(currentUser, tenantId, isOnline);
-            await syncPendingImageMessages(currentUser, tenantId, isOnline);
-            await syncPendingOps(currentUser, isOnline);
-          })();
-        };
-
-        for (const chatId of ids) {
-          const u = onSnapshot(
-            doc(db, "chats", chatId),
-            (snap) => {
-              void (async () => {
-                if (!snap.exists()) {
-                  await ChatRepository.deleteChat(chatId);
-                  if (!active) return;
-                  emit();
-                  return;
-                }
-                const data = snap.data() as ChatDoc;
-                if (!data.participants?.includes(memberId)) {
-                  await ChatRepository.deleteChat(chatId);
-                  if (!active) return;
-                  emit();
-                  return;
-                }
-                const chat: Chat = {
-                  id: snap.id,
-                  tenantId: data.tenantId,
-                  participants: data.participants,
-                  isGroup: data.isGroup,
-                  name: data.name,
-                  photoUrl: data.photoUrl ?? null,
-                  photoPath: data.photoPath ?? null,
-                  unreadCount: data.unreadBy?.[memberId] ?? 0,
-                  readUpTo: data.readUpTo,
-                };
-                if (data.lastMessageAt && data.lastMessageType) {
-                  const timestamp = data.lastMessageAt.toDate();
-                  if (data.lastMessageType === "text") {
-                    const text = await decryptIncomingMessage(chatId, {
-                      ciphertext: data.lastMessageCiphertext,
-                      iv: data.lastMessageIv,
-                      text: data.lastMessageText,
-                    });
-                    if (text != null) {
-                      chat.lastMessage = {
-                        text,
-                        type: "text",
-                        timestamp,
-                      };
-                    }
-                  } else {
-                    chat.lastMessage = {
-                      text: null,
-                      type: data.lastMessageType,
-                      timestamp,
-                    };
-                  }
-                }
-                if (!active) return;
-                await ChatRepository.upsertChat(chat);
-                if (!active) return;
-                await ChatRepository.refreshLastMessageFromLocal(chatId);
-                if (!active) return;
-                emit();
-              })();
-            },
-            () => {
-              emit();
-            }
-          );
-          unsubs.push(u);
-        }
-      },
-      () => {
-        unsubs.forEach((u) => u());
-        setLoading(false);
+    });
+    void refreshRemoteChats(() => active);
+    const unsubRealtime = realtimeClient.subscribe((event) => {
+      if (event.type.startsWith("chat.") || event.type.startsWith("message.")) {
+        void refreshRemoteChats(() => active);
       }
-    );
-
+    });
     return () => {
       active = false;
       unsubLocal();
-      unsubList();
-      unsubs.forEach((u) => u());
+      unsubRealtime();
     };
-  }, [firebaseUser, tenantId, currentUser, isOnline, loadLocalChats]);
+  }, [currentUser, loadLocalChats, refreshRemoteChats, tenantId]);
 
   return { chats, loading };
 }

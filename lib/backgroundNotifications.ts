@@ -1,8 +1,8 @@
 import * as Notifications from "expo-notifications";
 import * as TaskManager from "expo-task-manager";
-import { doc, getDoc } from "firebase/firestore";
 import { Platform } from "react-native";
-import { db } from "./firebase";
+import { listMessages } from "@/src/api/chats";
+import { listMembers } from "@/src/api/members";
 import { decryptIncomingMessage } from "./encryptedMessages";
 
 export const BACKGROUND_NOTIFICATION_TASK = "e2e-background-notification";
@@ -35,10 +35,9 @@ function readPayload(input: unknown): BackgroundData {
 async function resolveSenderName(memberId: string): Promise<string> {
   if (!memberId) return "Família";
   try {
-    const snap = await getDoc(doc(db, "members", memberId));
-    if (!snap.exists()) return "Família";
-    const data = snap.data() as { name?: unknown };
-    return typeof data.name === "string" && data.name.length > 0 ? data.name : "Família";
+    const members = await listMembers();
+    const member = members.find((item) => item.id === memberId);
+    return member?.name || "Família";
   } catch {
     return "Família";
   }
@@ -130,20 +129,15 @@ TaskManager.defineTask(BACKGROUND_NOTIFICATION_TASK, async ({ data, error }) => 
     }
 
     if (plaintext === null) {
-      const msgSnap = await getDoc(doc(db, "chats", chatId, "messages", messageId));
-      if (!msgSnap.exists()) {
+      const messages = await listMessages(chatId, { limit: 500 });
+      const msg = messages.find((item) => item.id === messageId);
+      if (!msg) {
         trace.push("snap=missing");
         await scheduleFallback(chatId, senderName);
         await scheduleDebug(trace.join(" "));
         return;
       }
-      const msg = msgSnap.data() as {
-        ciphertext?: string;
-        iv?: string;
-        text?: string | null;
-        audioUrl?: string | null;
-      };
-      if (msg.audioUrl) {
+      if (msg.audio_url) {
         await scheduleNotification(senderName, "Áudio", chatId);
         await scheduleDebug(trace.join(" ") + " path=audioFs");
         return;
@@ -151,7 +145,7 @@ TaskManager.defineTask(BACKGROUND_NOTIFICATION_TASK, async ({ data, error }) => 
       plaintext = await decryptIncomingMessage(chatId, {
         ciphertext: msg.ciphertext ?? null,
         iv: msg.iv ?? null,
-        text: msg.text ?? null,
+        text: null,
       });
       trace.push(`pt2=${plaintext === null ? "null" : `len${plaintext.length}`}`);
     }

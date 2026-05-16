@@ -1,16 +1,15 @@
 import { useAuth } from "@/context/AuthContext";
 import { useConnectivity } from "@/hooks/useConnectivity";
 import { useExpoPushToken } from "@/hooks/useExpoPushToken";
-import { db } from "@/lib/firebase";
 import { isValidExpoPushTokenString } from "@/lib/expoPushToken";
-import { doc, serverTimestamp, updateDoc } from "firebase/firestore";
+import { heartbeat, updateDevice } from "@/src/api/devices";
 import { useEffect, useRef } from "react";
 import { AppState } from "react-native";
 
 const LAST_ACTIVE_INTERVAL_MS = 60_000;
 
 export function PushTokenSync() {
-  const { deviceId, firebaseUser, loading, sessionReady, needsPushToken } = useAuth();
+  const { deviceId, currentUser, loading, sessionReady, needsPushToken } = useAuth();
   const { isOnline } = useConnectivity();
   const { token, refresh } = useExpoPushToken();
   const appState = useRef(AppState.currentState);
@@ -32,27 +31,22 @@ export function PushTokenSync() {
   }, [isOnline, loading, sessionReady, needsPushToken, refresh]);
 
   useEffect(() => {
-    if (!isOnline || loading || !deviceId || !firebaseUser || !token || !isValidExpoPushTokenString(token)) {
+    if (!isOnline || loading || !deviceId || !currentUser || !token || !isValidExpoPushTokenString(token)) {
       return;
     }
-    updateDoc(doc(db, "devices", deviceId), {
-      pushToken: token,
-      lastActiveAt: serverTimestamp(),
-    }).catch(() => {});
-  }, [deviceId, firebaseUser, isOnline, loading, token]);
+    updateDevice(deviceId, { device_id: deviceId, push_token: token }).catch(() => {});
+  }, [currentUser, deviceId, isOnline, loading, token]);
 
   useEffect(() => {
-    if (!isOnline || loading || !deviceId || !firebaseUser || needsPushToken) return;
+    if (!isOnline || loading || !deviceId || !currentUser || needsPushToken) return;
 
     const tick = () => {
-      updateDoc(doc(db, "devices", deviceId), {
-        lastActiveAt: serverTimestamp(),
-      }).catch(() => {});
+      heartbeat(deviceId).catch(() => {});
     };
 
     const id = setInterval(tick, LAST_ACTIVE_INTERVAL_MS);
     return () => clearInterval(id);
-  }, [deviceId, firebaseUser, isOnline, loading, needsPushToken]);
+  }, [currentUser, deviceId, isOnline, loading, needsPushToken]);
 
   return null;
 }

@@ -1,12 +1,9 @@
-import { auth } from "./firebase";
 import { generateConversationKey } from "./crypto/symmetric";
-import { tryBackupConversationKey } from "./keyBackup";
 import { SecureKeyStore } from "./secureKeyStore";
 
 async function backupIfPossible(chatId: string, key: Uint8Array): Promise<void> {
-  const uid = auth.currentUser?.uid;
-  if (!uid) return;
-  await tryBackupConversationKey(uid, chatId, key);
+  void chatId;
+  void key;
 }
 
 export async function ensureConversationKey(chatId: string): Promise<Uint8Array> {

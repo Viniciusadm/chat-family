@@ -14,7 +14,7 @@ import {
   listKeyBackups,
   writeKeyBackup,
   writePasswordSettings,
-} from "./firestoreKeyBackups";
+} from "./remoteKeyBackups";
 import { SecureKeyStore } from "./secureKeyStore";
 
 export type RestoreResult =

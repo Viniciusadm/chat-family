@@ -20,8 +20,10 @@ type AdminPendingDeviceRow = {
   id: string;
   tenant_id: string;
   user_id: string;
+  member_id: string | null;
   approved: number;
   push_token: string;
+  public_key: string | null;
   created_at: string;
 };
 
@@ -50,8 +52,10 @@ function rowToDevice(row: AdminPendingDeviceRow): Device {
     id: row.id,
     tenantId: row.tenant_id,
     userId: row.user_id,
+    memberId: row.member_id,
     approved: row.approved === 1,
-    pushToken: row.push_token,
+    pushToken: row.push_token ?? "",
+    publicKey: row.public_key,
     createdAt: new Date(row.created_at),
   };
 }
@@ -181,17 +185,21 @@ export const AdminRepository = {
             id,
             tenant_id,
             user_id,
+            member_id,
             approved,
             push_token,
+            public_key,
             created_at,
             updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             device.id,
             device.tenantId,
             device.userId,
+            device.memberId ?? null,
             device.approved ? 1 : 0,
             device.pushToken,
+            device.publicKey ?? null,
             device.createdAt.toISOString(),
             updatedAt,
           ]

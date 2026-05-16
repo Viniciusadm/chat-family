@@ -7,7 +7,6 @@ import { StyleSheet, View } from "react-native";
 export default function ProtectedLayout() {
   const {
     currentUser,
-    firebaseUser,
     deviceApproved,
     loading,
     sessionReady,
@@ -26,7 +25,7 @@ export default function ProtectedLayout() {
   );
   const hasApprovedSession = currentUser != null && deviceApproved === true;
 
-  if (loading || (firebaseUser && !sessionReady)) {
+  if (loading || (currentUser && !sessionReady)) {
     return (
       <View style={styles.center}>
         <LoadingDots />
@@ -34,7 +33,7 @@ export default function ProtectedLayout() {
     );
   }
 
-  if (!firebaseUser && !hasApprovedSession) {
+  if (!currentUser && !hasApprovedSession) {
     return <Redirect href="/login" />;
   }
 

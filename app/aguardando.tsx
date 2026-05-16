@@ -12,7 +12,6 @@ export default function AguardandoScreen() {
   const router = useRouter();
   const {
     currentUser,
-    firebaseUser,
     deviceApproved,
     loading,
     sessionReady,
@@ -66,7 +65,7 @@ export default function AguardandoScreen() {
     }
   }, [deviceApproved, loading, sessionReady, router]);
 
-  if (loading || (firebaseUser && !sessionReady)) {
+  if (loading || (currentUser && !sessionReady)) {
     return (
       <ScreenContainer
         style={[styles.screen, styles.centerOnly]}
@@ -77,7 +76,7 @@ export default function AguardandoScreen() {
     );
   }
 
-  if (!firebaseUser && !hasApprovedSession) {
+  if (!currentUser && !hasApprovedSession) {
     return <Redirect href="/login" />;
   }
 

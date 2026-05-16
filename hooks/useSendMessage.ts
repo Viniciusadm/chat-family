@@ -5,13 +5,11 @@ import { ChatRepository } from "@/lib/ChatRepository";
 import { ensureConversationKey } from "@/lib/conversationKeys";
 import { encryptMessageText } from "@/lib/encryptedMessages";
 import {
-  ensureAudioMessageInFirestore,
-  ensureTextMessageInFirestore,
-  softDeleteMessageInFirestore,
-  updateChatAfterOutgoingMessage,
-  updateTextMessageInFirestore,
-} from "@/lib/firestoreMessages";
-import { storage } from "@/lib/firebase";
+  ensureAudioMessageRemote,
+  ensureTextMessageRemote,
+  softDeleteMessageRemote,
+  updateTextMessageRemote,
+} from "@/lib/remoteMessages";
 import { ImageCacheRepository } from "@/lib/ImageCacheRepository";
 import { ImageGalleryRepository } from "@/lib/ImageGalleryRepository";
 import { processImageForUpload } from "@/lib/ImageProcessor";
@@ -19,8 +17,8 @@ import { uploadAndPersistImage } from "@/lib/imageUpload";
 import { MessageRepository } from "@/lib/MessageRepository";
 import { syncPendingTextMessages } from "@/lib/offlineSync";
 import { randomUuid } from "@/lib/randomUuid";
+import { uploadMessageAudio } from "@/src/api/media";
 import type { Message, MessageReplySnapshot } from "@/types/chat";
-import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { useState } from "react";
 
 export type SendableAudio = Blob | Uint8Array | ArrayBuffer;
@@ -28,7 +26,7 @@ export type SendableAudio = Blob | Uint8Array | ArrayBuffer;
 export const EDIT_DELETE_WINDOW_MS = 60 * 60 * 1000;
 
 export function useSendMessage(chatId: string) {
-  const { currentUser, tenantId, firebaseUser } = useAuth();
+  const { currentUser, tenantId } = useAuth();
   const { isOnline } = useConnectivity();
   const [isSending, setIsSending] = useState(false);
 
@@ -57,13 +55,13 @@ export function useSendMessage(chatId: string) {
         type: "text",
         timestamp: createdAt,
       });
-      if (!isOnline || !firebaseUser) return;
+      if (!isOnline) return;
       await ensureConversationKey(chatId);
       const enc = await encryptMessageText(chatId, trimmed);
       if (!enc) {
         return;
       }
-      await ensureTextMessageInFirestore({
+      await ensureTextMessageRemote({
         chatId,
         messageId,
         tenantId,
@@ -73,11 +71,6 @@ export function useSendMessage(chatId: string) {
         replyTo: options?.replyTo ?? null,
       });
       await MessageRepository.updateStatus(messageId, "sent");
-      await updateChatAfterOutgoingMessage(chatId, currentUser.id, {
-        type: "text",
-        ciphertext: enc.ciphertext,
-        iv: enc.iv,
-      });
     } catch {
       // Keep the local message pending. The offline sync will retry it.
     } finally {
@@ -95,35 +88,39 @@ export function useSendMessage(chatId: string) {
     }
   ) => {
     if (!currentUser || !tenantId) return;
-    if (!isOnline || !firebaseUser) return;
     setIsSending(true);
     const messageId = randomUuid();
+    const sentAt = new Date();
     try {
-      const ext = options?.extension ?? "webm";
-      const storageRef = ref(
-        storage,
-        `audios/${tenantId}/${chatId}/${messageId}.${ext}`
-      );
+      await MessageRepository.insertLocalMessage({
+        id: messageId,
+        conversationId: chatId,
+        senderId: currentUser.id,
+        body: null,
+        type: "audio",
+        status: "loading",
+        createdAt: sentAt,
+        audioDuration: options?.duration ?? null,
+        replyTo: options?.replyTo ?? null,
+      });
+      await ChatRepository.updateLastMessage(chatId, {
+        text: null,
+        type: "audio",
+        timestamp: sentAt,
+      });
+      if (!isOnline) return;
 
-      await uploadBytes(
-        storageRef,
-        audio,
-        options?.contentType
-          ? { contentType: options.contentType }
-          : undefined
-      );
-      const audioUrl = await getDownloadURL(storageRef);
-
-      await ensureAudioMessageInFirestore({
+      await ensureAudioMessageRemote({
         chatId,
         messageId,
         tenantId,
         senderId: currentUser.id,
-        audioUrl,
+        audioUrl: null,
         audioDuration: options?.duration ?? null,
         replyTo: options?.replyTo ?? null,
       });
-      const sentAt = new Date();
+      const uploaded = await uploadMessageAudio(chatId, messageId, audio);
+      const audioUrl = uploaded.url;
       await MessageRepository.insertLocalMessage({
         id: messageId,
         conversationId: chatId,
@@ -132,7 +129,7 @@ export function useSendMessage(chatId: string) {
         type: "audio",
         status: "sent",
         createdAt: sentAt,
-        syncedAt: sentAt,
+        syncedAt: new Date(),
         audioDuration: options?.duration ?? null,
         replyTo: options?.replyTo ?? null,
       });
@@ -140,14 +137,6 @@ export function useSendMessage(chatId: string) {
         chatId,
         messageId,
         remoteUrl: audioUrl,
-      });
-      await ChatRepository.updateLastMessage(chatId, {
-        text: null,
-        type: "audio",
-        timestamp: sentAt,
-      });
-      await updateChatAfterOutgoingMessage(chatId, currentUser.id, {
-        type: "audio",
       });
     } finally {
       setIsSending(false);
@@ -205,7 +194,7 @@ export function useSendMessage(chatId: string) {
         });
       }
 
-      if (!isOnline || !firebaseUser) return;
+      if (!isOnline) return;
 
       await uploadAndPersistImage({
         chatId,
@@ -226,7 +215,7 @@ export function useSendMessage(chatId: string) {
   };
 
   const retryImageMessage = async (message: Message) => {
-    if (!currentUser || !tenantId || !firebaseUser || !isOnline) return;
+    if (!currentUser || !tenantId || !isOnline) return;
     if (message.type !== "image") return;
     const sourceUri = message.imagePendingSourceUri ?? message.imageLocalUri;
     if (!sourceUri) return;
@@ -269,7 +258,7 @@ export function useSendMessage(chatId: string) {
 
     if (message.status === "loading") {
       await MessageRepository.overwritePendingCreateBody(message.id, trimmed);
-      if (isOnline && firebaseUser) {
+      if (isOnline) {
         void syncPendingTextMessages(currentUser, tenantId, isOnline);
       }
       return true;
@@ -283,12 +272,12 @@ export function useSendMessage(chatId: string) {
       preserveOriginal: !message.isEdited,
     });
 
-    if (!isOnline || !firebaseUser) return true;
+    if (!isOnline) return true;
     try {
       await ensureConversationKey(message.chatId);
       const enc = await encryptMessageText(message.chatId, trimmed);
       if (!enc) return true;
-      await updateTextMessageInFirestore({
+      await updateTextMessageRemote({
         chatId: message.chatId,
         messageId: message.id,
         ciphertext: enc.ciphertext,
@@ -321,9 +310,9 @@ export function useSendMessage(chatId: string) {
       pendingOp: "delete",
     });
 
-    if (!isOnline || !firebaseUser) return true;
+    if (!isOnline) return true;
     try {
-      await softDeleteMessageInFirestore({
+      await softDeleteMessageRemote({
         chatId: message.chatId,
         messageId: message.id,
       });

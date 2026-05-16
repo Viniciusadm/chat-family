@@ -1,6 +1,5 @@
 import { decryptText, encryptText } from "./crypto/symmetric";
 import { getConversationKey } from "./conversationKeys";
-import type { MessageDoc } from "@/types/chat";
 
 export async function encryptMessageText(
   chatId: string,
@@ -11,10 +10,11 @@ export async function encryptMessageText(
   return encryptText(key, plaintext);
 }
 
-export type IncomingEncryptedMessage = Pick<
-  MessageDoc,
-  "ciphertext" | "iv" | "text"
->;
+export type IncomingEncryptedMessage = {
+  ciphertext?: string | null;
+  iv?: string | null;
+  text?: string | null;
+};
 
 export async function decryptIncomingMessage(
   chatId: string,

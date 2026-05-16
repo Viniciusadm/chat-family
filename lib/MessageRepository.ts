@@ -1,8 +1,8 @@
 import { decryptIncomingMessage } from "@/lib/encryptedMessages";
 import { getDatabase, withExclusiveWrite } from "@/lib/db";
+import type { MessageDto } from "@/src/api/chats";
 import type {
   Message,
-  MessageDoc,
   MessagePendingOp,
   MessageReplySnapshot,
   MessageReplyType,
@@ -558,23 +558,23 @@ export const MessageRepository = {
     return rows.map((row) => row.conversation_id);
   },
 
-  async upsertFirestoreMessage(
+  async upsertRemoteMessage(
     conversationId: string,
     id: string,
-    data: MessageDoc,
+    data: MessageDto,
     options: { notify?: boolean } = {}
   ) {
-    const isAudio = data.audioUrl != null;
-    const isImage = !isAudio && data.imageUrl != null;
-    const createdAt = data.createdAt ? data.createdAt.toDate() : new Date();
-    const isDeleted = data.isDeleted === true;
-    const editedAt = data.editedAt ? data.editedAt.toDate() : null;
-    const deletedAt = data.deletedAt ? data.deletedAt.toDate() : null;
+    const isAudio = data.type === "audio";
+    const isImage = data.type === "image";
+    const createdAt = data.created_at ? new Date(data.created_at) : new Date();
+    const isDeleted = data.is_deleted === true;
+    const editedAt = data.edited_at ? new Date(data.edited_at) : null;
+    const deletedAt = data.deleted_at ? new Date(data.deleted_at) : null;
 
     let body: string | null;
     let type: MessageType;
     if (isAudio) {
-      body = data.audioUrl ?? null;
+      body = data.audio_url ?? null;
       type = "audio";
     } else if (isImage) {
       body = null;
@@ -583,7 +583,7 @@ export const MessageRepository = {
       body = await decryptIncomingMessage(conversationId, data);
       type = "text";
     } else {
-      body = data.text ?? null;
+      body = null;
       type = "text";
     }
 
@@ -591,18 +591,29 @@ export const MessageRepository = {
       {
         id,
         conversationId,
-        senderId: data.senderId,
+        senderId: data.sender_member_id,
         type,
         body,
         status: "sent",
         createdAt,
         syncedAt: new Date(),
-        audioDuration: isAudio ? data.audioDuration ?? null : null,
-        imageRemoteUrl: isImage ? data.imageUrl ?? null : null,
-        imageWidth: isImage ? data.imageWidth ?? null : null,
-        imageHeight: isImage ? data.imageHeight ?? null : null,
-        imageFileSize: isImage ? data.imageFileSize ?? null : null,
-        replyTo: data.replyTo ?? null,
+        audioDuration: isAudio ? data.audio_duration ?? null : null,
+        imageRemoteUrl: isImage ? data.image_url ?? null : null,
+        imageWidth: isImage ? data.image_width ?? null : null,
+        imageHeight: isImage ? data.image_height ?? null : null,
+        imageFileSize: isImage ? data.image_file_size ?? null : null,
+        replyTo: data.reply_to_message_id
+          ? {
+              id: data.reply_to_message_id,
+              senderId: data.reply_to_sender_id ?? "",
+              senderName: data.reply_to_sender_name ?? "Participante",
+              type:
+                data.reply_to_type === "audio" || data.reply_to_type === "image"
+                  ? data.reply_to_type
+                  : "text",
+              preview: data.reply_to_preview ?? "",
+            }
+          : null,
         isEdited: editedAt != null,
         editedAt,
         isDeleted,
@@ -612,7 +623,7 @@ export const MessageRepository = {
     );
   },
 
-  async syncWithFirestore(
+  async syncWithRemote(
     conversationId: string,
     sendPendingMessage: (message: Message) => Promise<void>
   ) {

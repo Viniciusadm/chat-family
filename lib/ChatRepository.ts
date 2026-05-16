@@ -1,6 +1,6 @@
 import { getDatabase, withExclusiveWrite } from "@/lib/db";
+import { timestampFromMillis } from "@/lib/localTimestamp";
 import type { Chat } from "@/types/chat";
-import { Timestamp } from "firebase/firestore";
 
 type ChatRow = {
   id: string;
@@ -46,7 +46,7 @@ function parseReadUpTo(value: string | null): Chat["readUpTo"] {
     const readUpTo: NonNullable<Chat["readUpTo"]> = {};
     for (const [userId, millis] of Object.entries(parsed)) {
       if (typeof userId !== "string" || typeof millis !== "number") continue;
-      readUpTo[userId] = Timestamp.fromMillis(millis);
+      readUpTo[userId] = timestampFromMillis(millis);
     }
 
     return Object.keys(readUpTo).length > 0 ? readUpTo : undefined;

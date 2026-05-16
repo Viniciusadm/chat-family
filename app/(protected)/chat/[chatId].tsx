@@ -25,7 +25,7 @@ import { useTheme } from "@/theme/ThemeContext";
 import { useThemedStyles } from "@/theme/useThemedStyles";
 import type { Message, MessageReplySnapshot } from "@/types/chat";
 import { Ionicons } from "@expo/vector-icons";
-import type { Timestamp } from "firebase/firestore";
+import type { LocalTimestamp } from "@/lib/localTimestamp";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -67,7 +67,7 @@ function readReceiptStatus(
   message: Message,
   currentUserId: string | undefined,
   participants: string[],
-  readUpTo: Record<string, Timestamp> | null
+  readUpTo: Record<string, LocalTimestamp> | null
 ): "loading" | "sent" | "read" | undefined {
   if (!currentUserId || message.senderId !== currentUserId) return undefined;
   if (message.status === "loading") return "loading";

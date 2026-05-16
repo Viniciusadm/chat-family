@@ -1,41 +1,7 @@
-import { collection, getDocs, query, where } from "firebase/firestore";
-import { db } from "./firebase";
 import { unwrapKeyFromShare, wrapKeyForDevice } from "./crypto/asymmetric";
 import { getConversationKey, importConversationKey } from "./conversationKeys";
 import { getDevicePrivateKey } from "./deviceIdentity";
-import { listKeyShares, writeKeyShare } from "./firestoreKeyShares";
-import type { DeviceDoc } from "@/types/chat";
-
-async function findApprovedDevicesForMember(
-  memberId: string,
-  tenantId: string,
-): Promise<{ deviceId: string; publicKey: string }[]> {
-  const userSnap = await getDocs(
-    query(
-      collection(db, "users"),
-      where("memberId", "==", memberId),
-      where("tenantId", "==", tenantId),
-    ),
-  );
-  const targets: { deviceId: string; publicKey: string }[] = [];
-  for (const u of userSnap.docs) {
-    const devSnap = await getDocs(
-      query(
-        collection(db, "devices"),
-        where("userId", "==", u.id),
-        where("tenantId", "==", tenantId),
-        where("approved", "==", true),
-      ),
-    );
-    for (const d of devSnap.docs) {
-      const data = d.data() as DeviceDoc;
-      if (typeof data.publicKey === "string" && data.publicKey.length > 0) {
-        targets.push({ deviceId: d.id, publicKey: data.publicKey });
-      }
-    }
-  }
-  return targets;
-}
+import { listKeyShares, writeKeyShare } from "./remoteKeyShares";
 
 export async function distributeConversationKey(
   chatId: string,
@@ -46,23 +12,10 @@ export async function distributeConversationKey(
   const key = await getConversationKey(chatId);
   if (!key) return;
 
-  const targets: { deviceId: string; publicKey: string }[] = [];
-  for (const memberId of participantMemberIds) {
-    try {
-      targets.push(...(await findApprovedDevicesForMember(memberId, tenantId)));
-    } catch {
-      // Sem permissão ou sem user doc; consumePendingKeyShares cobre depois.
-    }
-  }
-
-  for (const target of targets) {
-    const wrapped = wrapKeyForDevice(target.publicKey, key);
-    try {
-      await writeKeyShare(target.deviceId, chatId, wrappedBy, wrapped);
-    } catch {
-      // Permission or transient failure; skip silently.
-    }
-  }
+  void participantMemberIds;
+  void tenantId;
+  void wrappedBy;
+  void key;
 }
 
 export async function distributeAllOwnedKeysToDevice(

@@ -1,11 +1,7 @@
-import { storage } from "@/lib/firebase";
-import {
-  ensureImageMessageInFirestore,
-  updateChatAfterOutgoingMessage,
-} from "@/lib/firestoreMessages";
+import { ensureImageMessageRemote } from "@/lib/remoteMessages";
 import { MessageRepository } from "@/lib/MessageRepository";
+import { uploadMessageImage } from "@/src/api/media";
 import type { MessageReplySnapshot } from "@/types/chat";
-import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 
 export async function uploadAndPersistImage(args: {
   chatId: string;
@@ -18,34 +14,28 @@ export async function uploadAndPersistImage(args: {
   imageFileSize: number;
   replyTo: MessageReplySnapshot | null;
 }) {
-  const imageRef = ref(
-    storage,
-    `images/${args.tenantId}/${args.chatId}/${args.messageId}.jpg`
-  );
-
-  const blob = await fetch(args.imageUri).then((r) => r.blob());
-
-  await uploadBytes(imageRef, blob, { contentType: "image/jpeg" });
-
-  const imageUrl = await getDownloadURL(imageRef);
-
-  await ensureImageMessageInFirestore({
+  await ensureImageMessageRemote({
     chatId: args.chatId,
     messageId: args.messageId,
     tenantId: args.tenantId,
     senderId: args.senderId,
-    imageUrl,
-    imageWidth: args.imageWidth || null,
-    imageHeight: args.imageHeight || null,
-    imageFileSize: args.imageFileSize || null,
+    imageUrl: null,
+    thumbnailUrl: null,
+    imageWidth: null,
+    imageHeight: null,
+    imageFileSize: null,
     replyTo: args.replyTo,
   });
+
+  const uploaded = await uploadMessageImage(args.chatId, args.messageId, {
+    uri: args.imageUri,
+    name: `${args.messageId}.jpg`,
+    type: "image/jpeg",
+  });
+  const imageUrl = uploaded.url;
 
   await MessageRepository.updateImageRemoteUrls(args.messageId, {
     remote: imageUrl,
   });
   await MessageRepository.updateStatus(args.messageId, "sent");
-  await updateChatAfterOutgoingMessage(args.chatId, args.senderId, {
-    type: "image",
-  });
 }
