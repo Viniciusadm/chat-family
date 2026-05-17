@@ -1,6 +1,7 @@
 import { ChatRepository } from "@/lib/ChatRepository";
 import { ensureConversationKey } from "@/lib/conversationKeys";
 import { encryptMessageText } from "@/lib/encryptedMessages";
+import { distributeConversationKeyForChat } from "@/lib/keyDistribution";
 import {
   ensureTextMessageRemote,
   softDeleteMessageRemote,
@@ -100,6 +101,7 @@ export async function syncPendingTextMessages(
 
       try {
         await ensureConversationKey(message.chatId);
+        await distributeConversationKeyForChat(message.chatId);
         const enc = await encryptMessageText(message.chatId, message.content);
         if (!enc) continue;
         await ensureTextMessageRemote({
@@ -196,6 +198,7 @@ export async function syncPendingOps(
           await MessageRepository.clearPendingOp(message.id);
         } else if (message.pendingOp === "update" && message.type === "text") {
           await ensureConversationKey(message.chatId);
+          await distributeConversationKeyForChat(message.chatId);
           const enc = await encryptMessageText(message.chatId, message.content);
           if (!enc) continue;
           await updateTextMessageRemote({

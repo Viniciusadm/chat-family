@@ -15,6 +15,18 @@ export async function writeKeyShare(
   });
 }
 
+export async function writeChatKeyShare(
+  deviceId: string,
+  chatId: string,
+  share: WrappedKey,
+): Promise<void> {
+  await cryptoApi.putChatKeyShare(deviceId, chatId, {
+    ephemeral_public_key: share.ephemeralPublicKey,
+    iv: share.iv,
+    ciphertext: share.ciphertext,
+  });
+}
+
 export async function listKeyShares(
   deviceId: string,
 ): Promise<{ chatId: string; share: KeyShareDoc }[]> {

@@ -1,7 +1,8 @@
 import { unwrapKeyFromShare, wrapKeyForDevice } from "./crypto/asymmetric";
 import { getConversationKey, importConversationKey } from "./conversationKeys";
 import { getDevicePrivateKey } from "./deviceIdentity";
-import { listKeyShares, writeKeyShare } from "./remoteKeyShares";
+import { listKeyShares, writeChatKeyShare, writeKeyShare } from "./remoteKeyShares";
+import { listChatKeyRecipients } from "@/src/api/crypto";
 import { listKeyRecipientDevices } from "@/src/api/devices";
 
 export async function distributeConversationKey(
@@ -20,6 +21,22 @@ export async function distributeConversationKey(
       if (!device.public_key) return;
       const wrapped = wrapKeyForDevice(device.public_key, key);
       await writeKeyShare(device.id, chatId, wrappedBy, wrapped);
+    })
+  );
+}
+
+export async function distributeConversationKeyForChat(
+  chatId: string,
+): Promise<void> {
+  const key = await getConversationKey(chatId);
+  if (!key) return;
+
+  const recipients = await listChatKeyRecipients(chatId);
+  await Promise.all(
+    recipients.map(async (device) => {
+      if (!device.public_key) return;
+      const wrapped = wrapKeyForDevice(device.public_key, key);
+      await writeChatKeyShare(device.id, chatId, wrapped);
     })
   );
 }
@@ -50,6 +67,7 @@ export async function consumePendingKeyShares(deviceId: string): Promise<string[
   const importedChatIds: string[] = [];
   for (const { chatId, share } of shares) {
     try {
+      if (await getConversationKey(chatId)) continue;
       const key = unwrapKeyFromShare(priv, share);
       await importConversationKey(chatId, key);
       importedChatIds.push(chatId);

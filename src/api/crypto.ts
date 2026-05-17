@@ -20,6 +20,16 @@ export type KeyShareDto = {
   ciphertext: string;
 };
 
+export type ChatKeyRecipientDeviceDto = {
+  id: string;
+  user_id: string;
+  member_id: string;
+  public_key: string;
+  approved?: boolean;
+  active?: boolean;
+  created_at?: string;
+};
+
 export function getPasswordSettings() {
   return apiFetch<PasswordSettingsDto | null>("/crypto/password-settings");
 }
@@ -61,4 +71,19 @@ export function putKeyShare(deviceId: string, chatId: string, body: {
     method: "PUT",
     body,
   });
+}
+
+export function listChatKeyRecipients(chatId: string) {
+  return apiFetch<ChatKeyRecipientDeviceDto[]>(`/chats/${chatId}/key-recipients`);
+}
+
+export function putChatKeyShare(deviceId: string, chatId: string, body: {
+  ephemeral_public_key: string;
+  iv: string;
+  ciphertext: string;
+}) {
+  return apiFetch<{ ok: true }>(
+    `/chats/${chatId}/devices/${deviceId}/key-shares`,
+    { method: "PUT", body },
+  );
 }

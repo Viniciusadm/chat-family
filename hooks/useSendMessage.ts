@@ -4,6 +4,7 @@ import { AudioCacheRepository } from "@/lib/AudioCacheRepository";
 import { ChatRepository } from "@/lib/ChatRepository";
 import { ensureConversationKey } from "@/lib/conversationKeys";
 import { encryptMessageText } from "@/lib/encryptedMessages";
+import { distributeConversationKeyForChat } from "@/lib/keyDistribution";
 import {
   ensureAudioMessageRemote,
   ensureTextMessageRemote,
@@ -61,6 +62,7 @@ export function useSendMessage(chatId: string) {
       });
       if (!isOnline) return;
       await ensureConversationKey(chatId);
+      await distributeConversationKeyForChat(chatId);
       const enc = await encryptMessageText(chatId, trimmed);
       if (!enc) {
         return;
@@ -299,6 +301,7 @@ export function useSendMessage(chatId: string) {
     if (!isOnline) return true;
     try {
       await ensureConversationKey(message.chatId);
+      await distributeConversationKeyForChat(message.chatId);
       const enc = await encryptMessageText(message.chatId, trimmed);
       if (!enc) return true;
       await updateTextMessageRemote({

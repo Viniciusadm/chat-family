@@ -8,7 +8,7 @@ function openChatFromData(
 ) {
   const chatId = data && typeof data.chatId === "string" ? data.chatId : null;
   if (!chatId) return;
-  const messageId = typeof data.messageId === "string" ? data.messageId : undefined;
+  const messageId = typeof data?.messageId === "string" ? data.messageId : undefined;
   router.push({
     pathname: "/(protected)/chat/[chatId]",
     params: messageId ? { chatId, messageId } : { chatId },

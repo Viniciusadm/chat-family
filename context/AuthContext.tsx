@@ -297,6 +297,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }).catch(() => {});
   }, [deviceApproved, deviceId]);
 
+  useEffect(() => {
+    if (!deviceId || deviceApproved !== true) return;
+    const unsubscribe = realtimeClient.subscribe((event) => {
+      if (event.type !== "key_share.updated") return;
+      const targetDeviceId =
+        typeof event.payload.device_id === "string"
+          ? event.payload.device_id
+          : event.entity_id;
+      if (targetDeviceId !== deviceId) return;
+
+      void consumePendingKeyShares(deviceId)
+        .then(async (chatIds) => {
+          await Promise.all(
+            chatIds.map((chatId) => MessageRepository.decryptStoredMessages(chatId))
+          );
+          if (chatIds.length > 0) syncChatHistories(chatIds, true);
+        })
+        .catch(() => {});
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, [deviceApproved, deviceId]);
+
   const loginWithEmail = useCallback(
     async (email: string, password: string) => {
       setLoading(true);
