@@ -2,6 +2,7 @@ import { unwrapKeyFromShare, wrapKeyForDevice } from "./crypto/asymmetric";
 import { getConversationKey, importConversationKey } from "./conversationKeys";
 import { getDevicePrivateKey } from "./deviceIdentity";
 import { listKeyShares, writeKeyShare } from "./remoteKeyShares";
+import { listKeyRecipientDevices } from "@/src/api/devices";
 
 export async function distributeConversationKey(
   chatId: string,
@@ -11,11 +12,16 @@ export async function distributeConversationKey(
 ): Promise<void> {
   const key = await getConversationKey(chatId);
   if (!key) return;
-
-  void participantMemberIds;
   void tenantId;
-  void wrappedBy;
-  void key;
+
+  const recipients = await listKeyRecipientDevices(participantMemberIds);
+  await Promise.all(
+    recipients.map(async (device) => {
+      if (!device.public_key) return;
+      const wrapped = wrapKeyForDevice(device.public_key, key);
+      await writeKeyShare(device.id, chatId, wrappedBy, wrapped);
+    })
+  );
 }
 
 export async function distributeAllOwnedKeysToDevice(

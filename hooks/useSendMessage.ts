@@ -74,6 +74,11 @@ export function useSendMessage(chatId: string) {
         iv: enc.iv,
         replyTo: options?.replyTo ?? null,
       });
+      await MessageRepository.updateEncryptedPayload(messageId, {
+        ciphertext: enc.ciphertext,
+        iv: enc.iv,
+        encVersion: 1,
+      });
       await MessageRepository.updateStatus(messageId, "sent");
     } catch {
       // Keep the local message pending. The offline sync will retry it.
@@ -301,6 +306,11 @@ export function useSendMessage(chatId: string) {
         messageId: message.id,
         ciphertext: enc.ciphertext,
         iv: enc.iv,
+      });
+      await MessageRepository.updateEncryptedPayload(message.id, {
+        ciphertext: enc.ciphertext,
+        iv: enc.iv,
+        encVersion: 1,
       });
       await MessageRepository.clearPendingOp(message.id);
     } catch {

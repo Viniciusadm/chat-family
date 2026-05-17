@@ -111,6 +111,11 @@ export async function syncPendingTextMessages(
           iv: enc.iv,
           replyTo: message.replyTo ?? null,
         });
+        await MessageRepository.updateEncryptedPayload(message.id, {
+          ciphertext: enc.ciphertext,
+          iv: enc.iv,
+          encVersion: 1,
+        });
         await MessageRepository.updateStatus(message.id, "sent");
       } catch {
         // Leave the row pending for the next online pass.
@@ -198,6 +203,11 @@ export async function syncPendingOps(
             messageId: message.id,
             ciphertext: enc.ciphertext,
             iv: enc.iv,
+          });
+          await MessageRepository.updateEncryptedPayload(message.id, {
+            ciphertext: enc.ciphertext,
+            iv: enc.iv,
+            encVersion: 1,
           });
           await MessageRepository.clearPendingOp(message.id);
         }

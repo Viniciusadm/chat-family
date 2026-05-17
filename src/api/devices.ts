@@ -10,6 +10,16 @@ export type PendingDeviceDto = {
   created_at?: string;
 };
 
+export type KeyRecipientDeviceDto = {
+  id: string;
+  user_id: string;
+  member_id: string;
+  public_key: string;
+  approved?: boolean;
+  active?: boolean;
+  created_at?: string;
+};
+
 export function createDevice(body: {
   device_id: string;
   push_token?: string | null;
@@ -41,6 +51,14 @@ export function getDeviceStatus(deviceId: string) {
 
 export function listPendingDevices() {
   return apiFetch<PendingDeviceDto[]>("/admin/devices/pending");
+}
+
+export function listKeyRecipientDevices(memberIds: string[]) {
+  const qs = new URLSearchParams();
+  qs.set("member_ids", memberIds.join(","));
+  return apiFetch<KeyRecipientDeviceDto[]>(
+    `/admin/devices/key-recipients?${qs.toString()}`
+  );
 }
 
 export function approveDevice(deviceId: string) {

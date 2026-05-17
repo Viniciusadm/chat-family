@@ -42,6 +42,9 @@ type MessageRow = {
   original_body: string | null;
   updated_at: string | null;
   edit_attempts: number | null;
+  ciphertext: string | null;
+  iv: string | null;
+  enc_version: number | null;
 };
 
 type MessageSyncRow = {
@@ -73,6 +76,9 @@ export type LocalMessageInput = {
   editedAt?: Date | null;
   isDeleted?: boolean;
   deletedAt?: Date | null;
+  ciphertext?: string | null;
+  iv?: string | null;
+  encVersion?: number | null;
 };
 
 type Listener = () => void;
@@ -206,6 +212,9 @@ function inputParams(message: LocalMessageInput) {
     $editedAt: message.editedAt ? message.editedAt.toISOString() : null,
     $isDeleted: message.isDeleted ? 1 : 0,
     $deletedAt: message.deletedAt ? message.deletedAt.toISOString() : null,
+    $ciphertext: message.ciphertext ?? null,
+    $iv: message.iv ?? null,
+    $encVersion: message.encVersion ?? null,
   };
 }
 
@@ -317,7 +326,10 @@ export const MessageRepository = {
           is_edited,
           edited_at,
           is_deleted,
-          deleted_at
+          deleted_at,
+          ciphertext,
+          iv,
+          enc_version
         ) VALUES (
           $id,
           $conversationId,
@@ -345,13 +357,17 @@ export const MessageRepository = {
           $isEdited,
           $editedAt,
           $isDeleted,
-          $deletedAt
+          $deletedAt,
+          $ciphertext,
+          $iv,
+          $encVersion
         )
         ON CONFLICT(id) DO UPDATE SET
           conversation_id = excluded.conversation_id,
           sender_id = excluded.sender_id,
           body = CASE
             WHEN messages.pending_op IS NOT NULL THEN messages.body
+            WHEN excluded.body IS NULL AND messages.body IS NOT NULL THEN messages.body
             ELSE excluded.body
           END,
           type = excluded.type,
@@ -424,7 +440,10 @@ export const MessageRepository = {
           image_downloaded_at = COALESCE(
             excluded.image_downloaded_at,
             messages.image_downloaded_at
-          )`,
+          ),
+          ciphertext = COALESCE(excluded.ciphertext, messages.ciphertext),
+          iv = COALESCE(excluded.iv, messages.iv),
+          enc_version = COALESCE(excluded.enc_version, messages.enc_version)`,
         inputParams(message)
       );
     });
@@ -451,6 +470,63 @@ export const MessageRepository = {
     if (conversationId) {
       emit(conversationId);
     }
+  },
+
+  async updateEncryptedPayload(
+    id: string,
+    payload: { ciphertext: string; iv: string; encVersion: number }
+  ) {
+    let conversationId: string | undefined;
+    await withExclusiveWrite(async (tx) => {
+      const existing = await tx.getFirstAsync<Pick<MessageRow, "conversation_id">>(
+        "SELECT conversation_id FROM messages WHERE id = ?",
+        [id]
+      );
+      conversationId = existing?.conversation_id;
+      await tx.runAsync(
+        `UPDATE messages
+         SET ciphertext = ?, iv = ?, enc_version = ?
+         WHERE id = ?`,
+        [payload.ciphertext, payload.iv, payload.encVersion, id]
+      );
+    });
+    if (conversationId) emit(conversationId);
+  },
+
+  async decryptStoredMessages(conversationId: string): Promise<number> {
+    const db = await getDatabase();
+    const rows = await db.getAllAsync<
+      Pick<MessageRow, "id" | "ciphertext" | "iv" | "enc_version">
+    >(
+      `SELECT id, ciphertext, iv, enc_version
+       FROM messages
+       WHERE conversation_id = ?
+         AND type = 'text'
+         AND body IS NULL
+         AND ciphertext IS NOT NULL
+         AND iv IS NOT NULL
+         AND COALESCE(is_deleted, 0) = 0`,
+      [conversationId]
+    );
+    let repaired = 0;
+    for (const row of rows) {
+      const body = await decryptIncomingMessage(conversationId, {
+        ciphertext: row.ciphertext,
+        iv: row.iv,
+      });
+      if (body == null) continue;
+      await withExclusiveWrite(async (tx) => {
+        await tx.runAsync(
+          `UPDATE messages
+           SET body = ?
+           WHERE id = ? AND body IS NULL`,
+          [body, row.id]
+        );
+      });
+      repaired++;
+    }
+    if (repaired > 0) emit(conversationId);
+    return repaired;
   },
 
   async updateLocalAudioUri(id: string, localAudioUri: string) {
@@ -622,6 +698,9 @@ export const MessageRepository = {
         editedAt,
         isDeleted,
         deletedAt,
+        ciphertext: data.ciphertext ?? null,
+        iv: data.iv ?? null,
+        encVersion: data.enc_version ?? null,
       },
       options
     );

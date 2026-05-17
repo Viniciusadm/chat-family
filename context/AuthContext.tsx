@@ -7,6 +7,7 @@ import { realtimeClient } from "@/src/api/realtime";
 import { ensureDeviceKeyPair } from "@/lib/deviceIdentity";
 import { fetchExpoPushToken, isValidExpoPushTokenString } from "@/lib/expoPushToken";
 import { consumePendingKeyShares } from "@/lib/keyDistribution";
+import { MessageRepository } from "@/lib/MessageRepository";
 import {
   changeBackupPassword as changeBackupPasswordImpl,
   disableBackupPassword as disableBackupPasswordImpl,
@@ -288,7 +289,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!deviceId || deviceApproved !== true) return;
-    void consumePendingKeyShares(deviceId).then((chatIds) => {
+    void consumePendingKeyShares(deviceId).then(async (chatIds) => {
+      await Promise.all(
+        chatIds.map((chatId) => MessageRepository.decryptStoredMessages(chatId))
+      );
       if (chatIds.length > 0) syncChatHistories(chatIds, true);
     }).catch(() => {});
   }, [deviceApproved, deviceId]);

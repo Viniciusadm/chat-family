@@ -150,6 +150,9 @@ async function migrate(db: SQLite.SQLiteDatabase) {
   await ensureColumn(db, "messages", "original_body", "TEXT");
   await ensureColumn(db, "messages", "updated_at", "TEXT");
   await ensureColumn(db, "messages", "edit_attempts", "INTEGER NOT NULL DEFAULT 0");
+  await ensureColumn(db, "messages", "ciphertext", "TEXT");
+  await ensureColumn(db, "messages", "iv", "TEXT");
+  await ensureColumn(db, "messages", "enc_version", "INTEGER");
   await ensureColumn(db, "admin_pending_devices", "member_id", "TEXT");
   await ensureColumn(db, "admin_pending_devices", "public_key", "TEXT");
 
