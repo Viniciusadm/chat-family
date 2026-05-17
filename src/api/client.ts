@@ -22,9 +22,9 @@ export class ApiError extends Error {
 
 const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env;
 
-export const API_BASE_URL = env?.VITE_API_BASE_URL ?? "http://localhost:3000";
-export const API_WS_URL = env?.VITE_API_WS_URL ?? "ws://localhost:3000/realtime";
-export const MEDIA_BASE_URL = env?.VITE_MEDIA_BASE_URL ?? "http://localhost:3000";
+export const API_BASE_URL = env?.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:3000";
+export const API_WS_URL = env?.EXPO_PUBLIC_API_WS_URL ?? "ws://localhost:3000/realtime";
+export const MEDIA_BASE_URL = env?.EXPO_PUBLIC_MEDIA_BASE_URL ?? "http://localhost:3000";
 
 let accessToken: string | null = null;
 let refreshToken: string | null = null;
