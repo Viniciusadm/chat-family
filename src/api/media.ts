@@ -8,19 +8,34 @@ export type UploadResponse = {
   size_bytes?: number;
 };
 
-function formData(file: { uri: string; name?: string; type?: string } | Blob | Uint8Array | ArrayBuffer) {
+function formData(
+  file:
+    | { uri: string; name?: string; type?: string }
+    | Blob
+    | Uint8Array
+    | ArrayBuffer,
+  options?: { name?: string; type?: string }
+) {
   const data = new FormData();
   if (file instanceof Uint8Array || file instanceof ArrayBuffer) {
     const bytes = file instanceof Uint8Array ? file.slice() : file;
-    data.append("file", new Blob([bytes as ArrayBuffer]));
+    data.append(
+      "file",
+      new Blob([bytes as ArrayBuffer], { type: options?.type }),
+      options?.name
+    );
   } else if (typeof Blob !== "undefined" && file instanceof Blob) {
-    data.append("file", file);
+    const blob =
+      options?.type && file.type !== options.type
+        ? new Blob([file], { type: options.type })
+        : file;
+    data.append("file", blob, options?.name);
   } else {
     const item = file as { uri: string; name?: string; type?: string };
     data.append("file", {
       uri: item.uri,
-      name: item.name ?? "upload",
-      type: item.type ?? "application/octet-stream",
+      name: item.name ?? options?.name ?? "upload",
+      type: item.type ?? options?.type ?? "application/octet-stream",
     } as unknown as Blob);
   }
   return data;
@@ -47,11 +62,15 @@ export function uploadChatPhoto(chatId: string, file: { uri: string; name?: stri
 export function uploadMessageAudio(
   chatId: string,
   messageId: string,
-  file: Blob | Uint8Array | ArrayBuffer,
+  file: { uri: string; name?: string; type?: string } | Blob | Uint8Array | ArrayBuffer,
+  options?: { extension?: string; contentType?: string }
 ) {
   return apiFetch<UploadResponse>(`/chats/${chatId}/messages/${messageId}/audio`, {
     method: "POST",
-    body: formData(file),
+    body: formData(file, {
+      name: `${messageId}.${options?.extension ?? "m4a"}`,
+      type: options?.contentType ?? "audio/mp4",
+    }),
   });
 }
 

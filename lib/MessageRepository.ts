@@ -573,9 +573,13 @@ export const MessageRepository = {
 
     let body: string | null;
     let type: MessageType;
+    let status: MessageStatus = "sent";
     if (isAudio) {
       body = data.audio_url ?? null;
       type = "audio";
+      if (!data.audio_url && !isDeleted) {
+        status = "failed";
+      }
     } else if (isImage) {
       body = null;
       type = "image";
@@ -594,7 +598,7 @@ export const MessageRepository = {
         senderId: data.sender_member_id,
         type,
         body,
-        status: "sent",
+        status,
         createdAt,
         syncedAt: new Date(),
         audioDuration: isAudio ? data.audio_duration ?? null : null,

@@ -21,7 +21,11 @@ import { uploadMessageAudio } from "@/src/api/media";
 import type { Message, MessageReplySnapshot } from "@/types/chat";
 import { useState } from "react";
 
-export type SendableAudio = Blob | Uint8Array | ArrayBuffer;
+export type SendableAudio =
+  | { uri: string; name?: string; type?: string }
+  | Blob
+  | Uint8Array
+  | ArrayBuffer;
 
 export const EDIT_DELETE_WINDOW_MS = 60 * 60 * 1000;
 
@@ -84,6 +88,7 @@ export function useSendMessage(chatId: string) {
       extension?: string;
       contentType?: string;
       duration?: number;
+      localUri?: string | null;
       replyTo?: MessageReplySnapshot | null;
     }
   ) => {
@@ -100,6 +105,7 @@ export function useSendMessage(chatId: string) {
         type: "audio",
         status: "loading",
         createdAt: sentAt,
+        localAudioUri: options?.localUri ?? null,
         audioDuration: options?.duration ?? null,
         replyTo: options?.replyTo ?? null,
       });
@@ -108,7 +114,10 @@ export function useSendMessage(chatId: string) {
         type: "audio",
         timestamp: sentAt,
       });
-      if (!isOnline) return;
+      if (!isOnline) {
+        await MessageRepository.updateStatus(messageId, "failed");
+        return;
+      }
 
       await ensureAudioMessageRemote({
         chatId,
@@ -119,8 +128,14 @@ export function useSendMessage(chatId: string) {
         audioDuration: options?.duration ?? null,
         replyTo: options?.replyTo ?? null,
       });
-      const uploaded = await uploadMessageAudio(chatId, messageId, audio);
+      const uploaded = await uploadMessageAudio(chatId, messageId, audio, {
+        extension: options?.extension,
+        contentType: options?.contentType,
+      });
       const audioUrl = uploaded.url;
+      if (!audioUrl) {
+        throw new Error("Audio upload completed without a remote URL.");
+      }
       await MessageRepository.insertLocalMessage({
         id: messageId,
         conversationId: chatId,
@@ -130,6 +145,7 @@ export function useSendMessage(chatId: string) {
         status: "sent",
         createdAt: sentAt,
         syncedAt: new Date(),
+        localAudioUri: options?.localUri ?? null,
         audioDuration: options?.duration ?? null,
         replyTo: options?.replyTo ?? null,
       });
@@ -138,6 +154,9 @@ export function useSendMessage(chatId: string) {
         messageId,
         remoteUrl: audioUrl,
       });
+    } catch (error) {
+      console.warn("Audio message upload failed", error);
+      await MessageRepository.updateStatus(messageId, "failed").catch(() => {});
     } finally {
       setIsSending(false);
     }

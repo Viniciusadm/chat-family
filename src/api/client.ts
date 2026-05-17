@@ -20,11 +20,17 @@ export class ApiError extends Error {
   }
 }
 
-const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env;
+declare const process: {
+  env: {
+    EXPO_PUBLIC_API_BASE_URL?: string;
+    EXPO_PUBLIC_API_WS_URL?: string;
+    EXPO_PUBLIC_MEDIA_BASE_URL?: string;
+  };
+};
 
-export const API_BASE_URL = env?.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:3000";
-export const API_WS_URL = env?.EXPO_PUBLIC_API_WS_URL ?? "ws://localhost:3000/realtime";
-export const MEDIA_BASE_URL = env?.EXPO_PUBLIC_MEDIA_BASE_URL ?? "http://localhost:3000";
+export const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:3000";
+export const API_WS_URL = process.env.EXPO_PUBLIC_API_WS_URL ?? "ws://localhost:3000/realtime";
+export const MEDIA_BASE_URL = process.env.EXPO_PUBLIC_MEDIA_BASE_URL ?? "http://localhost:3000";
 
 let accessToken: string | null = null;
 let refreshToken: string | null = null;
@@ -136,6 +142,12 @@ export async function apiFetch<T = unknown>(
         : isForm
           ? options.body as BodyInit
           : JSON.stringify(options.body),
+  }).catch((error: unknown) => {
+    throw new ApiError(
+      0,
+      "Não foi possível conectar ao servidor. Verifique a URL da API e sua conexão.",
+      error,
+    );
   });
 
   if (response.status === 401 && needsAuth && options.retry !== false) {

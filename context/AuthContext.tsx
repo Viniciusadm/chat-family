@@ -296,15 +296,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const loginWithEmail = useCallback(
     async (email: string, password: string) => {
       setLoading(true);
-      const id = deviceIdRef.current || await getOrCreateDeviceId();
-      const payload = await devicePayload();
-      const response = await authApi.login({
-        email,
-        password,
-        device_id: id,
-        ...payload,
-      });
-      await establishSession(response.user, true);
+      try {
+        const id = deviceIdRef.current || await getOrCreateDeviceId();
+        const payload = await devicePayload();
+        const response = await authApi.login({
+          email,
+          password,
+          device_id: id,
+          ...payload,
+        });
+        await establishSession(response.user, true);
+      } catch (error) {
+        setLoading(false);
+        throw error;
+      }
     },
     [devicePayload, establishSession]
   );
@@ -312,16 +317,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const registerWithEmail = useCallback(
     async (email: string, password: string, name: string) => {
       setLoading(true);
-      const id = deviceIdRef.current || await getOrCreateDeviceId();
-      const payload = await devicePayload();
-      const response = await authApi.register({
-        email,
-        password,
-        name,
-        device_id: id,
-        ...payload,
-      });
-      await establishSession(response.user, true);
+      try {
+        const id = deviceIdRef.current || await getOrCreateDeviceId();
+        const payload = await devicePayload();
+        const response = await authApi.register({
+          email,
+          password,
+          name,
+          device_id: id,
+          ...payload,
+        });
+        await establishSession(response.user, true);
+      } catch (error) {
+        setLoading(false);
+        throw error;
+      }
     },
     [devicePayload, establishSession]
   );
@@ -329,14 +339,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const loginWithChildCode = useCallback(
     async (code: string) => {
       setLoading(true);
-      const id = deviceIdRef.current || await getOrCreateDeviceId();
-      const payload = await devicePayload();
-      const response = await authApi.childLogin({
-        code,
-        device_id: id,
-        ...payload,
-      });
-      await establishSession(response.user, false);
+      try {
+        const id = deviceIdRef.current || await getOrCreateDeviceId();
+        const payload = await devicePayload();
+        const response = await authApi.childLogin({
+          code,
+          device_id: id,
+          ...payload,
+        });
+        await establishSession(response.user, false);
+      } catch (error) {
+        setLoading(false);
+        throw error;
+      }
     },
     [devicePayload, establishSession]
   );

@@ -1,6 +1,7 @@
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { LoadingDots } from "@/components/LoadingDots";
 import { useAuth } from "@/context/AuthContext";
+import { ApiError } from "@/src/api/client";
 import { useTheme } from "@/theme/ThemeContext";
 import { useThemedStyles } from "@/theme/useThemedStyles";
 import { Ionicons } from "@expo/vector-icons";
@@ -20,17 +21,25 @@ import {
 
 type ViewMode = "login" | "register";
 
-function registerErrorMessage(e: unknown): string {
-  if (e && typeof e === "object" && "code" in e) {
-    const code = (e as { code: string }).code;
-    if (code === "auth/email-already-in-use") {
+function authErrorMessage(e: unknown, fallback: string): string {
+  if (e instanceof ApiError) {
+    if (e.status === 0) {
+      return e.message;
+    }
+    if (e.status === 400) {
+      return "Confira os dados informados. A senha precisa ter pelo menos 8 caracteres.";
+    }
+    if (e.status === 401) {
+      return "E-mail ou senha inválidos.";
+    }
+    if (e.status === 409) {
       return "Este e-mail já possui uma conta. Faça login ou use outro e-mail.";
     }
-    if (code === "permission-denied") {
-      return "Não foi possível registrar este aparelho. Saia e tente criar a conta novamente.";
+    if (e.status >= 500) {
+      return "Falha interna no servidor. Tente novamente em instantes.";
     }
   }
-  return e instanceof Error ? e.message : "Erro ao criar conta";
+  return e instanceof Error ? e.message : fallback;
 }
 
 export default function LoginScreen() {
@@ -359,7 +368,7 @@ export default function LoginScreen() {
     try {
       await loginWithEmail(email.trim(), password.trim());
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Erro ao entrar");
+      setError(authErrorMessage(e, "Erro ao entrar"));
     } finally {
       setBusy(false);
     }
@@ -372,7 +381,7 @@ export default function LoginScreen() {
     try {
       await registerWithEmail(email.trim(), password.trim(), name.trim());
     } catch (e: unknown) {
-      setError(registerErrorMessage(e));
+      setError(authErrorMessage(e, "Erro ao criar conta"));
     } finally {
       setBusy(false);
     }
@@ -388,7 +397,7 @@ export default function LoginScreen() {
       setChildCode("");
       router.replace("/aguardando");
     } catch (e: unknown) {
-      setChildError(e instanceof Error ? e.message : "Erro ao entrar");
+      setChildError(authErrorMessage(e, "Erro ao entrar"));
     } finally {
       setBusy(false);
     }

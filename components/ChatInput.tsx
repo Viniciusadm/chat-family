@@ -376,12 +376,15 @@ function ChatInput({
       await audioRecorder.stop();
       const uri = audioRecorder.uri;
       if (!uri) return;
-      const res = await fetch(uri);
-      const blob = await res.blob();
-      await sendAudio(blob, {
+      await sendAudio({
+        uri,
+        name: `recording-${Date.now()}.m4a`,
+        type: "audio/mp4",
+      }, {
         extension: "m4a",
         contentType: "audio/mp4",
         duration: durationMillis > 0 ? durationMillis / 1000 : undefined,
+        localUri: uri,
         replyTo: selectedReply,
       });
     } catch {
