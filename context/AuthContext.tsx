@@ -293,7 +293,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await Promise.all(
         chatIds.map((chatId) => MessageRepository.decryptStoredMessages(chatId))
       );
-      if (chatIds.length > 0) syncChatHistories(chatIds, true);
+      if (chatIds.length > 0) syncChatHistories(chatIds, true, deviceId);
     }).catch(() => {});
   }, [deviceApproved, deviceId]);
 
@@ -312,7 +312,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await Promise.all(
             chatIds.map((chatId) => MessageRepository.decryptStoredMessages(chatId))
           );
-          if (chatIds.length > 0) syncChatHistories(chatIds, true);
+          if (chatIds.length > 0) syncChatHistories(chatIds, true, deviceId);
         })
         .catch(() => {});
     });

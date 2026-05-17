@@ -529,6 +529,22 @@ export const MessageRepository = {
     return repaired;
   },
 
+  async countUndecryptedTextMessages(conversationId: string): Promise<number> {
+    const db = await getDatabase();
+    const row = await db.getFirstAsync<{ count: number }>(
+      `SELECT COUNT(*) AS count
+       FROM messages
+       WHERE conversation_id = ?
+         AND type = 'text'
+         AND body IS NULL
+         AND ciphertext IS NOT NULL
+         AND iv IS NOT NULL
+         AND COALESCE(is_deleted, 0) = 0`,
+      [conversationId]
+    );
+    return row?.count ?? 0;
+  },
+
   async updateLocalAudioUri(id: string, localAudioUri: string) {
     let conversationId: string | undefined;
     await withExclusiveWrite(async (tx) => {

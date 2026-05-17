@@ -2,6 +2,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useConnectivity } from "@/hooks/useConnectivity";
 import { AudioCacheRepository } from "@/lib/AudioCacheRepository";
 import { ChatRepository } from "@/lib/ChatRepository";
+import { repairConversationKeyFromPendingShare } from "@/lib/conversationKeyReadiness";
 import { ImageCacheRepository } from "@/lib/ImageCacheRepository";
 import { ImageGalleryRepository } from "@/lib/ImageGalleryRepository";
 import { MessageRepository } from "@/lib/MessageRepository";
@@ -23,7 +24,7 @@ type MessagesState = {
 };
 
 export function useMessages(chatId: string): { messages: Message[]; loading: boolean } {
-  const { currentUser, tenantId } = useAuth();
+  const { currentUser, tenantId, deviceId } = useAuth();
   const { isOnline } = useConnectivity();
   const [state, setState] = useState<MessagesState>({
     chatId: "",
@@ -84,6 +85,7 @@ export function useMessages(chatId: string): { messages: Message[]; loading: boo
   const refreshRemoteMessages = useCallback(
     async (activeChatId: string, active: () => boolean) => {
       if (!isOnline) return;
+      await repairConversationKeyFromPendingShare(activeChatId, deviceId);
       const syncState = await MessageRepository.getMessageSyncState(activeChatId);
       const rows = await listMessages(activeChatId, {
         after: syncState.newestMessageAt?.toISOString(),
@@ -109,12 +111,13 @@ export function useMessages(chatId: string): { messages: Message[]; loading: boo
           });
         }
       }
+      await repairConversationKeyFromPendingShare(activeChatId, deviceId);
       await MessageRepository.saveMessageSyncState(activeChatId, newest);
       await ChatRepository.refreshLastMessageFromLocal(activeChatId);
       if (!active()) return;
       await loadLocalMessages(activeChatId, active);
     },
-    [isOnline, loadLocalMessages]
+    [deviceId, isOnline, loadLocalMessages]
   );
 
   useEffect(() => {
@@ -132,12 +135,12 @@ export function useMessages(chatId: string): { messages: Message[]; loading: boo
       if (!active) return;
       void refreshLocalMedia(chatId, isActive, isOnline);
       if (currentUser && tenantId) {
-        await syncPendingTextMessages(currentUser, tenantId, isOnline);
+        await syncPendingTextMessages(currentUser, tenantId, isOnline, deviceId);
         await syncPendingImageMessages(currentUser, tenantId, isOnline);
-        await syncPendingOps(currentUser, isOnline);
+        await syncPendingOps(currentUser, isOnline, deviceId);
       }
       await refreshRemoteMessages(chatId, isActive);
-      void syncChatHistory(chatId, isOnline);
+      void syncChatHistory(chatId, isOnline, deviceId);
     })();
 
     const unsubLocal = MessageRepository.subscribe(chatId, () => {
@@ -157,6 +160,7 @@ export function useMessages(chatId: string): { messages: Message[]; loading: boo
   }, [
     chatId,
     currentUser,
+    deviceId,
     isOnline,
     loadLocalMessages,
     refreshLocalMedia,

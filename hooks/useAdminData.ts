@@ -2,7 +2,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useConnectivity } from "@/hooks/useConnectivity";
 import { AdminRepository } from "@/lib/AdminRepository";
 import { ChatRepository } from "@/lib/ChatRepository";
-import { ensureConversationKey } from "@/lib/conversationKeys";
+import { prepareConversationKeyForEncryption } from "@/lib/conversationKeyReadiness";
 import { distributeAllOwnedKeysToDevice, distributeConversationKey } from "@/lib/keyDistribution";
 import { uploadChatPhoto } from "@/src/api/media";
 import {
@@ -54,7 +54,7 @@ function chatFromDto(data: ChatDto, currentMemberId: string): Chat {
 }
 
 export function useAdminData() {
-  const { tenantId, currentUser } = useAuth();
+  const { tenantId, currentUser, deviceId: currentDeviceId } = useAuth();
   const { isOnline } = useConnectivity();
   const effectiveTenantId = tenantId ?? currentUser?.tenantId ?? null;
   const canMutate = isOnline && currentUser?.role === "adult";
@@ -167,7 +167,13 @@ export function useAdminData() {
     await refreshRemote(() => true);
     const newChats = await ChatRepository.getLocalChats(effectiveTenantId);
     const directChats = newChats.filter((chat) => chat.participants.includes(created.id));
-    await Promise.all(directChats.map((chat) => ensureConversationKey(chat.id)));
+    await Promise.all(
+      directChats.map((chat) =>
+        prepareConversationKeyForEncryption(chat.id, currentDeviceId, {
+          canCreate: true,
+        })
+      )
+    );
     for (const chat of directChats) {
       if (currentUser) {
         void distributeConversationKey(chat.id, chat.participants, effectiveTenantId, currentUser.id);
@@ -182,6 +188,13 @@ export function useAdminData() {
       const chatIds = chats
         .filter((chat) => device.memberId && chat.participants.includes(device.memberId))
         .map((chat) => chat.id);
+      await Promise.all(
+        chatIds.map((chatId) =>
+          prepareConversationKeyForEncryption(chatId, currentDeviceId, {
+            canCreate: true,
+          })
+        )
+      );
       await distributeAllOwnedKeysToDevice(deviceId, device.publicKey, chatIds, currentUser.id);
     }
     await approveDeviceApi(deviceId);
@@ -204,7 +217,9 @@ export function useAdminData() {
       is_group: true,
       participant_ids: participantIds,
     });
-    await ensureConversationKey(created.id);
+    await prepareConversationKeyForEncryption(created.id, currentDeviceId, {
+      canCreate: true,
+    });
     if (currentUser) {
       void distributeConversationKey(created.id, participantIds, effectiveTenantId, currentUser.id);
     }

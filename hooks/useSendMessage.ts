@@ -2,7 +2,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useConnectivity } from "@/hooks/useConnectivity";
 import { AudioCacheRepository } from "@/lib/AudioCacheRepository";
 import { ChatRepository } from "@/lib/ChatRepository";
-import { ensureConversationKey } from "@/lib/conversationKeys";
+import { prepareConversationKeyForEncryption } from "@/lib/conversationKeyReadiness";
 import { encryptMessageText } from "@/lib/encryptedMessages";
 import { distributeConversationKeyForChat } from "@/lib/keyDistribution";
 import {
@@ -31,7 +31,7 @@ export type SendableAudio =
 export const EDIT_DELETE_WINDOW_MS = 60 * 60 * 1000;
 
 export function useSendMessage(chatId: string) {
-  const { currentUser, tenantId } = useAuth();
+  const { currentUser, tenantId, deviceId } = useAuth();
   const { isOnline } = useConnectivity();
   const [isSending, setIsSending] = useState(false);
 
@@ -61,7 +61,9 @@ export function useSendMessage(chatId: string) {
         timestamp: createdAt,
       });
       if (!isOnline) return;
-      await ensureConversationKey(chatId);
+      await prepareConversationKeyForEncryption(chatId, deviceId, {
+        canCreate: currentUser.role === "adult",
+      });
       await distributeConversationKeyForChat(chatId);
       const enc = await encryptMessageText(chatId, trimmed);
       if (!enc) {
@@ -285,7 +287,7 @@ export function useSendMessage(chatId: string) {
     if (message.status === "loading") {
       await MessageRepository.overwritePendingCreateBody(message.id, trimmed);
       if (isOnline) {
-        void syncPendingTextMessages(currentUser, tenantId, isOnline);
+        void syncPendingTextMessages(currentUser, tenantId, isOnline, deviceId);
       }
       return true;
     }
@@ -300,7 +302,9 @@ export function useSendMessage(chatId: string) {
 
     if (!isOnline) return true;
     try {
-      await ensureConversationKey(message.chatId);
+      await prepareConversationKeyForEncryption(message.chatId, deviceId, {
+        canCreate: currentUser.role === "adult",
+      });
       await distributeConversationKeyForChat(message.chatId);
       const enc = await encryptMessageText(message.chatId, trimmed);
       if (!enc) return true;

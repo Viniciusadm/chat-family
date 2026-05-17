@@ -1,5 +1,8 @@
 import { ChatRepository } from "@/lib/ChatRepository";
-import { ensureConversationKey } from "@/lib/conversationKeys";
+import {
+  prepareConversationKeyForEncryption,
+  repairConversationKeyFromPendingShare,
+} from "@/lib/conversationKeyReadiness";
 import { encryptMessageText } from "@/lib/encryptedMessages";
 import { distributeConversationKeyForChat } from "@/lib/keyDistribution";
 import {
@@ -19,12 +22,17 @@ const MESSAGE_PAGE_SIZE = 100;
 const inFlightHistorySyncs = new Set<string>();
 let pendingSyncInFlight = false;
 
-export async function syncChatHistory(chatId: string, isOnline = true) {
+export async function syncChatHistory(
+  chatId: string,
+  isOnline = true,
+  deviceId?: string,
+) {
   if (!isOnline) return;
   if (inFlightHistorySyncs.has(chatId)) return;
   inFlightHistorySyncs.add(chatId);
 
   try {
+    await repairConversationKeyFromPendingShare(chatId, deviceId);
     const syncState = await MessageRepository.getMessageSyncState(chatId);
     let newestMessageAt = syncState.newestMessageAt;
 
@@ -67,6 +75,7 @@ export async function syncChatHistory(chatId: string, isOnline = true) {
       if (rows.length < MESSAGE_PAGE_SIZE) break;
     }
 
+    await repairConversationKeyFromPendingShare(chatId, deviceId);
     await MessageRepository.saveMessageSyncState(chatId, newestMessageAt);
     await ChatRepository.refreshLastMessageFromLocal(chatId);
   } catch {
@@ -76,17 +85,22 @@ export async function syncChatHistory(chatId: string, isOnline = true) {
   }
 }
 
-export function syncChatHistories(chatIds: string[], isOnline = true) {
+export function syncChatHistories(
+  chatIds: string[],
+  isOnline = true,
+  deviceId?: string,
+) {
   if (!isOnline) return;
   for (const chatId of chatIds) {
-    void syncChatHistory(chatId, isOnline);
+    void syncChatHistory(chatId, isOnline, deviceId);
   }
 }
 
 export async function syncPendingTextMessages(
   currentUser: AppUser,
   tenantId: string,
-  isOnline = true
+  isOnline = true,
+  deviceId?: string,
 ) {
   if (!isOnline) return;
   if (pendingSyncInFlight) return;
@@ -100,7 +114,9 @@ export async function syncPendingTextMessages(
       }
 
       try {
-        await ensureConversationKey(message.chatId);
+        await prepareConversationKeyForEncryption(message.chatId, deviceId, {
+          canCreate: currentUser.role === "adult",
+        });
         await distributeConversationKeyForChat(message.chatId);
         const enc = await encryptMessageText(message.chatId, message.content);
         if (!enc) continue;
@@ -179,7 +195,8 @@ let pendingOpsSyncInFlight = false;
 
 export async function syncPendingOps(
   currentUser: AppUser,
-  isOnline = true
+  isOnline = true,
+  deviceId?: string,
 ) {
   if (!isOnline) return;
   if (pendingOpsSyncInFlight) return;
@@ -197,7 +214,9 @@ export async function syncPendingOps(
           });
           await MessageRepository.clearPendingOp(message.id);
         } else if (message.pendingOp === "update" && message.type === "text") {
-          await ensureConversationKey(message.chatId);
+          await prepareConversationKeyForEncryption(message.chatId, deviceId, {
+            canCreate: currentUser.role === "adult",
+          });
           await distributeConversationKeyForChat(message.chatId);
           const enc = await encryptMessageText(message.chatId, message.content);
           if (!enc) continue;

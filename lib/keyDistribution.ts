@@ -77,3 +77,29 @@ export async function consumePendingKeyShares(deviceId: string): Promise<string[
   }
   return importedChatIds;
 }
+
+export async function importPendingKeyShareForChat(
+  deviceId: string,
+  chatId: string,
+  options: { replaceExisting?: boolean } = {},
+): Promise<boolean> {
+  if (!deviceId || !chatId) return false;
+  const priv = await getDevicePrivateKey();
+  if (!priv) return false;
+  if (!options.replaceExisting && (await getConversationKey(chatId))) {
+    return false;
+  }
+
+  const share = (await listKeyShares(deviceId)).find(
+    (item) => item.chatId === chatId,
+  );
+  if (!share) return false;
+
+  try {
+    const key = unwrapKeyFromShare(priv, share.share);
+    await importConversationKey(chatId, key);
+    return true;
+  } catch {
+    return false;
+  }
+}

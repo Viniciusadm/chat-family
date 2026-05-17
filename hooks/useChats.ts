@@ -1,6 +1,7 @@
 import { useAuth } from "@/context/AuthContext";
 import { useConnectivity } from "@/hooks/useConnectivity";
 import { ChatRepository } from "@/lib/ChatRepository";
+import { repairConversationKeyFromPendingShare } from "@/lib/conversationKeyReadiness";
 import { decryptIncomingMessage } from "@/lib/encryptedMessages";
 import { timestampFromIso } from "@/lib/localTimestamp";
 import {
@@ -14,7 +15,11 @@ import { realtimeClient } from "@/src/api/realtime";
 import type { Chat } from "@/types/chat";
 import { useCallback, useEffect, useState } from "react";
 
-async function dtoToChat(data: ChatDto, currentMemberId: string): Promise<Chat> {
+async function dtoToChat(
+  data: ChatDto,
+  currentMemberId: string,
+  deviceId?: string,
+): Promise<Chat> {
   const chat: Chat = {
     id: data.id,
     tenantId: data.tenant_id,
@@ -33,6 +38,7 @@ async function dtoToChat(data: ChatDto, currentMemberId: string): Promise<Chat> 
   if (data.last_message_at && data.last_message_type) {
     const timestamp = new Date(data.last_message_at);
     if (data.last_message_type === "text") {
+      await repairConversationKeyFromPendingShare(data.id, deviceId);
       const text = await decryptIncomingMessage(data.id, {
         ciphertext: data.last_message_ciphertext,
         iv: data.last_message_iv,
@@ -48,7 +54,7 @@ async function dtoToChat(data: ChatDto, currentMemberId: string): Promise<Chat> 
 }
 
 export function useChats(): { chats: Chat[]; loading: boolean } {
-  const { currentUser, tenantId } = useAuth();
+  const { currentUser, tenantId, deviceId } = useAuth();
   const { isOnline } = useConnectivity();
   const [chats, setChats] = useState<Chat[]>([]);
   const [loading, setLoading] = useState(true);
@@ -72,18 +78,20 @@ export function useChats(): { chats: Chat[]; loading: boolean } {
     async (active: () => boolean) => {
       if (!currentUser || !tenantId || !isOnline) return;
       const remote = await listChats();
-      const next = await Promise.all(remote.map((chat) => dtoToChat(chat, currentUser.id)));
+      const next = await Promise.all(
+        remote.map((chat) => dtoToChat(chat, currentUser.id, deviceId))
+      );
       for (const chat of next) {
         await ChatRepository.upsertChat(chat, { notify: false });
       }
       if (!active()) return;
-      syncChatHistories(next.map((chat) => chat.id), isOnline);
-      await syncPendingTextMessages(currentUser, tenantId, isOnline);
+      syncChatHistories(next.map((chat) => chat.id), isOnline, deviceId);
+      await syncPendingTextMessages(currentUser, tenantId, isOnline, deviceId);
       await syncPendingImageMessages(currentUser, tenantId, isOnline);
-      await syncPendingOps(currentUser, isOnline);
+      await syncPendingOps(currentUser, isOnline, deviceId);
       await loadLocalChats(active);
     },
-    [currentUser, isOnline, loadLocalChats, tenantId]
+    [currentUser, deviceId, isOnline, loadLocalChats, tenantId]
   );
 
   useEffect(() => {
