@@ -8,7 +8,11 @@ function openChatFromData(
 ) {
   const chatId = data && typeof data.chatId === "string" ? data.chatId : null;
   if (!chatId) return;
-  router.push(`/(protected)/chat/${chatId}`);
+  const messageId = typeof data.messageId === "string" ? data.messageId : undefined;
+  router.push({
+    pathname: "/(protected)/chat/[chatId]",
+    params: messageId ? { chatId, messageId } : { chatId },
+  });
 }
 
 export function NotificationNavigation() {

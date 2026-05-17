@@ -46,19 +46,24 @@ async function resolveSenderName(memberId: string): Promise<string> {
 const ANDROID_TRIGGER =
   Platform.OS === "android" ? ({ channelId: "messages-v2" } as const) : null;
 
-async function scheduleNotification(title: string, body: string, chatId: string) {
+async function scheduleNotification(
+  title: string,
+  body: string,
+  chatId: string,
+  messageId: string,
+) {
   await Notifications.scheduleNotificationAsync({
-    content: { title, body, data: { chatId } },
+    content: { title, body, data: { chatId, messageId } },
     trigger: ANDROID_TRIGGER,
   });
 }
 
-async function scheduleFallback(chatId: string, senderName: string) {
+async function scheduleFallback(chatId: string, messageId: string, senderName: string) {
   await Notifications.scheduleNotificationAsync({
     content: {
       title: senderName || "Família",
       body: "Nova mensagem",
-      data: { chatId },
+      data: { chatId, messageId },
     },
     trigger: ANDROID_TRIGGER,
   });
@@ -108,7 +113,7 @@ TaskManager.defineTask(BACKGROUND_NOTIFICATION_TASK, async ({ data, error }) => 
     trace.push(`type=${payloadType || "text"}`);
 
     if (payloadType === "audio") {
-      await scheduleNotification(senderName, "Áudio", chatId);
+      await scheduleNotification(senderName, "Áudio", chatId, messageId);
       await scheduleDebug(trace.join(" ") + " path=audio");
       return;
     }
@@ -133,12 +138,12 @@ TaskManager.defineTask(BACKGROUND_NOTIFICATION_TASK, async ({ data, error }) => 
       const msg = messages.find((item) => item.id === messageId);
       if (!msg) {
         trace.push("snap=missing");
-        await scheduleFallback(chatId, senderName);
+        await scheduleFallback(chatId, messageId, senderName);
         await scheduleDebug(trace.join(" "));
         return;
       }
       if (msg.audio_url) {
-        await scheduleNotification(senderName, "Áudio", chatId);
+        await scheduleNotification(senderName, "Áudio", chatId, messageId);
         await scheduleDebug(trace.join(" ") + " path=audioFs");
         return;
       }
@@ -151,12 +156,12 @@ TaskManager.defineTask(BACKGROUND_NOTIFICATION_TASK, async ({ data, error }) => 
     }
 
     if (plaintext === null || plaintext.trim().length === 0) {
-      await scheduleFallback(chatId, senderName);
+      await scheduleFallback(chatId, messageId, senderName);
       await scheduleDebug(trace.join(" ") + " path=fallback");
       return;
     }
 
-    await scheduleNotification(senderName, truncateBody(plaintext), chatId);
+    await scheduleNotification(senderName, truncateBody(plaintext), chatId, messageId);
     await scheduleDebug(trace.join(" ") + " path=ok");
   } catch (e) {
     await scheduleDebug(trace.join(" ") + ` throw=${e instanceof Error ? e.message : String(e)}`);
